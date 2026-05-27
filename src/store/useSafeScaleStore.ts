@@ -55,7 +55,7 @@ const DEFAULT_MEDICATION_SCHEDULE: MedicationItem[] = [
     dosage: '20mg',
     time: '21:00',
     status: 'Pending',
-    icon: 'pill-multiple',
+    icon: 'pill',
   },
 ];
 
