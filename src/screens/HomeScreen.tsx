@@ -796,7 +796,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
         >
           <View className="flex-row items-center" style={{ marginBottom: 20 }}>
             <MaterialCommunityIcons
-              name="shield-heart-outline"
+              name="shield-outline"
               size={18}
               color={COLORS.primary}
             />
