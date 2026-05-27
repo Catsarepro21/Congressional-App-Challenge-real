@@ -275,4 +275,16 @@ export interface SafeScaleState {
 
   /** Stores the result of a local AI analysis run. */
   setLocalAIAnalysisResult: (result: LocalAIAnalysisResult | null) => void;
+
+  /** Whether test/simulation mode is currently active. */
+  isTestMode: boolean;
+
+  /** Toggles the test mode on/off, clearing or seeding data. */
+  toggleTestMode: () => void;
+
+  /** Adds a new medication item to the schedule. */
+  addMedication: (medication: Omit<MedicationItem, 'id' | 'status'>) => void;
+
+  /** Removes a medication item from the schedule by id. */
+  removeMedication: (id: string) => void;
 }

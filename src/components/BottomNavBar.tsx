@@ -76,11 +76,25 @@ const DEFAULT_TABS: ReadonlyArray<NavTab> = [
     a11yHint: 'Open the allergen scanner',
   },
   {
+    key: 'map',
+    label: 'Map',
+    icon: 'map-outline',
+    activeIcon: 'map',
+    a11yHint: 'View regional pollen and air quality map',
+  },
+  {
     key: 'analytics',
     label: 'Analytics',
     icon: 'chart-line',
     activeIcon: 'chart-line',
     a11yHint: 'View your health analytics dashboard',
+  },
+  {
+    key: 'settings',
+    label: 'Settings',
+    icon: 'cog-outline',
+    activeIcon: 'cog',
+    a11yHint: 'Open application settings',
   },
 ] as const;
 
@@ -141,13 +155,11 @@ const TabItem = React.memo<TabItemProps>(
         accessibilityLabel={tab.label}
         accessibilityHint={tab.a11yHint}
         accessibilityState={{ selected: isActive }}
-        className="flex-1 items-center justify-center"
-        style={{ height: CAPSULE_HEIGHT }}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', height: CAPSULE_HEIGHT }}
         android_ripple={{ color: 'rgba(34,124,84,0.10)', borderless: true }}
       >
         <Animated.View
-          style={{ transform: [{ scale: scaleAnim }] }}
-          className="items-center justify-center gap-y-0.5"
+          style={{ transform: [{ scale: scaleAnim }], alignItems: 'center', justifyContent: 'center' }}
         >
           <MaterialCommunityIcons
             name={iconName as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
@@ -160,6 +172,7 @@ const TabItem = React.memo<TabItemProps>(
               fontSize: 11,
               fontWeight,
               letterSpacing: 0.2,
+              marginTop: 2,
             }}
             numberOfLines={1}
           >
@@ -277,6 +290,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
         backgroundColor: '#FFFFFF',
         borderTopWidth: 1,
         borderTopColor: 'hsl(220, 20%, 90%)',
+        paddingHorizontal: H_PADDING,
         // Elevation for Android Material shadow
         elevation: 12,
         // iOS shadow
@@ -293,7 +307,6 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           flexDirection: 'row',
           alignItems: 'center',
           height: 72,
-          paddingHorizontal: H_PADDING,
           position: 'relative',
         }}
       >

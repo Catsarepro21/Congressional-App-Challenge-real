@@ -77,6 +77,20 @@ const DEFAULT_BIOMETRIC_CORE: BiometricSummary = {
   historicalRHR: [64, 66, 65, 63, 67],
 };
 
+/**
+ * Empty biometric summary placeholder when test mode is disabled.
+ */
+const EMPTY_BIOMETRIC_CORE: BiometricSummary = {
+  heartRate: 0,
+  restingHeartRate: 0,
+  sleepMinutes: 0,
+  sleepConsistency: 0,
+  steps: 0,
+  activeCalories: 0,
+  dailyStabilityScore: 0,
+  historicalRHR: [],
+};
+
 /** Default scan session state — camera inactive, nothing processed. */
 const DEFAULT_SCAN_STATE: ScanState = {
   isCameraActive: false,
@@ -92,12 +106,13 @@ const DEFAULT_SCAN_STATE: ScanState = {
 export const useSafeScaleStore = create<SafeScaleState>((set) => ({
   // ── Initial State ──────────────────────────────────────────────────────────
 
-  /** Default allergen profile as specified in the architecture brief. */
-  userAllergies: ['Peanut', 'Almond'],
+  isTestMode: false,
 
-  medicationSchedule: DEFAULT_MEDICATION_SCHEDULE,
+  userAllergies: [],
 
-  biometricCore: DEFAULT_BIOMETRIC_CORE,
+  medicationSchedule: [],
+
+  biometricCore: EMPTY_BIOMETRIC_CORE,
 
   scanState: DEFAULT_SCAN_STATE,
 
@@ -260,6 +275,37 @@ export const useSafeScaleStore = create<SafeScaleState>((set) => ({
   /** Stores the result of a local AI analysis run. */
   setLocalAIAnalysisResult: (result: LocalAIAnalysisResult | null): void =>
     set({ localAIAnalysisResult: result }),
+
+  /** Toggles Test/Simulation Mode on/off. Seeding or clearing data. */
+  toggleTestMode: (): void =>
+    set((state) => {
+      const nextTestMode = !state.isTestMode;
+      return {
+        isTestMode: nextTestMode,
+        userAllergies: nextTestMode ? ['Peanut', 'Almond'] : [],
+        medicationSchedule: nextTestMode ? DEFAULT_MEDICATION_SCHEDULE : [],
+        biometricCore: nextTestMode ? DEFAULT_BIOMETRIC_CORE : EMPTY_BIOMETRIC_CORE,
+      };
+    }),
+
+  /** Adds a new medication entry. */
+  addMedication: (medication: Omit<MedicationItem, 'id' | 'status'>): void =>
+    set((state) => {
+      const newItem: MedicationItem = {
+        ...medication,
+        id: Date.now().toString(),
+        status: 'Pending',
+      };
+      return {
+        medicationSchedule: [...state.medicationSchedule, newItem],
+      };
+    }),
+
+  /** Removes a medication entry. */
+  removeMedication: (id: string): void =>
+    set((state) => ({
+      medicationSchedule: state.medicationSchedule.filter((m) => m.id !== id),
+    })),
 }));
 
 // ---------------------------------------------------------------------------
@@ -333,3 +379,10 @@ export const selectIsLocalAIOptedIn = (
 export const selectLocalAIAnalysisResult = (
   state: SafeScaleState,
 ): LocalAIAnalysisResult | null => state.localAIAnalysisResult;
+
+/**
+ * Returns whether test/simulation mode is currently active.
+ */
+export const selectIsTestMode = (
+  state: SafeScaleState,
+): boolean => state.isTestMode;

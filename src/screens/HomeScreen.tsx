@@ -39,7 +39,10 @@ import {
   StatusBar,
   LayoutAnimation,
   Platform,
-  UIManager,
+  Alert,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -52,16 +55,9 @@ import {
   selectUserAllergies,
   selectDailyStabilityScore,
   selectIsLocalAIOptedIn,
+  selectIsTestMode,
 } from '../store/useSafeScaleStore';
 import type { MedicationItem } from '../types';
-
-// Enable LayoutAnimation on Android
-if (
-  Platform.OS === 'android' &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // ---------------------------------------------------------------------------
 // Design constants
@@ -198,7 +194,7 @@ const AnimatedRing: React.FC<AnimatedRingProps> = ({ score }) => {
   };
 
   return (
-    <View className="items-center justify-center">
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
       <Svg
         width={RING_SIZE}
         height={RING_SIZE}
@@ -244,8 +240,13 @@ const AnimatedRing: React.FC<AnimatedRingProps> = ({ score }) => {
 
       {/* Centred score overlay */}
       <View
-        className="absolute items-center justify-center"
-        style={{ width: RING_SIZE, height: RING_SIZE }}
+        style={{
+          position: 'absolute',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: RING_SIZE,
+          height: RING_SIZE,
+        }}
       >
         <Text
           style={{
@@ -329,7 +330,7 @@ const BiometricStatCard: React.FC<BiometricStatCardProps> = ({
       size={22}
       color={iconColor}
     />
-    <View className="flex-row items-baseline mt-1">
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 4 }}>
       <Text
         style={{
           fontSize: 20,
@@ -456,9 +457,9 @@ const MedicationTimelineRow: React.FC<MedicationTimelineRowProps> = ({
   }, [item.id, item.status, onMarkComplete]);
 
   return (
-    <View className="flex-row" style={{ marginBottom: isLast ? 0 : 16 }}>
+    <View style={{ flexDirection: 'row', marginBottom: isLast ? 0 : 16 }}>
       {/* Timeline track column */}
-      <View className="items-center" style={{ width: 28, marginRight: 12 }}>
+      <View style={{ alignItems: 'center', width: 28, marginRight: 12 }}>
         {/* Animated pulse ring (Active only) */}
         {item.status === 'Active' && (
           <Animated.View
@@ -538,7 +539,7 @@ const MedicationTimelineRow: React.FC<MedicationTimelineRowProps> = ({
         </View>
 
         {/* Name + dosage */}
-        <View className="flex-1">
+        <View style={{ flex: 1 }}>
           <Text
             style={{
               fontSize: 15,
@@ -639,8 +640,12 @@ const SectionHeader: React.FC<{ title: string; subtitle?: string }> = ({
   subtitle,
 }) => (
   <View
-    className="flex-row items-baseline justify-between"
-    style={{ marginBottom: 14 }}
+    style={{
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      marginBottom: 14,
+    }}
   >
     <Text
       style={{
@@ -669,12 +674,38 @@ const SectionHeader: React.FC<{ title: string; subtitle?: string }> = ({
 // HomeScreen
 // ---------------------------------------------------------------------------
 
+/** Helper function to detect if running on Android Emulator or iOS Simulator */
+const checkIsEmulator = (): boolean => {
+  const constants = Platform.constants as any;
+  if (Platform.OS === 'android') {
+    const brand = constants.Brand || '';
+    const model = constants.Model || '';
+    const fingerprint = constants.Fingerprint || '';
+    const hardware = constants.Hardware || '';
+    return (
+      fingerprint.startsWith('generic') ||
+      fingerprint.startsWith('unknown') ||
+      model.includes('google_sdk') ||
+      model.includes('Emulator') ||
+      model.includes('Android SDK built for x86') ||
+      brand.startsWith('generic') ||
+      hardware.includes('goldfish') ||
+      hardware.includes('ranchu') ||
+      hardware.includes('vbox86')
+    );
+  } else if (Platform.OS === 'ios') {
+    const model = constants.Model || '';
+    return model.toLowerCase().includes('simulator');
+  }
+  return false;
+};
+
 interface HomeScreenProps {
   /** Passed from the root navigator to drive the BottomNavBar active state. */
   onNavigate: (index: number) => void;
 }
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const insets = useSafeAreaInsets();
 
   // ── Store selectors ──────────────────────────────────────────────────────
@@ -682,26 +713,129 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
   const medicationSchedule = useSafeScaleStore(selectMedicationSchedule);
   const userAllergies = useSafeScaleStore(selectUserAllergies);
   const stabilityScore = useSafeScaleStore(selectDailyStabilityScore);
-  const isLocalAIOptedIn = useSafeScaleStore(selectIsLocalAIOptedIn);
-  const setMedicationStatus = useSafeScaleStore(
-    (s) => s.setMedicationStatus,
-  );
-  const setLocalAIOptedIn = useSafeScaleStore(
-    (s) => s.setLocalAIOptedIn,
-  );
+  const isTestMode = useSafeScaleStore(selectIsTestMode);
 
-  const toggleAnim = useRef(new Animated.Value(isLocalAIOptedIn ? 20 : 0)).current;
+  const setMedicationStatus = useSafeScaleStore((s) => s.setMedicationStatus);
+  const toggleTestMode = useSafeScaleStore((s) => s.toggleTestMode);
+  const addMedication = useSafeScaleStore((s) => s.addMedication);
+  const updateBiometrics = useSafeScaleStore((s) => s.updateBiometrics);
 
-  useEffect(() => {
-    Animated.spring(toggleAnim, {
-      toValue: isLocalAIOptedIn ? 20 : 0,
-      tension: 280,
-      friction: 20,
-      useNativeDriver: true,
-    }).start();
-  }, [isLocalAIOptedIn, toggleAnim]);
+  // ── Local UI State ────────────────────────────────────────────────────────
+  const [tapCount, setTapCount] = useState(0);
+  const lastTapTime = useRef<number>(0);
+
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [medName, setMedName] = useState('');
+  const [medDosage, setMedDosage] = useState('');
+  const [medTime, setMedTime] = useState('08:00');
+  const [medIcon, setMedIcon] = useState('pill');
+
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStep, setSyncStep] = useState(0);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Toggles the developer test mode after tapping 5 times within a 2-second window.
+   */
+  const handleGreetingPress = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapTime.current < 2000) {
+      const nextCount = tapCount + 1;
+      setTapCount(nextCount);
+      if (nextCount >= 5) {
+        toggleTestMode();
+        setTapCount(0);
+        Alert.alert(
+          !isTestMode ? 'Test Mode Enabled' : 'Test Mode Disabled',
+          !isTestMode
+            ? 'SafeScale Health has loaded mock user telemetry and medication schedules.'
+            : 'SafeScale Health has cleared mock data back to default empty states.',
+          [{ text: 'OK' }]
+        );
+      }
+    } else {
+      setTapCount(1);
+    }
+    lastTapTime.current = now;
+  }, [tapCount, isTestMode, toggleTestMode]);
+
+  /**
+   * Submits the interactive add medication form to the Zustand store.
+   */
+  const handleAddMedicationSubmit = useCallback(() => {
+    if (medName.trim() === '' || medDosage.trim() === '') {
+      Alert.alert('Required Fields', 'Please enter both medication name and dosage.');
+      return;
+    }
+    addMedication({
+      name: medName.trim(),
+      dosage: medDosage.trim(),
+      time: medTime.trim() || '08:00',
+      icon: medIcon,
+    });
+    setMedName('');
+    setMedDosage('');
+    setMedTime('08:00');
+    setMedIcon('pill');
+    setIsAddModalOpen(false);
+  }, [medName, medDosage, medTime, medIcon, addMedication]);
+
+  // Removed handleAddAllergenSubmit (moved to SettingsScreen)
+
+  /**
+   * Simulates fetching and syncing device health metrics from Apple HealthKit or Android Health Connect.
+   */
+  const handleSyncHealthData = useCallback(() => {
+    setIsSyncing(true);
+    setSyncStep(1);
+
+    // Step 1: Connecting to Platform Health APIs
+    setTimeout(() => {
+      // Check if we are running on an emulator and test mode is NOT active
+      const runningOnEmulator = checkIsEmulator();
+      if (runningOnEmulator && !isTestMode) {
+        setIsSyncing(false);
+        setSyncStep(0);
+        Alert.alert(
+          'Sync Failed',
+          `No health tracker data found.\n\nReason: Running on an ${Platform.OS === 'ios' ? 'iOS Simulator' : 'Android Emulator'} which has no health tracker data configured.\n\nTo view biometric data, please enable Test Mode.`,
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      setSyncStep(2);
+      
+      // Step 2: Reading Resting Heart Rate History
+      setTimeout(() => {
+        setSyncStep(3);
+
+        // Step 3: Importing steps & sleep metrics
+        setTimeout(() => {
+          setSyncStep(4);
+
+          // Step 4: Import complete, update store
+          setTimeout(() => {
+            updateBiometrics({
+              heartRate: 74,
+              restingHeartRate: 64,
+              sleepMinutes: 480, // 8 hours
+              sleepConsistency: 88,
+              steps: 9243,
+              activeCalories: 460,
+              dailyStabilityScore: 82,
+              historicalRHR: [63, 65, 64, 62, 66],
+            });
+            setIsSyncing(false);
+            setSyncStep(0);
+            Alert.alert('Health Sync Complete', 'Successfully imported health metrics from your device tracker.');
+          }, 1000);
+        }, 1200);
+      }, 1200);
+    }, 1200);
+  }, [updateBiometrics, isTestMode]);
 
   /**
    * Marks a medication as Completed. If it was previously Active → Completed.
@@ -745,38 +879,58 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
         showsVerticalScrollIndicator={false}
         overScrollMode="never"
       >
-        {/* ── 1. Greeting Header ──────────────────────────────────────── */}
-        <View style={{ marginBottom: 24 }}>
-          <Text
-            style={{
-              fontSize: 13,
-              color: COLORS.textSecondary,
-              fontWeight: '500',
-              marginBottom: 2,
-            }}
-          >
-            {formatTodayDate()}
-          </Text>
-          <Text
-            style={{
-              fontSize: 26,
-              fontWeight: '800',
-              color: COLORS.textPrimary,
-              letterSpacing: -0.5,
-            }}
-          >
-            {greeting} 👋
-          </Text>
-          <Text
-            style={{
-              fontSize: 14,
-              color: COLORS.textSecondary,
-              marginTop: 4,
-            }}
-          >
-            Here's your daily health overview.
-          </Text>
-        </View>
+        {/* ── 1. Greeting Header (Pressable to toggle test mode) ── */}
+        <Pressable onPress={handleGreetingPress}>
+          <View style={{ marginBottom: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: COLORS.textSecondary,
+                  fontWeight: '500',
+                  marginBottom: 2,
+                }}
+              >
+                {formatTodayDate()}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 26,
+                  fontWeight: '800',
+                  color: COLORS.textPrimary,
+                  letterSpacing: -0.5,
+                }}
+              >
+                {greeting} 👋
+              </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: COLORS.textSecondary,
+                  marginTop: 4,
+                }}
+              >
+                {isTestMode ? "Test Mode Active · Seed Data Loaded" : "Here's your daily health overview."}
+              </Text>
+            </View>
+            {isTestMode && (
+              <View
+                style={{
+                  backgroundColor: COLORS.alertContainer,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 100,
+                  borderWidth: 1,
+                  borderColor: COLORS.alert,
+                }}
+              >
+                <Text style={{ color: COLORS.alert, fontWeight: '700', fontSize: 10, textTransform: 'uppercase' }}>
+                  TEST MODE
+                </Text>
+              </View>
+            )}
+          </View>
+        </Pressable>
 
         {/* ── 2. Health Stability Score Card ──────────────────────────── */}
         <View
@@ -794,7 +948,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
             elevation: 5,
           }}
         >
-          <View className="flex-row items-center" style={{ marginBottom: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
             <MaterialCommunityIcons
               name="shield-outline"
               size={18}
@@ -818,8 +972,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
 
           {/* Score legend pills */}
           <View
-            className="flex-row justify-center flex-wrap"
-            style={{ marginTop: 20, gap: 8 }}
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              marginTop: 20,
+              gap: 8,
+            }}
           >
             {(
               [
@@ -862,20 +1021,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
 
         {/* ── 3. Biometric Stats Row ───────────────────────────────────── */}
         <View
-          className="flex-row"
-          style={{ gap: 10, marginBottom: 16 }}
+          style={{
+            flexDirection: 'row',
+            gap: 10,
+            marginBottom: 16,
+          }}
         >
           <BiometricStatCard
             icon="heart-pulse"
             iconColor={COLORS.alert}
-            value={String(biometricCore.heartRate)}
-            unit="bpm"
+            value={stabilityScore === 0 ? '--' : String(biometricCore.heartRate)}
+            unit={stabilityScore === 0 ? '' : 'bpm'}
             label="Heart Rate"
           />
           <BiometricStatCard
             icon="sleep"
             iconColor={COLORS.secondary}
-            value={formatSleepMinutes(biometricCore.sleepMinutes)}
+            value={stabilityScore === 0 ? '--' : formatSleepMinutes(biometricCore.sleepMinutes)}
             unit=""
             label="Sleep"
           />
@@ -883,7 +1045,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
             icon="shoe-sneaker"
             iconColor={COLORS.primary}
             value={
-              biometricCore.steps >= 1000
+              stabilityScore === 0
+                ? '--'
+                : biometricCore.steps >= 1000
                 ? `${(biometricCore.steps / 1000).toFixed(1)}k`
                 : String(biometricCore.steps)
             }
@@ -893,15 +1057,44 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
           <BiometricStatCard
             icon="fire"
             iconColor="#E88C30"
-            value={String(biometricCore.activeCalories)}
-            unit="kcal"
+            value={stabilityScore === 0 ? '--' : String(biometricCore.activeCalories)}
+            unit={stabilityScore === 0 ? '' : 'kcal'}
             label="Active Cal"
           />
         </View>
 
+        {/* ── 3b. Sync Health Data Button ── */}
+        <Pressable
+          onPress={handleSyncHealthData}
+          style={({ pressed }) => ({
+            backgroundColor: COLORS.surface,
+            borderRadius: 16,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+            opacity: pressed ? 0.88 : 1,
+            shadowColor: '#1A2129',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.04,
+            shadowRadius: 6,
+            elevation: 1,
+          })}
+        >
+          <MaterialCommunityIcons name="cached" size={20} color={COLORS.primary} />
+          <Text style={{ color: COLORS.primary, fontWeight: '700', marginLeft: 8, fontSize: 13 }}>
+            Sync Apple Health / Google Health Connect
+          </Text>
+        </Pressable>
+
         {/* ── 4. Allergen Profile Strip ────────────────────────────────── */}
-        <View
-          style={{
+        <Pressable
+          onPress={() => onNavigate(4)}
+          style={({ pressed }) => ({
             backgroundColor: COLORS.surface,
             borderRadius: 20,
             padding: 16,
@@ -911,7 +1104,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
             shadowOpacity: 0.05,
             shadowRadius: 8,
             elevation: 2,
-          }}
+            opacity: pressed ? 0.92 : 1,
+          })}
         >
           <SectionHeader title="Allergen Profile" subtitle="Tap to manage →" />
           {userAllergies.length === 0 ? (
@@ -921,85 +1115,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
               No allergens configured.
             </Text>
           ) : (
-            <View className="flex-row flex-wrap">
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
               {userAllergies.map((allergen) => (
                 <AllergenPill key={allergen} label={allergen} />
               ))}
             </View>
           )}
-        </View>
+        </Pressable>
 
-        {/* ── 4b. Local AI Preferences Card ────────────────────────────── */}
-        <View
-          style={{
-            backgroundColor: COLORS.surface,
-            borderRadius: 20,
-            padding: 16,
-            marginBottom: 16,
-            shadowColor: '#1A2129',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 2,
-          }}
-        >
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-4">
-              <View className="flex-row items-center mb-1">
-                <MaterialCommunityIcons
-                  name="robot-outline"
-                  size={18}
-                  color={isLocalAIOptedIn ? COLORS.primary : COLORS.textSecondary}
-                />
-                <Text
-                  style={{
-                    fontSize: 15,
-                    fontWeight: '700',
-                    color: COLORS.textPrimary,
-                    marginLeft: 6,
-                  }}
-                >
-                  Local AI Research
-                </Text>
-              </View>
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: COLORS.textSecondary,
-                  lineHeight: 16,
-                }}
-              >
-                Use an offline on-device language model to research ingredient safety details and health impacts. 100% private.
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => setLocalAIOptedIn(!isLocalAIOptedIn)}
-              style={{
-                width: 48,
-                height: 28,
-                borderRadius: 14,
-                backgroundColor: isLocalAIOptedIn ? COLORS.primary : '#E8EDF0',
-                padding: 2,
-                justifyContent: 'center',
-              }}
-            >
-              <Animated.View
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 12,
-                  backgroundColor: '#FFFFFF',
-                  transform: [{ translateX: toggleAnim }],
-                  shadowColor: '#000000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.2,
-                  shadowRadius: 2,
-                  elevation: 2,
-                }}
-              />
-            </Pressable>
-          </View>
-        </View>
+        {/* Local AI Preferences Card removed (moved to SettingsScreen) */}
 
         {/* ── 5. Medication Timeline Card ──────────────────────────────── */}
         <View
@@ -1078,11 +1202,238 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate: _onNavigate }) => {
                 )}% complete`
               : '—'}
           </Text>
+
+          {/* Add Medication Trigger Button */}
+          <Pressable
+            onPress={() => setIsAddModalOpen(true)}
+            style={({ pressed }) => ({
+              marginTop: 16,
+              backgroundColor: COLORS.primaryContainer,
+              borderRadius: 12,
+              paddingVertical: 12,
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              opacity: pressed ? 0.88 : 1,
+            })}
+          >
+            <MaterialCommunityIcons name="plus" size={18} color={COLORS.primary} />
+            <Text style={{ color: COLORS.primary, fontWeight: '700', marginLeft: 6, fontSize: 14 }}>
+              Add Medication
+            </Text>
+          </Pressable>
         </View>
 
         {/* Bottom spacer so content clears the nav bar */}
         <View style={{ height: 16 }} />
       </ScrollView>
+
+      {/* ── 6. Add Medication Modal ───────────────────────────────────── */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isAddModalOpen}
+        onRequestClose={() => setIsAddModalOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(26, 33, 41, 0.5)', justifyContent: 'flex-end' }}
+          onPress={() => setIsAddModalOpen(false)}
+        >
+          <Pressable
+            style={{
+              backgroundColor: COLORS.surface,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 24,
+              paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+            }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: COLORS.textPrimary }}>
+                New Medication
+              </Text>
+              <Pressable onPress={() => setIsAddModalOpen(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={COLORS.textSecondary} />
+              </Pressable>
+            </View>
+
+            {/* Input: Name */}
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
+              Medication Name
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 15,
+                color: COLORS.textPrimary,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+              placeholder="e.g. Lisinopril"
+              placeholderTextColor="#A0AAB2"
+              value={medName}
+              onChangeText={setMedName}
+            />
+
+            {/* Input: Dosage */}
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
+              Dosage / Instructions
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 15,
+                color: COLORS.textPrimary,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+              placeholder="e.g. 10mg or 2 tablets"
+              placeholderTextColor="#A0AAB2"
+              value={medDosage}
+              onChangeText={setMedDosage}
+            />
+
+            {/* Input: Time */}
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
+              Scheduled Time (24h format)
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 15,
+                color: COLORS.textPrimary,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+              placeholder="e.g. 08:00 or 21:00"
+              placeholderTextColor="#A0AAB2"
+              value={medTime}
+              onChangeText={setMedTime}
+            />
+
+            {/* Input: Icon Selection */}
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8 }}>
+              Select Icon
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
+              {(['pill', 'capsule', 'syringe', 'droplet'] as const).map((icon) => (
+                <Pressable
+                  key={icon}
+                  onPress={() => setMedIcon(icon)}
+                  style={{
+                    flex: 1,
+                    backgroundColor: medIcon === icon ? COLORS.primaryContainer : COLORS.background,
+                    borderRadius: 12,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 2,
+                    borderColor: medIcon === icon ? COLORS.primary : 'transparent',
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name={icon as any}
+                    size={24}
+                    color={medIcon === icon ? COLORS.primary : COLORS.textSecondary}
+                  />
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Submit Button */}
+            <Pressable
+              onPress={handleAddMedicationSubmit}
+              style={({ pressed }) => ({
+                backgroundColor: COLORS.primary,
+                borderRadius: 16,
+                paddingVertical: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.88 : 1,
+              })}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 16 }}>
+                Schedule Medication
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Manage Allergens Modal removed (moved to SettingsScreen) */}
+
+      {/* ── 8. Health Sync Progress Modal ──────────────────────────────── */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isSyncing}
+        onRequestClose={() => {}}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(26, 33, 41, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginBottom: 20 }} />
+            <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+              Syncing Health Tracker
+            </Text>
+            
+            <View style={{ width: '100%', gap: 12, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons 
+                  name={syncStep >= 1 ? "check-circle" : "circle-outline"} 
+                  size={16} 
+                  color={syncStep >= 1 ? COLORS.primary : COLORS.textSecondary} 
+                />
+                <Text style={{ fontSize: 12, color: syncStep >= 1 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 1 ? '700' : '400' }}>
+                  Connecting to Platform Health APIs...
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons 
+                  name={syncStep >= 2 ? "check-circle" : "circle-outline"} 
+                  size={16} 
+                  color={syncStep >= 2 ? COLORS.primary : COLORS.textSecondary} 
+                />
+                <Text style={{ fontSize: 12, color: syncStep >= 2 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 2 ? '700' : '400' }}>
+                  Reading Resting Heart Rate History...
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons 
+                  name={syncStep >= 3 ? "check-circle" : "circle-outline"} 
+                  size={16} 
+                  color={syncStep >= 3 ? COLORS.primary : COLORS.textSecondary} 
+                />
+                <Text style={{ fontSize: 12, color: syncStep >= 3 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 3 ? '700' : '400' }}>
+                  Importing steps & sleep metrics...
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons 
+                  name={syncStep >= 4 ? "check-circle" : "circle-outline"} 
+                  size={16} 
+                  color={syncStep >= 4 ? COLORS.primary : COLORS.textSecondary} 
+                />
+                <Text style={{ fontSize: 12, color: syncStep >= 4 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 4 ? '700' : '400' }}>
+                  Calculating Health Stability Index...
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

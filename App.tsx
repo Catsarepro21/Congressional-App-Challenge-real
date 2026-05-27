@@ -13,6 +13,10 @@ import { View, StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import HomeScreen from './src/screens/HomeScreen';
+import ScanScreen from './src/screens/ScanScreen';
+import MapScreen from './src/screens/MapScreen';
+import AnalyticsScreen from './src/screens/AnalyticsScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { BottomNavBar } from './src/components/BottomNavBar';
 
 const BACKGROUND = '#F3F5F7';
@@ -24,35 +28,19 @@ export default function App() {
     setActiveTab(index);
   }, []);
 
-  /** Render the active screen. ScanScreen and AnalyticsScreen will be wired in Phase 2. */
+  /** Render the active screen. */
   const renderScreen = () => {
     switch (activeTab) {
       case 0:
         return <HomeScreen onNavigate={handleTabPress} />;
       case 1:
-        // ScanScreen — placeholder until Phase 2
-        return (
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: BACKGROUND,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          />
-        );
+        return <ScanScreen />;
       case 2:
-        // AnalyticsScreen — placeholder until Phase 2
-        return (
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: BACKGROUND,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          />
-        );
+        return <MapScreen />;
+      case 3:
+        return <AnalyticsScreen />;
+      case 4:
+        return <SettingsScreen />;
       default:
         return <HomeScreen onNavigate={handleTabPress} />;
     }
