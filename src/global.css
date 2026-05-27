@@ -1,0 +1,23 @@
+/* src/global.css - NativeWind v4 theme configuration styles */
+@import "tailwindcss";
+
+@theme {
+  /* HSL Tailored Color Palette */
+  --color-primary: hsl(152, 60%, 35%);        /* Forest Emerald Green */
+  --color-primary-container: hsl(152, 60%, 90%);
+  --color-secondary: hsl(190, 45%, 42%);      /* Muted Teal */
+  --color-background: hsl(220, 20%, 97%);     /* Very Light Gray/Blue */
+  --color-surface: hsl(0, 0%, 100%);          /* White Card Base */
+  
+  /* Coral Red Alert Block for Allergen Alert */
+  --color-alert: hsl(355, 78%, 56%);          /* Vibrant Coral-Red */
+  --color-alert-container: hsl(355, 100%, 96%); /* Tinted warning red */
+  
+  /* Text Scales */
+  --color-text-primary: hsl(220, 30%, 15%);
+  --color-text-secondary: hsl(220, 15%, 45%);
+  
+  /* Border Radiuses following Material 3 guidelines */
+  --radius-container: 24px;                  /* rounded-3xl cards */
+  --radius-pill: 100px;                       /* rounded-full pills */
+}

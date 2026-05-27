@@ -1,0 +1,8 @@
+/**
+ * @file index.ts
+ * @description Barrel export for all SafeScale Health service modules.
+ * Import from '@/services' for clean import paths in consumer files.
+ */
+
+export { AllergenEngine } from './AllergenEngine';
+export { HealthDataService } from './HealthDataService';
