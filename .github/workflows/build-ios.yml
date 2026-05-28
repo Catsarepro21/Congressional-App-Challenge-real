@@ -32,7 +32,7 @@ jobs:
           sudo mkdir -p /usr/local/bin
           sudo ln -sf "$NODE_PATH" /usr/local/bin/node
 
-      - name: Patch Podfile to disable code signing in all Pod targets
+      - name: Patch Podfile for CI
         run: |
           python3 << 'PYEOF'
           import re
@@ -40,9 +40,23 @@ jobs:
           with open('ios/Podfile', 'r') as f:
               content = f.read()
 
-          # Settings to inject into the post_install hook
+          # 1. Disable New Architecture — this removes ExpoModulesJSI entirely,
+          #    which is the pod whose xcframework build script fails on CI.
+          if "RCT_NEW_ARCH_ENABLED" not in content:
+              content = "ENV['RCT_NEW_ARCH_ENABLED'] = '0'\n" + content
+              print("Injected RCT_NEW_ARCH_ENABLED = 0")
+          else:
+              # Force it to 0 even if already present
+              content = re.sub(
+                  r"ENV\['RCT_NEW_ARCH_ENABLED'\]\s*=\s*'[^']*'",
+                  "ENV['RCT_NEW_ARCH_ENABLED'] = '0'",
+                  content
+              )
+              print("Forced RCT_NEW_ARCH_ENABLED = 0")
+
+          # 2. Inject code-signing disable into existing post_install block
           injection = """
-            # CI: disable code signing and script sandboxing for all pod targets
+            # CI: disable code signing and script sandboxing
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
                 config.build_settings['CODE_SIGNING_ALLOWED']          = 'NO'
@@ -54,17 +68,15 @@ jobs:
             end
           """
 
-          # Inject right after the first "post_install do |installer|" line
-          patched = re.sub(
-              r'(post_install do \|installer\|)',
-              r'\1' + injection,
-              content,
-              count=1
-          )
-
-          # If there was no post_install block at all, append one
-          if patched == content:
-              patched += "\npost_install do |installer|\n" + injection + "\nend\n"
+          if 'post_install do |installer|' in content:
+              patched = re.sub(
+                  r'(post_install do \|installer\|)',
+                  r'\1' + injection,
+                  content,
+                  count=1
+              )
+          else:
+              patched = content + "\npost_install do |installer|\n" + injection + "\nend\n"
 
           with open('ios/Podfile', 'w') as f:
               f.write(patched)
@@ -96,8 +108,8 @@ jobs:
             clean build 2>&1 | tee xcodebuild.log
           EXIT_CODE=${PIPESTATUS[0]}
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "--- XCODEBUILD ERRORS ---"
-            grep -E "error:|Error:|BUILD FAILED" xcodebuild.log | head -80
+            echo "====== ERRORS ======"
+            grep -E "error:|Error:|BUILD FAILED|PhaseScriptExecution" xcodebuild.log | head -80
             exit $EXIT_CODE
           fi
 
