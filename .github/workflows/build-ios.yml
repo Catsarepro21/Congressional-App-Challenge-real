@@ -21,6 +21,12 @@ jobs:
       - name: Install JS Dependencies
         run: npm ci
 
+      - name: Show active Xcode and Swift versions
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          swift --version
+
       - name: Generate Native iOS Project
         run: npx expo prebuild --platform ios --clean
 
@@ -69,58 +75,67 @@ jobs:
           print("Podfile patched successfully")
           PYEOF
 
-      - name: Patch ExpoModulesJSI build script (add signing flags to inner xcodebuild)
+      - name: Patch ExpoModulesJSI build script (signing flags as xcodebuild build settings)
         run: |
           SCRIPT="node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh"
-          echo "--- Original xcodebuild call ---"
-          grep -n "CODE_SIGNING\|env -i\|xcodebuild" "$SCRIPT" | head -20
 
-          # The script uses:
-          #   env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \
-          #     xcodebuild \
-          #
-          # We need to add CODE_SIGNING_ALLOWED=NO etc. to the env -i call.
           python3 << 'PYEOF'
-          with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'r') as f:
+          script_path = 'node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh'
+          with open(script_path, 'r') as f:
               content = f.read()
 
-          # Inject signing flags into the env -i ... xcodebuild call.
-          # The pattern to find is the env -i line with RN_ROOT, followed by xcodebuild.
-          old = 'env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \\'
-          new = (
-              'env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \\\n'
-              '    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \\'
+          print("=== BEFORE patch: xcodebuild-related lines ===")
+          for i, line in enumerate(content.splitlines(), 1):
+              if any(k in line for k in ['xcodebuild', 'SKIP_INSTALL', 'BUILD_LIBRARY', 'quiet', 'CODE_SIGNING']):
+                  print(f"{i}: {line}")
+
+          # Fix 1: Remove -quiet so we can see the real error in CI logs
+          content = content.replace('    -quiet \\\n', '')
+
+          # Fix 2: Add CODE_SIGNING flags as xcodebuild BUILD SETTINGS
+          #        (must come after the existing build settings, not before xcodebuild)
+          old_marker = '    SKIP_INSTALL=NO \\\n'
+          signing_flags = (
+              '    SKIP_INSTALL=NO \\\n'
+              '    CODE_SIGNING_ALLOWED=NO \\\n'
+              '    CODE_SIGNING_REQUIRED=NO \\\n'
+              '    CODE_SIGN_IDENTITY="" \\\n'
+              '    EXPANDED_CODE_SIGN_IDENTITY="" \\\n'
           )
 
-          if old in content:
-              patched = content.replace(old, new, 1)
-              with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'w') as f:
-                  f.write(patched)
-              print("SUCCESS: Patched env -i line in build-xcframework.sh")
+          if old_marker in content:
+              content = content.replace(old_marker, signing_flags, 1)
+              print("\nSUCCESS: Added signing flags as xcodebuild build settings after SKIP_INSTALL=NO")
           else:
-              # Fallback: patch using a broader pattern that finds the xcodebuild build call
-              import re
-              patched = re.sub(
-                  r'(env -i PATH="\$PATH" HOME="\$HOME"[^\n]+ \\)',
-                  r'\1\n    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \\',
-                  content,
-                  count=1
+              # The marker changed — do a best-effort insert before SWIFT_COMPILATION_MODE
+              old_marker2 = '    SWIFT_COMPILATION_MODE=wholemodule \\\n'
+              signing_flags2 = (
+                  '    CODE_SIGNING_ALLOWED=NO \\\n'
+                  '    CODE_SIGNING_REQUIRED=NO \\\n'
+                  '    CODE_SIGN_IDENTITY="" \\\n'
+                  '    EXPANDED_CODE_SIGN_IDENTITY="" \\\n'
+                  '    SWIFT_COMPILATION_MODE=wholemodule \\\n'
               )
-              with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'w') as f:
-                  f.write(patched)
-              print("FALLBACK: Patched using regex")
+              if old_marker2 in content:
+                  content = content.replace(old_marker2, signing_flags2, 1)
+                  print("\nFALLBACK: Added signing flags before SWIFT_COMPILATION_MODE")
+              else:
+                  print("\nWARNING: Could not find patch anchor — printing full script for diagnosis:")
+                  print(content)
 
-          # Verify the patch
-          with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'r') as f:
-              verify = f.read()
-          if 'CODE_SIGNING_ALLOWED=NO' in verify:
-              print("Verification PASSED: CODE_SIGNING_ALLOWED=NO is in the script")
-          else:
-              print("WARNING: Patch may have failed, CODE_SIGNING_ALLOWED not found")
+          with open(script_path, 'w') as f:
+              f.write(content)
+
+          print("\n=== AFTER patch: xcodebuild-related lines ===")
+          with open(script_path, 'r') as f:
+              patched = f.read()
+          for i, line in enumerate(patched.splitlines(), 1):
+              if any(k in line for k in ['xcodebuild', 'SKIP_INSTALL', 'BUILD_LIBRARY', 'CODE_SIGNING', 'SWIFT_COMPILATION']):
+                  print(f"{i}: {line}")
+
+          assert 'CODE_SIGNING_ALLOWED=NO' in patched, "PATCH FAILED: signing flags not in script"
+          print("\nVerification PASSED")
           PYEOF
-
-          echo "--- Patched xcodebuild call ---"
-          grep -n "CODE_SIGNING\|env -i\|xcodebuild" "$SCRIPT" | head -20
 
       - name: Install CocoaPods
         working-directory: ios
@@ -146,7 +161,7 @@ jobs:
             clean build 2>&1 | tee xcodebuild.log
           EXIT_CODE=${PIPESTATUS[0]}
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "====== ERRORS ======"
+            echo "====== BUILD ERRORS ======"
             grep -E "error:|Error:|BUILD FAILED|PhaseScriptExecution" xcodebuild.log | head -80
             exit $EXIT_CODE
           fi
