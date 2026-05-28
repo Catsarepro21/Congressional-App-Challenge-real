@@ -28,6 +28,10 @@ jobs:
       - name: Generate Native iOS Project
         run: npx expo prebuild --platform ios
 
+      - name: Configure Xcode Node environment
+        run: |
+          echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
+
       - name: Build Unsigned App with Xcode
         run: |
           xcodebuild -workspace ios/SafeScaleHealth.xcworkspace \
