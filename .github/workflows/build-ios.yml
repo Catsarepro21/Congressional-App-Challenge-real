@@ -162,13 +162,9 @@ jobs:
           fi
           APP_NAME=$(basename "$APP_PATH" .app)
           IPA_NAME="${APP_NAME}.ipa"
-          if [[ "$IPA_NAME" == *$'\n'* ]]; then
-            echo "ERROR: IPA name contains a newline."
-            exit 1
-          fi
           rm -rf ./Payload
           mkdir -p Payload
-          cp -R "$APP_PATH" Payload/
+          ditto "$APP_PATH" "Payload/${APP_NAME}.app"
           ditto -c -k --sequesterRsrc --keepParent Payload "$IPA_NAME"
           printf '%s\n' "IPA_PATH=$IPA_NAME" >> "$GITHUB_ENV"
 
