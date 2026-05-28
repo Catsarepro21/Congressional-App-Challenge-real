@@ -32,7 +32,7 @@ jobs:
           sudo mkdir -p /usr/local/bin
           sudo ln -sf "$NODE_PATH" /usr/local/bin/node
 
-      - name: Patch Podfile for CI
+      - name: Patch Podfile for CI (disable code signing in all pod targets)
         run: |
           python3 << 'PYEOF'
           import re
@@ -40,21 +40,6 @@ jobs:
           with open('ios/Podfile', 'r') as f:
               content = f.read()
 
-          # 1. Disable New Architecture — this removes ExpoModulesJSI entirely,
-          #    which is the pod whose xcframework build script fails on CI.
-          if "RCT_NEW_ARCH_ENABLED" not in content:
-              content = "ENV['RCT_NEW_ARCH_ENABLED'] = '0'\n" + content
-              print("Injected RCT_NEW_ARCH_ENABLED = 0")
-          else:
-              # Force it to 0 even if already present
-              content = re.sub(
-                  r"ENV\['RCT_NEW_ARCH_ENABLED'\]\s*=\s*'[^']*'",
-                  "ENV['RCT_NEW_ARCH_ENABLED'] = '0'",
-                  content
-              )
-              print("Forced RCT_NEW_ARCH_ENABLED = 0")
-
-          # 2. Inject code-signing disable into existing post_install block
           injection = """
             # CI: disable code signing and script sandboxing
             installer.pods_project.targets.each do |target|
@@ -83,6 +68,59 @@ jobs:
 
           print("Podfile patched successfully")
           PYEOF
+
+      - name: Patch ExpoModulesJSI build script (add signing flags to inner xcodebuild)
+        run: |
+          SCRIPT="node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh"
+          echo "--- Original xcodebuild call ---"
+          grep -n "CODE_SIGNING\|env -i\|xcodebuild" "$SCRIPT" | head -20
+
+          # The script uses:
+          #   env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \
+          #     xcodebuild \
+          #
+          # We need to add CODE_SIGNING_ALLOWED=NO etc. to the env -i call.
+          python3 << 'PYEOF'
+          with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'r') as f:
+              content = f.read()
+
+          # Inject signing flags into the env -i ... xcodebuild call.
+          # The pattern to find is the env -i line with RN_ROOT, followed by xcodebuild.
+          old = 'env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \\'
+          new = (
+              'env -i PATH="$PATH" HOME="$HOME" PODS_ROOT="$PODS_ROOT" RN_ROOT="$RN_ROOT" \\\n'
+              '    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \\'
+          )
+
+          if old in content:
+              patched = content.replace(old, new, 1)
+              with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'w') as f:
+                  f.write(patched)
+              print("SUCCESS: Patched env -i line in build-xcframework.sh")
+          else:
+              # Fallback: patch using a broader pattern that finds the xcodebuild build call
+              import re
+              patched = re.sub(
+                  r'(env -i PATH="\$PATH" HOME="\$HOME"[^\n]+ \\)',
+                  r'\1\n    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \\',
+                  content,
+                  count=1
+              )
+              with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'w') as f:
+                  f.write(patched)
+              print("FALLBACK: Patched using regex")
+
+          # Verify the patch
+          with open('node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh', 'r') as f:
+              verify = f.read()
+          if 'CODE_SIGNING_ALLOWED=NO' in verify:
+              print("Verification PASSED: CODE_SIGNING_ALLOWED=NO is in the script")
+          else:
+              print("WARNING: Patch may have failed, CODE_SIGNING_ALLOWED not found")
+          PYEOF
+
+          echo "--- Patched xcodebuild call ---"
+          grep -n "CODE_SIGNING\|env -i\|xcodebuild" "$SCRIPT" | head -20
 
       - name: Install CocoaPods
         working-directory: ios
