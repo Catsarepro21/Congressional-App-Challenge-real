@@ -154,10 +154,10 @@ jobs:
       - name: Package App into IPA
         run: |
           set -euo pipefail
-          APP_PATH=$(find build/Build/Products -type d -path "*Release-iphoneos*" -name "*.app" -print -quit)
+          APP_PATH=$(find build/Build/Products -type d -path "*Release-iphoneos/*.app" -print -quit)
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: No .app found under build/Build/Products."
-            ls -la build/Build/Products
+            find build/Build/Products -type d -name "*.app" -print
             exit 1
           fi
           APP_NAME=$(basename "$APP_PATH" .app)
