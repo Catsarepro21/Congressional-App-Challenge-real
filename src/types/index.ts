@@ -30,6 +30,12 @@ export interface MedicationItem {
   status: 'Completed' | 'Active' | 'Pending';
   /** MaterialCommunityIcons icon name (e.g. "pill", "pill-multiple"). */
   icon: string;
+  /** Current stock of medication remaining. */
+  stock?: number;
+  /** Threshold below which a low stock alert should trigger. */
+  refillThreshold?: number;
+  /** Toggle flag for low stock reminder notifications. */
+  refillAlertsEnabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +80,20 @@ export interface BiometricSummary {
    * Must contain >= 3 entries for variance-based scoring to activate.
    */
   historicalRHR: number[];
+}
+
+/**
+ * Represents a single daily summary stored in the weekly history tracking system.
+ */
+export interface WeeklyHistoryEntry {
+  /** Date formatted as YYYY-MM-DD */
+  readonly date: string;
+  steps: number;
+  activeCalories: number;
+  stabilityScore: number;
+  sleepMinutes: number;
+  heartRate: number;
+  medicationAdherence: number; // Percentage from 0 to 100
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +248,12 @@ export interface SafeScaleState {
   /** The result of the most recent local AI analysis run. */
   localAIAnalysisResult: LocalAIAnalysisResult | null;
 
+  /** Timestamp of the last successful health data synchronization. */
+  lastSyncedAt: string | null;
+
+  /** Rolling history of daily biometric records for the past week (max 7 days). */
+  weeklyHistory: WeeklyHistoryEntry[];
+
   // ----- Actions ------------------------------------------------------------
 
   /** Replaces the entire userAllergies array atomically. */
@@ -313,4 +339,167 @@ export interface SafeScaleState {
   addCrowdsourcedReport: (report: Omit<CrowdsourcedReport, 'id' | 'timestamp'>) => void;
   /** Purges all crowdsourced reports. */
   clearCrowdsourcedReports: () => void;
+
+  /** Health logged meals and hydration items. */
+  loggedItems: LoggedItem[];
+  /** Logs a meal or water entry. */
+  addLoggedItem: (item: Omit<LoggedItem, 'id' | 'timestamp'>) => void;
+  /** Removes a log entry by id. */
+  deleteLoggedItem: (id: string) => void;
+  /** Clears all logged entries. */
+  clearLoggedItems: () => void;
+
+  /** Dynamic daily hydration goal (default 2000 ml) */
+  hydrationGoal: number;
+  /** Dynamic daily calorie intake goal (default 2000 kcal) */
+  calorieGoal: number;
+  /** Set daily hydration goal */
+  setHydrationGoal: (goal: number) => void;
+  /** Set daily calorie goal */
+  setCalorieGoal: (goal: number) => void;
+
+  /** Official Clinical Medical Records */
+  medicalRecords: MedicalRecord[];
+  /** Add a medical record (simulated import or direct upload) */
+  addMedicalRecord: (record: Omit<MedicalRecord, 'id'>) => void;
+  /** Delete a medical record */
+  deleteMedicalRecord: (id: string) => void;
+  /** Clear all medical records */
+  clearMedicalRecords: () => void;
+
+  // ----- Hydration Alerts and Emergency Plan State -----
+  /** Toggle flag for daily recurring water reminders */
+  hydrationNotificationsEnabled: boolean;
+  /** Time interval in hours between hydration alerts */
+  hydrationIntervalHours: number;
+  /** Set hydration alert toggle status */
+  setHydrationNotificationsEnabled: (enabled: boolean) => void;
+  /** Set interval hours for hydration alerts */
+  setHydrationIntervalHours: (hours: number) => void;
+
+  /** Registered emergency contact list */
+  emergencyContacts: EmergencyContact[];
+  /** Add a contact for anaphylaxis/allergy reaction events */
+  addEmergencyContact: (contact: Omit<EmergencyContact, 'id'>) => void;
+  /** Remove emergency contact by id */
+  removeEmergencyContact: (id: string) => void;
+
+  /** Restock medication quantity */
+  refillMedication: (id: string, amount: number) => void;
+
+  // ----- Personal Profile State -----
+  /** Personal profile data */
+  profile: UserProfile;
+  /** Update user profile properties */
+  updateProfile: (profile: Partial<UserProfile>) => void;
+
+  // ----- Vaccine Milestone State & Actions -----
+  /** Scheduled immunization milestones */
+  vaccineMilestones: VaccineMilestone[];
+  /** Import a scanned document into the records vault */
+  addScannedDocument: (record: Omit<MedicalRecord, 'id'>) => void;
+  /** Complete an immunization milestone */
+  completeVaccineMilestone: (id: string, dateAdministered?: string, provider?: string) => void;
+  /** Regenerate vaccine milestones based on profile DOB */
+  initializeVaccineMilestones: () => void;
+
+  // ----- Mood & Vitals Log State & Actions -----
+  /** Daily mood logs for correlation analytics */
+  moodLogs: MoodEntry[];
+  /** Clinical vitals logs (BP, glucose, temp, SpO2) */
+  vitalsLogs: VitalLogEntry[];
+  /** Add a mood log entry */
+  addMoodLog: (entry: Omit<MoodEntry, 'id' | 'timestamp'>) => void;
+  /** Add a clinical vital log entry */
+  addVitalLog: (entry: Omit<VitalLogEntry, 'id' | 'timestamp'>) => void;
+  /** Clear all mood logs */
+  clearMoodLogs: () => void;
+  /** Clear all vitals logs */
+  clearVitalsLogs: () => void;
+}
+
+/**
+ * Represents a logged health telemetry entry (meal nutrition or water hydration).
+ */
+export interface LoggedItem {
+  readonly id: string;
+  readonly type: 'Water' | 'Meal';
+  readonly name: string;
+  readonly value: string; // e.g. "500 ml", "650 kcal"
+  readonly timestamp: string; // HH:MM
+}
+
+/**
+ * Represents an official clinical medical record imported from a health provider (FHIR format).
+ */
+export interface MedicalRecord {
+  readonly id: string;
+  readonly type: 'Immunization' | 'LabResult' | 'Condition' | 'Prescription';
+  readonly title: string;
+  readonly value: string;
+  readonly date: string;
+  readonly provider: string;
+  readonly status: string;
+  readonly fhirData?: string; // Raw simulated FHIR JSON representation
+  readonly documentImage?: string; // Mock scanned document image URI
+}
+
+/**
+ * Represents a contact to be notified or called during allergy emergencies.
+ */
+export interface EmergencyContact {
+  readonly id: string;
+  name: string;
+  phone: string;
+}
+
+/**
+ * Represents the user's personal identity and physical baseline metrics.
+ */
+export interface UserProfile {
+  name: string;
+  dob: string;
+  bloodType: string;
+  height: number; // in cm
+  weight: number; // in kg
+  organDonor?: boolean;
+}
+
+/**
+ * Represents a scheduled vaccination milestone tracked based on age and DOB.
+ */
+export interface VaccineMilestone {
+  readonly id: string;
+  readonly name: string;
+  readonly recommendedAge: string;
+  readonly targetDisease: string;
+  status: 'Pending' | 'Completed';
+  dueDate?: string;
+  reminderScheduled?: boolean;
+}
+
+/**
+ * Represents a logged daily mood entry for mental health correlation.
+ */
+export interface MoodEntry {
+  readonly id: string;
+  readonly timestamp: string; // YYYY-MM-DD
+  rating: number; // 1 to 10
+  stressLevel: 'Low' | 'Medium' | 'High';
+  feelings: string[]; // e.g. ["Anxious", "Calm", "Energetic"]
+  notes?: string;
+}
+
+/**
+ * Represents a logged clinical vital signs entry.
+ */
+export interface VitalLogEntry {
+  readonly id: string;
+  readonly timestamp: string; // YYYY-MM-DD
+  systolicBP?: number; // mmHg
+  diastolicBP?: number; // mmHg
+  bloodGlucose?: number; // mg/dL
+  glucoseContext?: 'Fasting' | 'Post-Meal' | 'General';
+  spo2?: number; // %
+  temperature?: number; // °F
 }
