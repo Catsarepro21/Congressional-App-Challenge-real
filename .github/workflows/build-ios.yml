@@ -153,15 +153,26 @@ jobs:
 
       - name: Package App into IPA
         run: |
+          set -euo pipefail
+          APP_PATH=$(find build/Build/Products -type d -path "*Release-iphoneos*" -name "*.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found under build/Build/Products."
+            ls -la build/Build/Products
+            exit 1
+          fi
+          APP_NAME=$(basename "$APP_PATH" .app)
+          IPA_NAME="${APP_NAME}.ipa"
+          rm -rf Payload
           mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/SafeScaleHealth.app Payload/
-          zip -r SafeScaleHealth.ipa Payload
+          cp -R "$APP_PATH" Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload "$IPA_NAME"
+          echo "IPA_PATH=$IPA_NAME" >> $GITHUB_ENV
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SafeScaleHealth-Unsigned-IPA
-          path: SafeScaleHealth.ipa
+          path: ${{ env.IPA_PATH }}
 
       - name: Upload Build Log on Failure
         if: failure()
