@@ -1,7 +1,7 @@
 name: Build Unsigned iOS IPA
 
 on:
-  workflow_dispatch: # Allows manual trigger from the Actions tab on GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,33 +18,55 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: Install JS Dependencies
         run: npm ci
 
-      - name: Symlink Node.js for Xcode
-        run: |
-          sudo ln -sf $(which node) /usr/local/bin/node
+      - name: Setup Ruby & CocoaPods
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
 
       - name: Generate Native iOS Project
-        run: npx expo prebuild --platform ios
+        run: npx expo prebuild --platform ios --clean
 
-      - name: Configure Xcode Node environment
+      - name: Configure Node path for Xcode scripts
         run: |
-          echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
+          NODE_PATH=$(command -v node)
+          echo "NODE_BINARY=$NODE_PATH" >> $GITHUB_ENV
+          echo "export NODE_BINARY=$NODE_PATH" > ios/.xcode.env.local
+          # Also symlink so non-login Xcode shells can find it
+          sudo mkdir -p /usr/local/bin
+          sudo ln -sf "$NODE_PATH" /usr/local/bin/node
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install --repo-update
 
       - name: Build Unsigned App with Xcode
+        env:
+          NODE_BINARY: ${{ env.NODE_BINARY }}
         run: |
-          xcodebuild -workspace ios/SafeScaleHealth.xcworkspace \
-                     -scheme SafeScaleHealth \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     -derivedDataPath build \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY="" \
-                     PROVISIONING_PROFILE="" \
-                     ENABLE_USER_SCRIPT_SANDBOXING=NO \
-                     clean build
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/SafeScaleHealth.xcworkspace \
+            -scheme SafeScaleHealth \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE="" \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            NODE_BINARY="$NODE_BINARY" \
+            clean build 2>&1 | tee xcodebuild.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "--- XCODEBUILD ERRORS ---"
+            grep -E "error:|Error:" xcodebuild.log | head -60
+            exit $EXIT_CODE
+          fi
 
       - name: Package App into IPA
         run: |
@@ -52,8 +74,15 @@ jobs:
           cp -r build/Build/Products/Release-iphoneos/SafeScaleHealth.app Payload/
           zip -r SafeScaleHealth.ipa Payload
 
-      - name: Upload iOS Artifact
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SafeScaleHealth-Unsigned-IPA
           path: SafeScaleHealth.ipa
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
