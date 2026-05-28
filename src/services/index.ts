@@ -6,3 +6,5 @@
 
 export { AllergenEngine } from './AllergenEngine';
 export { HealthDataService } from './HealthDataService';
+export { NotificationService } from './NotificationService';
+
