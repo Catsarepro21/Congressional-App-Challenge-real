@@ -43,17 +43,9 @@ jobs:
           cp -r build/Build/Products/Release-iphoneos/SafeScaleHealth.app Payload/
           zip -r SafeScaleHealth.ipa Payload
 
-      - name: Upload IPA Artifact
-        uses: actions/actions-helper@v2
-        # Standard upload-artifact action is preferred for sharing build files:
-        # (Using v4 to ensure compatibility and speed)
-        with:
-          name: SafeScaleHealth-Unsigned-IPA
-          path: SafeScaleHealth.ipa
-        continue-on-error: true
-
-      - name: Upload Artifact (Fallback)
+      - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SafeScaleHealth-Unsigned-IPA
           path: SafeScaleHealth.ipa
+
