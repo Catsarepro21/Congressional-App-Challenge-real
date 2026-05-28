@@ -12,6 +12,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Select Xcode 26 (required for expo-modules-jsi swift-tools-version 6.2)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.3'
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -140,6 +145,21 @@ jobs:
       - name: Install CocoaPods
         working-directory: ios
         run: pod install --repo-update
+
+      - name: Pre-flight ExpoModulesJSI build (standalone, shows actual error)
+        run: |
+          PODS_ROOT="$(pwd)/ios/Pods"
+          SRCROOT="$(pwd)/node_modules/expo-modules-jsi/apple"
+          SCRIPT="${SRCROOT}/scripts/build-xcframework.sh"
+          echo "=== Running ExpoModulesJSI build script standalone ==="
+          PODS_ROOT="$PODS_ROOT" \
+          PODS_TARGET_SRCROOT="$SRCROOT" \
+          CONFIGURATION="Release" \
+          PLATFORM_NAME="iphoneos" \
+          NODE_BINARY="$(which node)" \
+          bash -x "$SCRIPT" 2>&1 | tee /tmp/jsi_build.log || true
+          echo "=== Last 60 lines of JSI build output ==="
+          tail -60 /tmp/jsi_build.log
 
       - name: Build Unsigned App with Xcode
         env:
