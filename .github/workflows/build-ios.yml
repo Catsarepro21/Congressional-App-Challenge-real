@@ -169,6 +169,7 @@ jobs:
           printf '%s\n' "IPA_PATH=$IPA_NAME" >> "$GITHUB_ENV"
 
       - name: Upload IPA Artifact
+        if: ${{ success() && env.IPA_PATH != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: SafeScaleHealth-Unsigned-IPA
