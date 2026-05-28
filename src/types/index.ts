@@ -143,6 +143,21 @@ export interface LocalAIAnalysisResult {
 }
 
 /**
+ * Represents a single crowdsourced allergen report posted to the local map.
+ */
+export interface CrowdsourcedReport {
+  readonly id: string;
+  readonly allergen: string;
+  readonly severity: 'Low' | 'Medium' | 'High';
+  readonly notes?: string;
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly x: number; // visual x-coord on map
+  readonly y: number; // visual y-coord on map
+  readonly timestamp: string;
+}
+
+/**
  * Tracks the full lifecycle state of the scanner camera view.
  * Managed via useSafeScaleStore.setScanState().
  */
@@ -287,4 +302,15 @@ export interface SafeScaleState {
 
   /** Removes a medication item from the schedule by id. */
   removeMedication: (id: string) => void;
+
+  /** Health data authorization status. null = unrequested, false = denied, true = approved */
+  hasHealthPermission: boolean | null;
+  /** Sets the health tracker data sharing permission state. */
+  setHealthPermission: (granted: boolean | null) => void;
+  /** Active crowdsourced allergen reports visualised on the map. */
+  crowdsourcedReports: CrowdsourcedReport[];
+  /** Adds a new crowdsourced report dynamically. */
+  addCrowdsourcedReport: (report: Omit<CrowdsourcedReport, 'id' | 'timestamp'>) => void;
+  /** Purges all crowdsourced reports. */
+  clearCrowdsourcedReports: () => void;
 }

@@ -54,8 +54,8 @@ import {
   selectMedicationSchedule,
   selectUserAllergies,
   selectDailyStabilityScore,
-  selectIsLocalAIOptedIn,
   selectIsTestMode,
+  selectHasHealthPermission,
 } from '../store/useSafeScaleStore';
 import type { MedicationItem } from '../types';
 
@@ -688,10 +688,13 @@ const checkIsEmulator = (): boolean => {
       model.includes('google_sdk') ||
       model.includes('Emulator') ||
       model.includes('Android SDK built for x86') ||
+      model.includes('sdk_gphone') ||
+      model.startsWith('sdk_') ||
       brand.startsWith('generic') ||
       hardware.includes('goldfish') ||
       hardware.includes('ranchu') ||
-      hardware.includes('vbox86')
+      hardware.includes('vbox86') ||
+      hardware.includes('gphone')
     );
   } else if (Platform.OS === 'ios') {
     const model = constants.Model || '';
@@ -714,11 +717,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const userAllergies = useSafeScaleStore(selectUserAllergies);
   const stabilityScore = useSafeScaleStore(selectDailyStabilityScore);
   const isTestMode = useSafeScaleStore(selectIsTestMode);
+  const hasHealthPermission = useSafeScaleStore(selectHasHealthPermission);
 
   const setMedicationStatus = useSafeScaleStore((s) => s.setMedicationStatus);
   const toggleTestMode = useSafeScaleStore((s) => s.toggleTestMode);
   const addMedication = useSafeScaleStore((s) => s.addMedication);
   const updateBiometrics = useSafeScaleStore((s) => s.updateBiometrics);
+  const setHealthPermission = useSafeScaleStore((s) => s.setHealthPermission);
 
   // ── Local UI State ────────────────────────────────────────────────────────
   const [tapCount, setTapCount] = useState(0);
@@ -730,9 +735,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const [medTime, setMedTime] = useState('08:00');
   const [medIcon, setMedIcon] = useState('pill');
 
-
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState(0);
+  const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -785,9 +790,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   // Removed handleAddAllergenSubmit (moved to SettingsScreen)
 
   /**
-   * Simulates fetching and syncing device health metrics from Apple HealthKit or Android Health Connect.
+   * Helper that executes the actual animated sync sequence.
    */
-  const handleSyncHealthData = useCallback(() => {
+  const executeSync = useCallback(() => {
     setIsSyncing(true);
     setSyncStep(1);
 
@@ -836,6 +841,32 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       }, 1200);
     }, 1200);
   }, [updateBiometrics, isTestMode]);
+
+  /**
+   * Checks for health data permission before syncing.
+   * Prompts the user if permission is unrequested or previously denied.
+   */
+  const handleSyncHealthData = useCallback(() => {
+    if (hasHealthPermission === true) {
+      executeSync();
+    } else {
+      setIsPermissionModalOpen(true);
+    }
+  }, [hasHealthPermission, executeSync]);
+
+  const handleApprovePermission = useCallback(() => {
+    setHealthPermission(true);
+    setIsPermissionModalOpen(false);
+    setTimeout(() => {
+      executeSync();
+    }, 300);
+  }, [setHealthPermission, executeSync]);
+
+  const handleDenyPermission = useCallback(() => {
+    setHealthPermission(false);
+    setIsPermissionModalOpen(false);
+    Alert.alert('Permission Denied', 'SafeScale Health was denied access to your device health tracker.');
+  }, [setHealthPermission]);
 
   /**
    * Marks a medication as Completed. If it was previously Active → Completed.
@@ -1430,6 +1461,58 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                   Calculating Health Stability Index...
                 </Text>
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 9. Health Tracker Permission Modal ──────────────────────────── */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isPermissionModalOpen}
+        onRequestClose={() => setIsPermissionModalOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(26, 33, 41, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' }}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primaryContainer, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <MaterialCommunityIcons name="heart-pulse" size={32} color={COLORS.primary} />
+            </View>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+              Health Data Access
+            </Text>
+            <Text style={{ fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18, marginBottom: 20 }}>
+              SafeScale Health requires your permission to connect and read activity counts, resting heart rate values, and sleep metrics from your device tracker.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+              <Pressable
+                onPress={handleDenyPermission}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  backgroundColor: COLORS.background,
+                  borderRadius: 14,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Text style={{ color: COLORS.textSecondary, fontWeight: '700', fontSize: 14 }}>Deny</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleApprovePermission}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  backgroundColor: COLORS.primary,
+                  borderRadius: 14,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  opacity: pressed ? 0.88 : 1,
+                })}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Approve</Text>
+              </Pressable>
             </View>
           </View>
         </View>

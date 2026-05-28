@@ -30,6 +30,7 @@ import type {
   ScanState,
   ScanPayloadMetrics,
   LocalAIAnalysisResult,
+  CrowdsourcedReport,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,10 @@ export const useSafeScaleStore = create<SafeScaleState>((set) => ({
   isLocalAIOptedIn: false,
 
   localAIAnalysisResult: null,
+
+  hasHealthPermission: null,
+
+  crowdsourcedReports: [],
 
   // ── Allergy Management Actions ─────────────────────────────────────────────
 
@@ -306,6 +311,24 @@ export const useSafeScaleStore = create<SafeScaleState>((set) => ({
     set((state) => ({
       medicationSchedule: state.medicationSchedule.filter((m) => m.id !== id),
     })),
+
+  setHealthPermission: (granted: boolean | null): void =>
+    set({ hasHealthPermission: granted }),
+
+  addCrowdsourcedReport: (report: Omit<CrowdsourcedReport, 'id' | 'timestamp'>): void =>
+    set((state) => {
+      const newReport: CrowdsourcedReport = {
+        ...report,
+        id: Date.now().toString(),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      return {
+        crowdsourcedReports: [newReport, ...state.crowdsourcedReports],
+      };
+    }),
+
+  clearCrowdsourcedReports: (): void =>
+    set({ crowdsourcedReports: [] }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -386,3 +409,17 @@ export const selectLocalAIAnalysisResult = (
 export const selectIsTestMode = (
   state: SafeScaleState,
 ): boolean => state.isTestMode;
+
+/**
+ * Returns the health tracker permission status.
+ */
+export const selectHasHealthPermission = (
+  state: SafeScaleState,
+): boolean | null => state.hasHealthPermission;
+
+/**
+ * Returns crowdsourced map reports.
+ */
+export const selectCrowdsourcedReports = (
+  state: SafeScaleState,
+): CrowdsourcedReport[] => state.crowdsourcedReports;

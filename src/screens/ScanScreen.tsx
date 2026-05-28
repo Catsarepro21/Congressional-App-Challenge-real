@@ -340,7 +340,7 @@ export const ScanScreen: React.FC = () => {
               >
                 <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginBottom: 12 }}>
                   <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Point at food label & tap capture
+                    {isLocalAIOptedIn ? 'Take a picture of the food' : 'Point at food label & tap capture'}
                   </Text>
                 </View>
                 <Pressable
