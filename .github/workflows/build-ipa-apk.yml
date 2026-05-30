@@ -1,9 +1,6 @@
 name: Build iOS IPA and Android APK
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 jobs:
