@@ -1127,6 +1127,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               } catch (e) {
                 console.warn('[HealthKit] Failed to fetch real health data:', e);
               }
+            } else if (Platform.OS === 'android' && syncPlatform === 'google') {
+              try {
+                const realData = await HealthDataService.fetchHealthConnectData();
+                if (realData) {
+                  heartRate = realData.heartRate;
+                  restingHeartRate = realData.restingHeartRate;
+                  sleepMinutes = realData.sleepMinutes;
+                  sleepConsistency = realData.sleepConsistency;
+                  steps = realData.steps;
+                  activeCalories = realData.activeCalories;
+                }
+              } catch (e) {
+                console.warn('[HealthConnect] Failed to fetch real health data:', e);
+              }
             }
 
             const baseHistory = biometricCore.historicalRHR.length >= 3 
@@ -1193,6 +1207,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         permissionGranted = await HealthDataService.requestHealthPermissions();
       } catch (e) {
         console.error('[HealthKit] Permission request error:', e);
+        permissionGranted = false;
+      }
+    } else if (Platform.OS === 'android' && syncPlatform === 'google') {
+      try {
+        permissionGranted = await HealthDataService.requestHealthConnectPermissions();
+      } catch (e) {
+        console.error('[HealthConnect] Permission request error:', e);
         permissionGranted = false;
       }
     }

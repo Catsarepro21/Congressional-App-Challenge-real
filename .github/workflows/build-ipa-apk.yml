@@ -143,6 +143,9 @@ jobs:
           print("\nVerification PASSED")
           PYEOF
 
+      - name: Patch react-native-health for React Native 0.85 compatibility
+        run: python3 .github/scripts/patch-healthkit.py
+
       - name: Install CocoaPods
         working-directory: ios
         run: pod install --repo-update
