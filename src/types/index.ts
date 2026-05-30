@@ -36,6 +36,8 @@ export interface MedicationItem {
   refillThreshold?: number;
   /** Toggle flag for low stock reminder notifications. */
   refillAlertsEnabled?: boolean;
+  /** Inactive ingredients to cross-check for allergies. */
+  inactiveIngredients?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +418,14 @@ export interface SafeScaleState {
   clearMoodLogs: () => void;
   /** Clear all vitals logs */
   clearVitalsLogs: () => void;
+
+  // ----- Symptom Log State & Actions -----
+  /** Daily symptom logs for flare-up correlation */
+  symptomLogs: SymptomLog[];
+  /** Add a symptom log entry */
+  addSymptomLog: (log: Omit<SymptomLog, 'id' | 'timestamp' | 'date'>) => void;
+  /** Delete a symptom log entry by id */
+  deleteSymptomLog: (id: string) => void;
 }
 
 /**
@@ -503,3 +513,15 @@ export interface VitalLogEntry {
   spo2?: number; // %
   temperature?: number; // °F
 }
+
+/**
+ * Represents a logged symptom entry.
+ */
+export interface SymptomLog {
+  readonly id: string;
+  readonly date: string;
+  readonly timestamp: string;
+  type: string;
+  severity: number;
+}
+

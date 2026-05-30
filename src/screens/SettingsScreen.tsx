@@ -1041,7 +1041,7 @@ export const SettingsScreen: React.FC = () => {
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-            <MaterialCommunityIcons name="pill-multiple" size={20} color={COLORS.primary} />
+            <MaterialCommunityIcons name="pill" size={20} color={COLORS.primary} />
             <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginLeft: 8 }}>
               Medication Allergen Checker
             </Text>

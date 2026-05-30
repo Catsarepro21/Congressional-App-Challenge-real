@@ -1105,13 +1105,29 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
           setSyncStep(4);
 
           // Step 4: Import complete, update store
-          setTimeout(() => {
-            const heartRate = Math.floor(68 + Math.random() * 12);
-            const restingHeartRate = Math.floor(58 + Math.random() * 8);
-            const sleepMinutes = Math.floor(420 + Math.random() * 90);
-            const sleepConsistency = Math.floor(82 + Math.random() * 14);
-            const steps = Math.floor(8000 + Math.random() * 4000);
-            const activeCalories = Math.floor(350 + Math.random() * 200);
+          setTimeout(async () => {
+            let heartRate = Math.floor(68 + Math.random() * 12);
+            let restingHeartRate = Math.floor(58 + Math.random() * 8);
+            let sleepMinutes = Math.floor(420 + Math.random() * 90);
+            let sleepConsistency = Math.floor(82 + Math.random() * 14);
+            let steps = Math.floor(8000 + Math.random() * 4000);
+            let activeCalories = Math.floor(350 + Math.random() * 200);
+
+            if (Platform.OS === 'ios' && syncPlatform === 'apple') {
+              try {
+                const realData = await HealthDataService.fetchHealthData();
+                if (realData) {
+                  heartRate = realData.heartRate;
+                  restingHeartRate = realData.restingHeartRate;
+                  sleepMinutes = realData.sleepMinutes;
+                  sleepConsistency = realData.sleepConsistency;
+                  steps = realData.steps;
+                  activeCalories = realData.activeCalories;
+                }
+              } catch (e) {
+                console.warn('[HealthKit] Failed to fetch real health data:', e);
+              }
+            }
 
             const baseHistory = biometricCore.historicalRHR.length >= 3 
               ? biometricCore.historicalRHR 
@@ -1152,7 +1168,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         }, 1200);
       }, 1200);
     }, 1200);
-  }, [updateBiometrics, isTestMode, biometricCore.historicalRHR]);
+  }, [updateBiometrics, isTestMode, biometricCore.historicalRHR, syncPlatform]);
 
   /**
    * Checks for health data permission before syncing.
@@ -1168,13 +1184,29 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     }
   }, [hasHealthPermission, executeSync]);
 
-  const handleApprovePermission = useCallback(() => {
-    setHealthPermission(true);
+  const handleApprovePermission = useCallback(async () => {
     setIsPermissionModalOpen(false);
-    setTimeout(() => {
-      executeSync();
-    }, 300);
-  }, [setHealthPermission, executeSync]);
+    
+    let permissionGranted = true;
+    if (Platform.OS === 'ios' && syncPlatform === 'apple') {
+      try {
+        permissionGranted = await HealthDataService.requestHealthPermissions();
+      } catch (e) {
+        console.error('[HealthKit] Permission request error:', e);
+        permissionGranted = false;
+      }
+    }
+
+    setHealthPermission(permissionGranted);
+
+    if (permissionGranted) {
+      setTimeout(() => {
+        executeSync();
+      }, 300);
+    } else {
+      Alert.alert('Permission Denied', 'SafeScale Health was denied access to your device health tracker.');
+    }
+  }, [setHealthPermission, executeSync, syncPlatform]);
 
   const handleDenyPermission = useCallback(() => {
     setHealthPermission(false);
@@ -1225,7 +1257,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
   // Box Breathing Timer Effect
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: any = null;
     let secondsLeft = 4;
     
     if (isBreathingActive) {
@@ -2118,7 +2150,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             </Text>
           ) : (
             <View style={{ gap: 8, marginBottom: 16 }}>
-              {symptomLogs.map((log) => (
+              {symptomLogs.map((log: any) => (
                 <View key={log.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: 12, padding: 10, justifyContent: 'space-between' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: log.severity >= 8 ? COLORS.alert : log.severity >= 4 ? '#E88C30' : COLORS.primary, marginRight: 10 }} />
@@ -2658,7 +2690,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                     elevation: 4,
                   })}
                 >
-                  <MaterialCommunityIcons name="phone-emergency" size={24} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <MaterialCommunityIcons name="phone" size={24} color="#FFFFFF" style={{ marginRight: 8 }} />
                   <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 16 }}>
                     CALL EMERGENCY SERVICES (911)
                   </Text>
@@ -3446,7 +3478,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                  <MaterialCommunityIcons name="wind" size={20} color={COLORS.secondary} style={{ marginRight: 6 }} />
+                  <MaterialCommunityIcons name="lungs" size={20} color={COLORS.secondary} style={{ marginRight: 6 }} />
                   <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.secondary }}>
                     Box Breathing Assistant
                   </Text>

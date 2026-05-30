@@ -40,6 +40,8 @@ import type {
   SymptomLog,
   UserProfile,
   VaccineMilestone,
+  MoodEntry,
+  VitalLogEntry,
 } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { NotificationService } from '../services/NotificationService';

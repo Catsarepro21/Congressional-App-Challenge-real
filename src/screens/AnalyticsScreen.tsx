@@ -22,6 +22,7 @@ const COLORS = {
   background: '#F3F5F7',
   surface: '#FFFFFF',
   alert: '#EB4C42',
+  alertContainer: '#FFEBEA',
   textPrimary: '#1A2129',
   textSecondary: '#6B7A87',
   border: 'hsl(220, 20%, 90%)',
@@ -512,7 +513,7 @@ export const AnalyticsScreen: React.FC = () => {
     if (symptomLogs.length === 0) {
       report += `No symptoms logged today.\n`;
     } else {
-      symptomLogs.forEach((log) => {
+      symptomLogs.forEach((log: any) => {
         report += `- ${log.type} (Severity: ${log.severity}/10) at ${log.timestamp}\n`;
       });
     }

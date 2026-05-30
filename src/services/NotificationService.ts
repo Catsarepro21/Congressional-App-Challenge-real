@@ -232,10 +232,7 @@ export const NotificationService = {
 
       targetDate.setHours(9, 0, 0, 0);
 
-      const trigger: Notifications.NotificationTriggerInput = {
-        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-        date: targetDate,
-      };
+      const trigger: any = targetDate;
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {

@@ -8,7 +8,12 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.safescalehealth"
+      "bundleIdentifier": "com.anonymous.safescalehealth",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "SafeScale Health requires access to the camera to scan food barcodes and medical document records.",
+        "NSLocationWhenInUseUsageDescription": "SafeScale Health requires location access to find nearby pharmacies and clinics."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,6 +27,20 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8a68a6c3-4e6e-4e6b-8f25-ccac89630b20"
+      }
+    },
+    "plugins": [
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "SafeScale Health requires access to your health data to sync steps, heart rate, sleep, and active calories.",
+          "healthUpdatePermission": "SafeScale Health requires permission to write health updates."
+        }
+      ]
+    ]
   }
 }
