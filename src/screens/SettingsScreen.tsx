@@ -484,6 +484,8 @@ export const SettingsScreen: React.FC = () => {
         },
       ]
     );
+  }, []);
+
   const checkDrugAllergies = (ingredientsStr: string): string[] => {
     const ingredients = ingredientsStr.split(',').map(i => i.trim().toLowerCase());
     const clashes: string[] = [];
