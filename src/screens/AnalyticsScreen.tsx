@@ -825,6 +825,7 @@ export const AnalyticsScreen: React.FC = () => {
                 </View>
               </View>
               </View>
+              </>
             ) : (
               <>
                 {/* ── Vitals & Trends View ── */}
