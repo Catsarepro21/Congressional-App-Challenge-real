@@ -334,23 +334,29 @@ const BiometricStatCard: React.FC<BiometricStatCardProps> = ({
       size={22}
       color={iconColor}
     />
-    <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 4 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 4, maxWidth: '100%' }}>
       <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
         style={{
           fontSize: 20,
           fontWeight: '700',
           color: COLORS.textPrimary,
+          flexShrink: 1,
         }}
       >
         {value}
       </Text>
       {unit !== '' && (
         <Text
+          numberOfLines={1}
           style={{
             fontSize: 11,
             fontWeight: '500',
             color: COLORS.textSecondary,
             marginLeft: 2,
+            flexShrink: 1,
           }}
         >
           {unit}
@@ -358,6 +364,7 @@ const BiometricStatCard: React.FC<BiometricStatCardProps> = ({
       )}
     </View>
     <Text
+      numberOfLines={1}
       style={{
         fontSize: 10,
         color: COLORS.textSecondary,
@@ -820,20 +827,25 @@ const SectionHeader: React.FC<{ title: string; subtitle?: string }> = ({
     }}
   >
     <Text
+      numberOfLines={1}
       style={{
         fontSize: 18,
         fontWeight: '700',
         color: COLORS.textPrimary,
+        flex: 1,
+        marginRight: 8,
       }}
     >
       {title}
     </Text>
     {subtitle !== undefined && (
       <Text
+        numberOfLines={1}
         style={{
           fontSize: 12,
           color: COLORS.secondary,
           fontWeight: '600',
+          flexShrink: 1,
         }}
       >
         {subtitle}
@@ -958,6 +970,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState(0);
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
+  const [isSyncPickerOpen, setIsSyncPickerOpen] = useState(false);
+  const [syncPlatform, setSyncPlatform] = useState<'apple' | 'google' | null>(null);
 
   const [isICEModalOpen, setIsICEModalOpen] = useState(false);
   const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
@@ -1144,7 +1158,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
    * Checks for health data permission before syncing.
    * Prompts the user if permission is unrequested or previously denied.
    */
-  const handleSyncHealthData = useCallback(() => {
+  const handleSyncHealthData = useCallback((platform: 'apple' | 'google') => {
+    setSyncPlatform(platform);
+    setIsSyncPickerOpen(false);
     if (hasHealthPermission === true) {
       executeSync();
     } else {
@@ -1624,7 +1640,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
         {/* ── 3b. Sync Health Data Button ── */}
         <Pressable
-          onPress={handleSyncHealthData}
+          onPress={() => setIsSyncPickerOpen(true)}
           style={({ pressed }) => ({
             backgroundColor: COLORS.surface,
             borderRadius: 16,
@@ -1646,8 +1662,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         >
           <MaterialCommunityIcons name="cached" size={20} color={COLORS.primary} />
           <Text style={{ color: COLORS.primary, fontWeight: '700', marginLeft: 8, fontSize: 13 }}>
-            Sync Apple Health / Google Health Connect
+            Sync Health Data
           </Text>
+          <MaterialCommunityIcons name="chevron-right" size={18} color={COLORS.primary} style={{ marginLeft: 4 }} />
         </Pressable>
 
         {lastSyncedAt ? (
@@ -2446,6 +2463,93 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* ── Health Sync Platform Picker Modal ─────────────────────────── */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isSyncPickerOpen}
+        onRequestClose={() => setIsSyncPickerOpen(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(26, 33, 41, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 24 }}
+          onPress={() => setIsSyncPickerOpen(false)}
+        >
+          <Pressable
+            style={{ backgroundColor: COLORS.surface, borderRadius: 28, padding: 24, width: '100%', maxWidth: 340 }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.textPrimary }}>
+                Sync Health Data
+              </Text>
+              <Pressable onPress={() => setIsSyncPickerOpen(false)}>
+                <MaterialCommunityIcons name="close" size={22} color={COLORS.textSecondary} />
+              </Pressable>
+            </View>
+            <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 20, lineHeight: 17 }}>
+              Choose your health platform to import biometric data including heart rate, sleep, steps, and active calories.
+            </Text>
+
+            {/* Apple Health Option */}
+            <Pressable
+              onPress={() => handleSyncHealthData('apple')}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                borderRadius: 18,
+                padding: 16,
+                marginBottom: 12,
+                borderWidth: 1.5,
+                borderColor: syncPlatform === 'apple' ? COLORS.primary : COLORS.border,
+              })}
+            >
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#FFEBEA', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                <MaterialCommunityIcons name="apple" size={28} color="#FF2D55" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Apple Health</Text>
+                <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                  HealthKit · Heart Rate · Sleep · Steps · Active Calories
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+            </Pressable>
+
+            {/* Google Health Connect Option */}
+            <Pressable
+              onPress={() => handleSyncHealthData('google')}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                borderRadius: 18,
+                padding: 16,
+                marginBottom: 4,
+                borderWidth: 1.5,
+                borderColor: syncPlatform === 'google' ? COLORS.primary : COLORS.border,
+              })}
+            >
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                <MaterialCommunityIcons name="google-fit" size={28} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health Connect</Text>
+                <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                  Health Connect · Fitbit · Samsung Health · Garmin
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+            </Pressable>
+
+            <Text style={{ fontSize: 10, color: COLORS.textSecondary, textAlign: 'center', marginTop: 14, lineHeight: 14 }}>
+              SafeScale Health reads health data from your device's health platform. No data is uploaded to external servers.
+            </Text>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* ── 9. Health Tracker Permission Modal ──────────────────────────── */}

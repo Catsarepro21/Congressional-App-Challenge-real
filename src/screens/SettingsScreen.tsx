@@ -137,11 +137,16 @@ export const SettingsScreen: React.FC = () => {
   const [milestoneDate, setMilestoneDate] = useState(new Date().toLocaleDateString());
   const [milestoneProvider, setMilestoneProvider] = useState('Public Health Clinic');
 
+  // Use a ref to guard initialization — prevents infinite loop when the store
+  // action reference changes identity on each render.
+  const didInitMilestones = useRef(false);
   useEffect(() => {
-    if (vaccineMilestones.length === 0) {
+    if (!didInitMilestones.current && vaccineMilestones.length === 0) {
+      didInitMilestones.current = true;
       initializeVaccineMilestones();
     }
-  }, [vaccineMilestones, initializeVaccineMilestones]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Drug checker states
   const [drugCheckerInput, setDrugCheckerInput] = useState('');
@@ -220,6 +225,7 @@ export const SettingsScreen: React.FC = () => {
   // ── Switch Animations ──────────────────────────────────────────────────────
   const aiToggleAnim = useRef(new Animated.Value(isLocalAIOptedIn ? 20 : 0)).current;
   const testToggleAnim = useRef(new Animated.Value(isTestMode ? 20 : 0)).current;
+  const hydrationToggleAnim = useRef(new Animated.Value(hydrationNotificationsEnabled ? 24 : 0)).current;
 
   useEffect(() => {
     Animated.spring(aiToggleAnim, {
@@ -238,6 +244,15 @@ export const SettingsScreen: React.FC = () => {
       useNativeDriver: true,
     }).start();
   }, [isTestMode, testToggleAnim]);
+
+  useEffect(() => {
+    Animated.spring(hydrationToggleAnim, {
+      toValue: hydrationNotificationsEnabled ? 24 : 0,
+      tension: 280,
+      friction: 20,
+      useNativeDriver: true,
+    }).start();
+  }, [hydrationNotificationsEnabled, hydrationToggleAnim]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -484,7 +499,7 @@ export const SettingsScreen: React.FC = () => {
         },
       ]
     );
-  }, []);
+  }, [isTestMode, toggleTestMode, setUserAllergies, updateBiometrics]);
 
   const checkDrugAllergies = (ingredientsStr: string): string[] => {
     const ingredients = ingredientsStr.split(',').map(i => i.trim().toLowerCase());

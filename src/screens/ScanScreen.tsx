@@ -154,6 +154,15 @@ export const ScanScreen: React.FC = () => {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
+  // Auto-request camera permission on mount so the OS permission dialog
+  // appears immediately rather than waiting for user to tap a button.
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) {
+      requestPermission();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permission?.status]);
+
   const [selectedProduct, setSelectedProduct] = useState<PresetProduct>(PRESET_PRODUCTS[0]);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
