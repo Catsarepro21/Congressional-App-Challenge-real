@@ -10,6 +10,7 @@ import {
   Image,
   Dimensions,
   Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -451,6 +452,20 @@ export const ScanScreen: React.FC = () => {
   }
 
   if (!permission.granted) {
+    const isPermanentlyDenied = !permission.canAskAgain;
+
+    const handlePressPermission = async () => {
+      if (isPermanentlyDenied) {
+        try {
+          await Linking.openSettings();
+        } catch (error) {
+          Alert.alert('Error', 'Could not open Settings. Please go to system Settings manually.');
+        }
+      } else {
+        requestPermission();
+      }
+    };
+
     return (
       <View style={{ flex: 1, backgroundColor: COLORS.background, justifyContent: 'center', padding: 24 }}>
         <View style={{ alignItems: 'center', marginBottom: 24 }}>
@@ -461,11 +476,13 @@ export const ScanScreen: React.FC = () => {
             Camera Access Required
           </Text>
           <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 18 }}>
-            SafeScale Health requires access to your camera to scan food ingredient labels for potential allergens.
+            {isPermanentlyDenied
+              ? 'Camera permission is disabled. Please open system settings to grant camera access to SafeScale Health.'
+              : 'SafeScale Health requires access to your camera to scan food ingredient labels for potential allergens.'}
           </Text>
         </View>
         <Pressable
-          onPress={requestPermission}
+          onPress={handlePressPermission}
           style={({ pressed }) => ({
             backgroundColor: COLORS.primary,
             borderRadius: 16,
@@ -475,7 +492,7 @@ export const ScanScreen: React.FC = () => {
           })}
         >
           <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 16 }}>
-            Grant Camera Permission
+            {isPermanentlyDenied ? 'Open Settings' : 'Grant Camera Permission'}
           </Text>
         </Pressable>
       </View>

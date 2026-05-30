@@ -23,7 +23,14 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.safescalehealth"
+      "package": "com.anonymous.safescalehealth",
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_RESTING_HEART_RATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,6 +46,27 @@
         {
           "healthSharePermission": "SafeScale Health requires access to your health data to sync steps, heart rate, sleep, and active calories.",
           "healthUpdatePermission": "SafeScale Health requires permission to write health updates."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SafeScale Health requires access to the camera to scan food barcodes and medical document records."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SafeScale Health requires location access to find nearby pharmacies and clinics."
+        }
+      ],
+      "react-native-health-connect",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
         }
       ]
     ]
