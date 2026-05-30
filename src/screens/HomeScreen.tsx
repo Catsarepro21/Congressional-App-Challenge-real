@@ -1189,6 +1189,39 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
    * Prompts the user if permission is unrequested or previously denied.
    */
   const handleSyncHealthData = useCallback((platform: 'apple' | 'google') => {
+    if (Platform.OS === 'ios' && platform === 'google') {
+      setIsSyncPickerOpen(false);
+      Alert.alert(
+        'Google Health on iOS',
+        'On iOS, Google Fit and Fitbit sync their data directly into Apple Health (HealthKit).\n\nPlease make sure Google Fit/Fitbit is allowed to share data with Apple Health in your device settings, then sync using Apple Health.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sync via Apple Health',
+            onPress: () => {
+              setSyncPlatform('apple');
+              if (hasHealthPermission === true) {
+                executeSync();
+              } else {
+                setIsPermissionModalOpen(true);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    if (Platform.OS === 'android' && platform === 'apple') {
+      setIsSyncPickerOpen(false);
+      Alert.alert(
+        'Apple Health on Android',
+        'Apple Health is exclusive to iOS devices.\n\nPlease select Google Health Connect to sync your fitness and activity data on Android.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setSyncPlatform(platform);
     setIsSyncPickerOpen(false);
     if (hasHealthPermission === true) {
