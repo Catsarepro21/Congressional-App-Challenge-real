@@ -2974,7 +2974,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 </View>
               )}
             </ScrollView>
-            {/* ICE Medical Card Modal */}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ICE Medical Card Modal */}
       <Modal
         animationType="slide"
         transparent={true}
