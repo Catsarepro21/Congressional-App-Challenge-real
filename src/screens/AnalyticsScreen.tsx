@@ -995,7 +995,7 @@ export const AnalyticsScreen: React.FC = () => {
                           >
                             <MaterialCommunityIcons name="alert-decagram" size={22} color={COLORS.alert} style={{ marginRight: 8 }} />
                             <View style={{ flex: 1 }}>
-                              <Text style={{ fontSize: 12, fontWeight: '800', color: COLORS.alert}>
+                              <Text style={{ fontSize: 12, fontWeight: '800', color: COLORS.alert }}>
                                 Negative Correlation Detected
                               </Text>
                               <Text style={{ fontSize: 11, color: COLORS.textPrimary, marginTop: 2, lineHeight: 15 }}>
