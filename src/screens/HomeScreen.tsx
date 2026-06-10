@@ -1130,10 +1130,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 console.warn('[HealthKit] Failed to fetch real health data:', e);
               }
             } else if (Platform.OS === 'ios' && syncPlatform === 'google') {
-              // Google Fit REST API on iOS — uses stored OAuth access token
+              // Google Fit REST API on iOS — uses stored OAuth access token or fallback client ID
               try {
-                const clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
-                if (clientId.trim()) {
+                let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
+                if (!clientId.trim() || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
+                  clientId = GoogleFitService.DEFAULT_CLIENT_ID;
+                }
+                if (clientId.trim() && !clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
                   const token = await GoogleFitService.authorize(clientId);
                   if (token) {
                     const realData = await GoogleFitService.fetchFitnessData(token);
@@ -1247,11 +1250,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     
     // For Google Fit on iOS — use OAuth flow directly, no system permission dialog needed
     if (syncPlatform === 'google' && Platform.OS === 'ios') {
-      const clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
-      if (!clientId.trim()) {
+      let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
+      if (!clientId.trim() || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
+        clientId = GoogleFitService.DEFAULT_CLIENT_ID;
+      }
+      if (!clientId || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
         Alert.alert(
           'Google Client ID Required',
-          'To sync with Google Fit on iOS, please add your Google OAuth Client ID in Settings → AI & Integration Settings.',
+          'To sync with Google Fit on iOS, please configure your Google OAuth Client ID in Settings → AI & Integration Settings or hardcode it in GoogleFitService.ts.',
           [{ text: 'OK' }]
         );
         return;
@@ -1270,8 +1276,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         console.error('[GoogleFit] OAuth failed:', e);
         Alert.alert(
           'Google Fit Authorization Failed',
-          e.message === 'NO_CLIENT_ID'
-            ? 'Please add your Google OAuth Client ID in Settings → AI & Integration Settings.'
+          e.message === 'NO_CLIENT_ID' || (clientId && clientId.includes('YOUR_GOOGLE_CLIENT_ID'))
+            ? 'Please add your Google OAuth Client ID in Settings → AI & Integration Settings or hardcode it in GoogleFitService.ts.'
             : 'Could not connect to Google Fit. Please check your Client ID and try again.',
           [{ text: 'OK' }]
         );
