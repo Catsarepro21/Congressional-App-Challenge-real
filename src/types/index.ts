@@ -473,7 +473,37 @@ export interface UserProfile {
   height: number; // in cm
   weight: number; // in kg
   organDonor?: boolean;
+  unitPreference?: 'metric' | 'imperial';
+  useGeminiFoodVision?: boolean;
+  geminiApiKey?: string;
+  useGeminiWeeklyReport?: boolean;
 }
+
+export interface FoodAnalysisResult {
+  foodName: string;
+  portionEstimate: string;
+  calories: number;
+  carbs: number;    // g
+  protein: number;  // g
+  fat: number;      // g
+  fiber: number;    // g
+  sugar: number;    // g
+  sodium: number;   // mg
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface WeeklyReport {
+  generatedAt: string;
+  avgDailyCalories: number;
+  avgSleepMinutes: number;
+  totalSteps: number;
+  avgRestingHR: number;
+  avgBloodGlucose: number | null;
+  avgSpO2: number | null;
+  moodTrend: string;
+  narrative: string;
+}
+
 
 /**
  * Represents a scheduled vaccination milestone tracked based on age and DOB.

@@ -125,6 +125,10 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   height: 168,
   weight: 62,
   organDonor: false,
+  unitPreference: 'metric',
+  useGeminiFoodVision: false,
+  geminiApiKey: '',
+  useGeminiWeeklyReport: false,
 };
 
 /**
