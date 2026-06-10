@@ -122,6 +122,16 @@ export const SettingsScreen: React.FC = () => {
   const [useGeminiFoodVision, setUseGeminiFoodVision] = useState(profile.useGeminiFoodVision || false);
   const [geminiApiKey, setGeminiApiKey] = useState(profile.geminiApiKey || '');
   const [useGeminiWeeklyReport, setUseGeminiWeeklyReport] = useState(profile.useGeminiWeeklyReport || false);
+  const [googleOAuthClientId, setGoogleOAuthClientId] = useState(profile.googleOAuthClientId || '');
+
+  // Auto-enable Gemini features when user types an API key
+  const handleGeminiApiKeyChange = (key: string) => {
+    setGeminiApiKey(key);
+    if (key.trim().length > 10) {
+      setUseGeminiFoodVision(true);
+      setUseGeminiWeeklyReport(true);
+    }
+  };
   const [isProfileSaved, setIsProfileSaved] = useState(false);
 
   // Sync inputs with store if profile changes externally (e.g. Test Mode seeding)
@@ -140,6 +150,7 @@ export const SettingsScreen: React.FC = () => {
     setUseGeminiFoodVision(profile.useGeminiFoodVision || false);
     setGeminiApiKey(profile.geminiApiKey || '');
     setUseGeminiWeeklyReport(profile.useGeminiWeeklyReport || false);
+    setGoogleOAuthClientId(profile.googleOAuthClientId || '');
   }, [profile]);
 
   const handleUnitPreferenceChange = (pref: 'metric' | 'imperial') => {
@@ -315,6 +326,7 @@ export const SettingsScreen: React.FC = () => {
       useGeminiFoodVision,
       geminiApiKey,
       useGeminiWeeklyReport,
+      googleOAuthClientId,
     });
 
     setIsProfileSaved(true);
@@ -1067,7 +1079,7 @@ export const SettingsScreen: React.FC = () => {
               }}
               secureTextEntry={true}
               value={geminiApiKey}
-              onChangeText={setGeminiApiKey}
+              onChangeText={handleGeminiApiKeyChange}
               placeholder="Paste your Gemini API Key here"
               placeholderTextColor="#A0AAB2"
               autoCapitalize="none"
@@ -1140,9 +1152,44 @@ export const SettingsScreen: React.FC = () => {
               />
             </Pressable>
           </View>
+
+          {/* Google Fit OAuth Client ID Input */}
+          <View style={{ marginTop: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <MaterialCommunityIcons name="google-fit" size={15} color="#4285F4" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginLeft: 6 }}>
+                Google Fit Client ID (iOS)
+              </Text>
+            </View>
+            <TextInput
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 13,
+                color: COLORS.textPrimary,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+              value={googleOAuthClientId}
+              onChangeText={setGoogleOAuthClientId}
+              placeholder="Paste your iOS OAuth Client ID here"
+              placeholderTextColor="#A0AAB2"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 6, lineHeight: 14 }}>
+              Allows Google Fit sync on iOS for Fitbit, Garmin, etc. Get a free iOS Client ID at{' '}
+              <Text style={{ color: '#4285F4', fontWeight: '700' }}>
+                console.cloud.google.com → Fitness API → Credentials
+              </Text>
+              {'. Bundle ID: com.anonymous.safescalehealth'}
+            </Text>
+          </View>
         </View>
 
         {/* ── Section: Hydration Alarms ────────────────────────────────── */}
+
         <View
           style={{
             backgroundColor: COLORS.surface,

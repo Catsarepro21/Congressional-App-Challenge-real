@@ -303,6 +303,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
   vitalsLogs: [],
 
+  hasCompletedOnboarding: false,
+
   profile: DEFAULT_USER_PROFILE,
 
   biometricCore: EMPTY_BIOMETRIC_CORE,
@@ -916,6 +918,15 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   clearVitalsLogs: (): void => {
     set({ vitalsLogs: [] });
   },
+
+  completeOnboarding: (profile: UserProfile, allergies: string[]): void => {
+    set((state) => ({
+      hasCompletedOnboarding: true,
+      profile,
+      userAllergies: allergies,
+      vaccineMilestones: generateMilestones(profile.dob),
+    }));
+  },
     }),
     {
       name: 'safescale-storage',
@@ -941,6 +952,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         vaccineMilestones: state.vaccineMilestones,
         moodLogs: state.moodLogs,
         vitalsLogs: state.vitalsLogs,
+        hasCompletedOnboarding: state.hasCompletedOnboarding,
       }),
     }
   )

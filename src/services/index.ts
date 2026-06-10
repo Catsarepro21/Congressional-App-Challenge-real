@@ -9,5 +9,7 @@ export { HealthDataService } from './HealthDataService';
 export { NotificationService } from './NotificationService';
 export { WeeklyReportService } from './WeeklyReportService';
 export { FoodVisionService } from './FoodVisionService';
+export { GoogleFitService } from './GoogleFitService';
+
 
 

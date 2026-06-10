@@ -62,6 +62,7 @@ import {
 } from '../store/useSafeScaleStore';
 import type { MedicationItem } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
+import { GoogleFitService } from '../services/GoogleFitService';
 
 // ---------------------------------------------------------------------------
 // Design constants
@@ -1128,6 +1129,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               } catch (e) {
                 console.warn('[HealthKit] Failed to fetch real health data:', e);
               }
+            } else if (Platform.OS === 'ios' && syncPlatform === 'google') {
+              // Google Fit REST API on iOS — uses stored OAuth access token
+              try {
+                const clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
+                if (clientId.trim()) {
+                  const token = await GoogleFitService.authorize(clientId);
+                  if (token) {
+                    const realData = await GoogleFitService.fetchFitnessData(token);
+                    heartRate = realData.heartRate;
+                    restingHeartRate = realData.restingHeartRate;
+                    sleepMinutes = realData.sleepMinutes;
+                    sleepConsistency = realData.sleepConsistency;
+                    steps = realData.steps;
+                    activeCalories = realData.activeCalories;
+                  }
+                }
+              } catch (e) {
+                console.warn('[GoogleFit] iOS REST API fetch failed:', e);
+              }
             } else if (Platform.OS === 'android' && syncPlatform === 'google') {
               try {
                 const realData = await HealthDataService.fetchHealthConnectData();
@@ -1143,6 +1163,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 console.warn('[HealthConnect] Failed to fetch real health data:', e);
               }
             }
+
 
             const baseHistory = biometricCore.historicalRHR.length >= 3 
               ? biometricCore.historicalRHR 
@@ -1190,26 +1211,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
    * Prompts the user if permission is unrequested or previously denied.
    */
   const handleSyncHealthData = useCallback((platform: 'apple' | 'google') => {
-    if (Platform.OS === 'ios' && platform === 'google') {
+    if (Platform.OS === 'ios' && platform === 'apple') {
+      setSyncPlatform('apple');
       setIsSyncPickerOpen(false);
-      Alert.alert(
-        'Google Health on iOS',
-        'On iOS, Google Fit and Fitbit sync their data directly into Apple Health (HealthKit).\n\nPlease make sure Google Fit/Fitbit is allowed to share data with Apple Health in your device settings, then sync using Apple Health.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sync via Apple Health',
-            onPress: () => {
-              setSyncPlatform('apple');
-              if (hasHealthPermission === true) {
-                executeSync();
-              } else {
-                setIsPermissionModalOpen(true);
-              }
-            },
-          },
-        ]
-      );
+      if (hasHealthPermission === true) {
+        executeSync();
+      } else {
+        setIsPermissionModalOpen(true);
+      }
       return;
     }
 
@@ -1223,7 +1232,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       return;
     }
 
-    setSyncPlatform(platform);
+    // Google sync — works on both iOS (Google Fit REST API) and Android (Health Connect)
+    setSyncPlatform('google');
     setIsSyncPickerOpen(false);
     if (hasHealthPermission === true) {
       executeSync();
@@ -1235,6 +1245,40 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const handleApprovePermission = useCallback(async () => {
     setIsPermissionModalOpen(false);
     
+    // For Google Fit on iOS — use OAuth flow directly, no system permission dialog needed
+    if (syncPlatform === 'google' && Platform.OS === 'ios') {
+      const clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
+      if (!clientId.trim()) {
+        Alert.alert(
+          'Google Client ID Required',
+          'To sync with Google Fit on iOS, please add your Google OAuth Client ID in Settings → AI & Integration Settings.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      try {
+        const token = await GoogleFitService.authorize(clientId);
+        if (token) {
+          setHealthPermission(true);
+          setTimeout(() => {
+            executeSync();
+          }, 300);
+        } else {
+          Alert.alert('Cancelled', 'Google Fit authorization was cancelled.');
+        }
+      } catch (e: any) {
+        console.error('[GoogleFit] OAuth failed:', e);
+        Alert.alert(
+          'Google Fit Authorization Failed',
+          e.message === 'NO_CLIENT_ID'
+            ? 'Please add your Google OAuth Client ID in Settings → AI & Integration Settings.'
+            : 'Could not connect to Google Fit. Please check your Client ID and try again.',
+          [{ text: 'OK' }]
+        );
+      }
+      return;
+    }
+
     let permissionGranted = true;
     if (Platform.OS === 'ios' && syncPlatform === 'apple') {
       try {

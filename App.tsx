@@ -5,6 +5,7 @@
  * Provides:
  *   - SafeAreaProvider  (react-native-safe-area-context)
  *   - StatusBar configuration
+ *   - First-launch onboarding gate (checks hasCompletedOnboarding in the store)
  *   - Tab navigation state (activeIndex) wired to BottomNavBar + screen router
  */
 
@@ -17,16 +18,29 @@ import ScanScreen from './src/screens/ScanScreen';
 import MapScreen from './src/screens/MapScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import { BottomNavBar } from './src/components/BottomNavBar';
+import { useSafeScaleStore } from './src/store/useSafeScaleStore';
 
 const BACKGROUND = '#F3F5F7';
 
 export default function App() {
+  const hasCompletedOnboarding = useSafeScaleStore((s) => s.hasCompletedOnboarding);
   const [activeTab, setActiveTab] = useState<number>(0);
 
   const handleTabPress = useCallback((index: number) => {
     setActiveTab(index);
   }, []);
+
+  // Show onboarding on first launch
+  if (!hasCompletedOnboarding) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar barStyle="dark-content" backgroundColor={BACKGROUND} />
+        <OnboardingScreen onDone={() => {}} />
+      </SafeAreaProvider>
+    );
+  }
 
   /** Render the active screen. */
   const renderScreen = () => {

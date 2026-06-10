@@ -68,7 +68,9 @@
             "minSdkVersion": 26
           }
         }
-      ]
-    ]
+      ],
+      "expo-web-browser"
+    ],
+    "scheme": "com.anonymous.safescalehealth"
   }
 }
