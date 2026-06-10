@@ -426,6 +426,12 @@ export interface SafeScaleState {
   addSymptomLog: (log: Omit<SymptomLog, 'id' | 'timestamp' | 'date'>) => void;
   /** Delete a symptom log entry by id */
   deleteSymptomLog: (id: string) => void;
+
+  // ----- Onboarding State & Actions -----
+  /** Whether the user has completed the first-launch onboarding flow */
+  hasCompletedOnboarding: boolean;
+  /** Marks onboarding as complete and saves user-entered profile data */
+  completeOnboarding: (profile: UserProfile, allergies: string[]) => void;
 }
 
 /**
@@ -477,6 +483,8 @@ export interface UserProfile {
   useGeminiFoodVision?: boolean;
   geminiApiKey?: string;
   useGeminiWeeklyReport?: boolean;
+  /** Google OAuth 2.0 Client ID (iOS client type) for Google Fit REST API access */
+  googleOAuthClientId?: string;
 }
 
 export interface FoodAnalysisResult {
