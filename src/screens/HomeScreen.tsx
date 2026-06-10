@@ -925,6 +925,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const addEmergencyContact = useSafeScaleStore((s) => s.addEmergencyContact);
   const removeEmergencyContact = useSafeScaleStore((s) => s.removeEmergencyContact);
   const profile = useSafeScaleStore((s) => s.profile);
+  const unitPreference = profile?.unitPreference || 'imperial';
   const addMoodLog = useSafeScaleStore((s) => s.addMoodLog);
   const addVitalLog = useSafeScaleStore((s) => s.addVitalLog);
 
@@ -1372,11 +1373,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const handleVitalSubmit = useCallback(() => {
     const sys = parseInt(systolicBPInput, 10);
     const dia = parseInt(diastolicBPInput, 10);
-    const gluc = parseInt(glucoseInput, 10);
-    const spo2 = parseInt(spo2Input, 10);
-    const temp = parseFloat(tempInput);
+    
+    const glucRaw = parseFloat(glucoseInput);
+    const gluc = isNaN(glucRaw)
+      ? undefined
+      : unitPreference === 'metric'
+        ? Math.round(glucRaw * 18)
+        : Math.round(glucRaw);
 
-    if (isNaN(sys) && isNaN(dia) && isNaN(gluc) && isNaN(spo2) && isNaN(temp)) {
+    const spo2 = parseInt(spo2Input, 10);
+    
+    const tempRaw = parseFloat(tempInput);
+    const temp = isNaN(tempRaw)
+      ? undefined
+      : unitPreference === 'metric'
+        ? (tempRaw * 9/5) + 32
+        : tempRaw;
+
+    if (isNaN(sys) && isNaN(dia) && gluc === undefined && isNaN(spo2) && temp === undefined) {
       Alert.alert('Empty Fields', 'Please enter at least one vital parameter.');
       return;
     }
@@ -1384,10 +1398,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     addVitalLog({
       systolicBP: isNaN(sys) ? undefined : sys,
       diastolicBP: isNaN(dia) ? undefined : dia,
-      bloodGlucose: isNaN(gluc) ? undefined : gluc,
+      bloodGlucose: gluc,
       glucoseContext: glucoseInput ? glucoseContext : undefined,
       spo2: isNaN(spo2) ? undefined : spo2,
-      temperature: isNaN(temp) ? undefined : temp,
+      temperature: temp,
     });
 
     setSystolicBPInput('');
@@ -1397,7 +1411,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     setTempInput('');
     setIsVitalsModalOpen(false);
     Alert.alert('Success', 'Vitals logged successfully.');
-  }, [systolicBPInput, diastolicBPInput, glucoseInput, glucoseContext, spo2Input, tempInput, addVitalLog]);
+  }, [systolicBPInput, diastolicBPInput, glucoseInput, glucoseContext, spo2Input, tempInput, unitPreference, addVitalLog]);
 
   const handleMoodSubmit = useCallback(() => {
     addMoodLog({
@@ -1805,7 +1819,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               </View>
               <View>
                 <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>
-                  {vitalsLogs.length > 0 && vitalsLogs[0].bloodGlucose ? `${vitalsLogs[0].bloodGlucose} mg/dL` : '-- mg/dL'}
+                  {vitalsLogs.length > 0 && vitalsLogs[0].bloodGlucose
+                    ? unitPreference === 'imperial'
+                      ? `${vitalsLogs[0].bloodGlucose} mg/dL`
+                      : `${(vitalsLogs[0].bloodGlucose / 18).toFixed(1)} mmol/L`
+                    : unitPreference === 'imperial' ? '-- mg/dL' : '-- mmol/L'}
                 </Text>
                 <Text style={{ fontSize: 10, color: COLORS.textSecondary, marginTop: 1 }}>
                   Glucose ({vitalsLogs.length > 0 && vitalsLogs[0].glucoseContext ? vitalsLogs[0].glucoseContext : 'Fasting'})
@@ -3208,6 +3226,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 <Text style={{ fontSize: 11, fontWeight: '800', color: COLORS.alert, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>PATIENT IDENTIFICATION</Text>
                 <Text style={{ fontSize: 20, fontWeight: '800', color: COLORS.textPrimary }}>{profile.name}</Text>
                 <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 4 }}>Date of Birth: {profile.dob}</Text>
+                <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 4 }}>
+                  Height: {unitPreference === 'metric' ? `${Math.round(profile.height)} cm` : `${Math.round(profile.height / 2.54)} in`} · Weight: {unitPreference === 'metric' ? `${Math.round(profile.weight)} kg` : `${Math.round(profile.weight / 0.45359237)} lbs`}
+                </Text>
                 <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                   <View style={{ backgroundColor: COLORS.alert, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
                     <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>BLOOD: {profile.bloodType || 'Unknown'}</Text>
@@ -3362,7 +3383,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
               {/* Glucose Row */}
               <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
-                Blood Glucose (mg/dL) & Context
+                Blood Glucose ({unitPreference === 'imperial' ? 'mg/dL' : 'mmol/L'}) & Context
               </Text>
               <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
                 <View style={{ flex: 1.2 }}>
@@ -3376,7 +3397,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                       borderWidth: 1,
                       borderColor: COLORS.border,
                     }}
-                    placeholder="Glucose (e.g. 95)"
+                    placeholder={unitPreference === 'imperial' ? "Glucose (e.g. 95)" : "Glucose (e.g. 5.3)"}
                     placeholderTextColor="#A0AAB2"
                     keyboardType="numeric"
                     value={glucoseInput}
@@ -3431,7 +3452,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
-                    Temperature (°F)
+                    Temperature ({unitPreference === 'imperial' ? '°F' : '°C'})
                   </Text>
                   <TextInput
                     style={{
@@ -3443,7 +3464,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                       borderWidth: 1,
                       borderColor: COLORS.border,
                     }}
-                    placeholder="e.g. 98.6"
+                    placeholder={unitPreference === 'imperial' ? "e.g. 98.6" : "e.g. 37.0"}
                     placeholderTextColor="#A0AAB2"
                     keyboardType="numeric"
                     value={tempInput}

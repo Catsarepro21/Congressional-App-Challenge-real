@@ -143,13 +143,21 @@ const DOC_PRESETS: ScannedDocPreset[] = [
   }
 ];
 
-export const ScanScreen: React.FC = () => {
+import { FoodVisionService } from '../services/FoodVisionService';
+import type { FoodAnalysisResult } from '../types';
+
+interface ScanScreenProps {
+  onNavigate?: (index: number) => void;
+}
+
+export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
   const insets = useSafeAreaInsets();
   const userAllergies = useSafeScaleStore(selectUserAllergies);
   const isLocalAIOptedIn = useSafeScaleStore(selectIsLocalAIOptedIn);
   const addLoggedItem = useSafeScaleStore((s) => s.addLoggedItem);
   const crowdsourcedReports = useSafeScaleStore((s) => s.crowdsourcedReports) || [];
   const addScannedDocument = useSafeScaleStore((s) => s.addScannedDocument);
+  const profile = useSafeScaleStore((s) => s.profile);
 
   // Camera permissions hook
   const [permission, requestPermission] = useCameraPermissions();
@@ -173,8 +181,12 @@ export const ScanScreen: React.FC = () => {
   const [allergenResult, setAllergenResult] = useState<AllergenMatchResult | null>(null);
   const [aiResult, setAiResult] = useState<LocalAIAnalysisResult | null>(null);
 
+  // Food photo analysis states
+  const [foodAnalysisResult, setFoodAnalysisResult] = useState<FoodAnalysisResult | null>(null);
+  const [foodLogged, setFoodLogged] = useState(false);
+
   // Document scan states
-  const [scanMode, setScanMode] = useState<'Allergen' | 'Document'>('Allergen');
+  const [scanMode, setScanMode] = useState<'Allergen' | 'FoodPhoto' | 'Document'>('Allergen');
   const [docScanResult, setDocScanResult] = useState<{ type: 'Prescription' | 'LabResult' | 'Immunization'; title: string; value: string; provider: string; status: string } | null>(null);
   const [isDocImported, setIsDocImported] = useState(false);
 
@@ -385,7 +397,7 @@ export const ScanScreen: React.FC = () => {
     setIsScanning(false);
   };
 
-  // Handler for capturing the photo and executing OCR simulation
+  // Handler for capturing the photo and executing OCR/Food analysis
   const handleCaptureAndScan = async () => {
     if (!cameraRef.current || isScanning) return;
 
@@ -398,6 +410,8 @@ export const ScanScreen: React.FC = () => {
       setIsLogged(false);
       setDocScanResult(null);
       setIsDocImported(false);
+      setFoodAnalysisResult(null);
+      setFoodLogged(false);
 
       // Take picture
       const photo = await cameraRef.current.takePictureAsync({
@@ -406,6 +420,23 @@ export const ScanScreen: React.FC = () => {
       
       if (photo && photo.uri) {
         setCapturedPhoto(photo.uri);
+
+        if (scanMode === 'FoodPhoto') {
+          try {
+            const result = await FoodVisionService.analyzeImage(
+              photo.uri,
+              profile.useGeminiFoodVision || false,
+              profile.geminiApiKey || ''
+            );
+            setFoodAnalysisResult(result);
+          } catch (e) {
+            console.error('Food analysis error:', e);
+            Alert.alert('Analysis Failed', 'Could not analyze the food photo. Please try again.');
+          } finally {
+            setIsScanning(false);
+          }
+          return;
+        }
       }
 
       if (scanMode === 'Document') {
@@ -424,6 +455,17 @@ export const ScanScreen: React.FC = () => {
     }
   };
 
+  const handleLogFoodAnalysis = () => {
+    if (!foodAnalysisResult) return;
+    addLoggedItem({
+      type: 'Meal',
+      name: foodAnalysisResult.foodName,
+      value: `${foodAnalysisResult.calories} kcal`,
+    });
+    setFoodLogged(true);
+    Alert.alert('✅ Logged!', `${foodAnalysisResult.foodName} has been added to your daily log.`);
+  };
+
   const handleResetScanner = () => {
     setCapturedPhoto(null);
     setScannedBarcode(null);
@@ -434,6 +476,8 @@ export const ScanScreen: React.FC = () => {
     setDocScanResult(null);
     setIsDocImported(false);
     setIsScanning(false);
+    setFoodAnalysisResult(null);
+    setFoodLogged(false);
   };
 
   // Interpolate translate Y for scanning laser line
@@ -512,16 +556,18 @@ export const ScanScreen: React.FC = () => {
         {/* Title Header */}
         <View style={{ marginBottom: 16 }}>
           <Text style={{ fontSize: 24, fontWeight: '800', color: COLORS.textPrimary }}>
-            {scanMode === 'Allergen' ? 'Allergen Scanner' : 'Document Vault Scanner'}
+            {scanMode === 'Allergen' ? 'Allergen Scanner' : scanMode === 'FoodPhoto' ? 'Food Photo AI' : 'Document Vault Scanner'}
           </Text>
           <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 4 }}>
             {scanMode === 'Allergen' 
-              ? 'Point your camera at a food label or object to detect ingredients and allergens.' 
-              : 'Frame prescriptions, vaccine passes, or lab reports to scan and archive them.'}
+              ? 'Point your camera at a food label or barcode to detect allergens.' 
+              : scanMode === 'FoodPhoto'
+              ? 'Photograph your meal to estimate calories, macros, and portion size.'
+              : 'Frame prescriptions, vaccine passes, or lab reports to archive them.'}
           </Text>
         </View>
 
-        {/* Segmented Control */}
+        {/* 3-tab Segmented Control */}
         <View style={{ flexDirection: 'row', backgroundColor: '#E8EDF0', borderRadius: 16, padding: 4, marginBottom: 20 }}>
           <Pressable
             onPress={() => {
@@ -534,6 +580,8 @@ export const ScanScreen: React.FC = () => {
               paddingVertical: 10,
               borderRadius: 12,
               alignItems: 'center',
+              flexDirection: 'row',
+              justifyContent: 'center',
               shadowColor: scanMode === 'Allergen' ? '#1A2129' : 'transparent',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: scanMode === 'Allergen' ? 0.1 : 0,
@@ -541,8 +589,34 @@ export const ScanScreen: React.FC = () => {
               elevation: scanMode === 'Allergen' ? 2 : 0,
             }}
           >
-            <Text style={{ color: scanMode === 'Allergen' ? COLORS.textPrimary : COLORS.textSecondary, fontWeight: '700', fontSize: 13 }}>
-              Allergen Scanner
+            <MaterialCommunityIcons name="barcode-scan" size={16} color={scanMode === 'Allergen' ? COLORS.primary : COLORS.textSecondary} style={{ marginRight: 4 }} />
+            <Text style={{ color: scanMode === 'Allergen' ? COLORS.textPrimary : COLORS.textSecondary, fontWeight: '700', fontSize: 12 }}>
+              Allergen
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              handleResetScanner();
+              setScanMode('FoodPhoto');
+            }}
+            style={{
+              flex: 1,
+              backgroundColor: scanMode === 'FoodPhoto' ? COLORS.surface : 'transparent',
+              paddingVertical: 10,
+              borderRadius: 12,
+              alignItems: 'center',
+              flexDirection: 'row',
+              justifyContent: 'center',
+              shadowColor: scanMode === 'FoodPhoto' ? '#1A2129' : 'transparent',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: scanMode === 'FoodPhoto' ? 0.1 : 0,
+              shadowRadius: 4,
+              elevation: scanMode === 'FoodPhoto' ? 2 : 0,
+            }}
+          >
+            <MaterialCommunityIcons name="food-apple" size={16} color={scanMode === 'FoodPhoto' ? COLORS.primary : COLORS.textSecondary} style={{ marginRight: 4 }} />
+            <Text style={{ color: scanMode === 'FoodPhoto' ? COLORS.textPrimary : COLORS.textSecondary, fontWeight: '700', fontSize: 12 }}>
+              Food AI
             </Text>
           </Pressable>
           <Pressable
@@ -556,6 +630,8 @@ export const ScanScreen: React.FC = () => {
               paddingVertical: 10,
               borderRadius: 12,
               alignItems: 'center',
+              flexDirection: 'row',
+              justifyContent: 'center',
               shadowColor: scanMode === 'Document' ? '#1A2129' : 'transparent',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: scanMode === 'Document' ? 0.1 : 0,
@@ -563,8 +639,9 @@ export const ScanScreen: React.FC = () => {
               elevation: scanMode === 'Document' ? 2 : 0,
             }}
           >
-            <Text style={{ color: scanMode === 'Document' ? COLORS.textPrimary : COLORS.textSecondary, fontWeight: '700', fontSize: 13 }}>
-              Document Vault Scanner
+            <MaterialCommunityIcons name="file-document-outline" size={16} color={scanMode === 'Document' ? COLORS.primary : COLORS.textSecondary} style={{ marginRight: 4 }} />
+            <Text style={{ color: scanMode === 'Document' ? COLORS.textPrimary : COLORS.textSecondary, fontWeight: '700', fontSize: 12 }}>
+              Document
             </Text>
           </Pressable>
         </View>
@@ -718,6 +795,125 @@ export const ScanScreen: React.FC = () => {
             </View>
           )}
         </View>
+
+        {/* Food Photo AI Result Card */}
+        {foodAnalysisResult && (
+          <View
+            style={{
+              backgroundColor: COLORS.surface,
+              borderRadius: 24,
+              padding: 20,
+              marginBottom: 20,
+              shadowColor: '#1A2129',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.06,
+              shadowRadius: 12,
+              elevation: 3,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: COLORS.primaryContainer,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: 12,
+                }}
+              >
+                <MaterialCommunityIcons name="food-apple" size={22} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>
+                  Food AI Analysis
+                </Text>
+                <Text style={{ fontSize: 11, color: COLORS.textSecondary }}>
+                  {foodAnalysisResult.confidence === 'high' ? 'High confidence match' : 'Estimated macros'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.textPrimary }}>
+                {foodAnalysisResult.foodName}
+              </Text>
+              <Text style={{ fontSize: 12, color: COLORS.textSecondary, fontStyle: 'italic', marginTop: 1 }}>
+                Portion: {foodAnalysisResult.portionEstimate}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+              <View style={{ minWidth: 70, backgroundColor: COLORS.background, padding: 8, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Calories</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
+                  {foodAnalysisResult.calories} <Text style={{ fontSize: 9, fontWeight: '400' }}>kcal</Text>
+                </Text>
+              </View>
+              <View style={{ minWidth: 60, backgroundColor: COLORS.background, padding: 8, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Carbs</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
+                  {foodAnalysisResult.carbs}g
+                </Text>
+              </View>
+              <View style={{ minWidth: 60, backgroundColor: COLORS.background, padding: 8, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Protein</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
+                  {foodAnalysisResult.protein}g
+                </Text>
+              </View>
+              <View style={{ minWidth: 60, backgroundColor: COLORS.background, padding: 8, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Fat</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
+                  {foodAnalysisResult.fat}g
+                </Text>
+              </View>
+              <View style={{ minWidth: 60, backgroundColor: COLORS.background, padding: 8, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Fiber</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
+                  {foodAnalysisResult.fiber}g
+                </Text>
+              </View>
+              <View style={{ minWidth: 60, backgroundColor: COLORS.background, padding: 8, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Sugar</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
+                  {foodAnalysisResult.sugar}g
+                </Text>
+              </View>
+              <View style={{ minWidth: 70, backgroundColor: COLORS.background, padding: 8, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Sodium</Text>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
+                  {foodAnalysisResult.sodium}mg
+                </Text>
+              </View>
+            </View>
+
+            {!foodLogged ? (
+              <Pressable
+                onPress={handleLogFoodAnalysis}
+                style={({ pressed }) => ({
+                  backgroundColor: COLORS.primary,
+                  borderRadius: 14,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.88 : 1,
+                })}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>
+                  Log to Food Journal
+                </Text>
+              </Pressable>
+            ) : (
+              <View style={{ backgroundColor: COLORS.primaryContainer, borderRadius: 14, paddingVertical: 10, alignItems: 'center' }}>
+                <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 13 }}>
+                  ✓ Logged in Health Journal
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Scan Results Card */}
         {allergenResult && (

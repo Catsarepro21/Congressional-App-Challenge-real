@@ -111,9 +111,17 @@ export const SettingsScreen: React.FC = () => {
   const [profileNameInput, setProfileNameInput] = useState(profile.name);
   const [profileDobInput, setProfileDobInput] = useState(profile.dob);
   const [profileBloodTypeInput, setProfileBloodTypeInput] = useState(profile.bloodType);
-  const [profileHeightInput, setProfileHeightInput] = useState(String(profile.height));
-  const [profileWeightInput, setProfileWeightInput] = useState(String(profile.weight));
+  const [profileHeightInput, setProfileHeightInput] = useState(
+    profile.unitPreference === 'imperial' ? String(Math.round(profile.height / 2.54)) : String(profile.height)
+  );
+  const [profileWeightInput, setProfileWeightInput] = useState(
+    profile.unitPreference === 'imperial' ? String(Math.round(profile.weight / 0.45359237)) : String(profile.weight)
+  );
   const [profileOrganDonorInput, setProfileOrganDonorInput] = useState(profile.organDonor || false);
+  const [unitPreference, setUnitPreference] = useState(profile.unitPreference || 'metric');
+  const [useGeminiFoodVision, setUseGeminiFoodVision] = useState(profile.useGeminiFoodVision || false);
+  const [geminiApiKey, setGeminiApiKey] = useState(profile.geminiApiKey || '');
+  const [useGeminiWeeklyReport, setUseGeminiWeeklyReport] = useState(profile.useGeminiWeeklyReport || false);
   const [isProfileSaved, setIsProfileSaved] = useState(false);
 
   // Sync inputs with store if profile changes externally (e.g. Test Mode seeding)
@@ -121,10 +129,38 @@ export const SettingsScreen: React.FC = () => {
     setProfileNameInput(profile.name);
     setProfileDobInput(profile.dob);
     setProfileBloodTypeInput(profile.bloodType);
-    setProfileHeightInput(String(profile.height));
-    setProfileWeightInput(String(profile.weight));
+    setProfileHeightInput(
+      profile.unitPreference === 'imperial' ? String(Math.round(profile.height / 2.54)) : String(profile.height)
+    );
+    setProfileWeightInput(
+      profile.unitPreference === 'imperial' ? String(Math.round(profile.weight / 0.45359237)) : String(profile.weight)
+    );
     setProfileOrganDonorInput(profile.organDonor || false);
+    setUnitPreference(profile.unitPreference || 'metric');
+    setUseGeminiFoodVision(profile.useGeminiFoodVision || false);
+    setGeminiApiKey(profile.geminiApiKey || '');
+    setUseGeminiWeeklyReport(profile.useGeminiWeeklyReport || false);
   }, [profile]);
+
+  const handleUnitPreferenceChange = (pref: 'metric' | 'imperial') => {
+    setUnitPreference(pref);
+    const h = parseFloat(profileHeightInput);
+    const w = parseFloat(profileWeightInput);
+    if (!isNaN(h)) {
+      if (pref === 'imperial') {
+        setProfileHeightInput(String(Math.round(h / 2.54)));
+      } else {
+        setProfileHeightInput(String(Math.round(h * 2.54)));
+      }
+    }
+    if (!isNaN(w)) {
+      if (pref === 'imperial') {
+        setProfileWeightInput(String(Math.round(w / 0.45359237)));
+      } else {
+        setProfileWeightInput(String(Math.round(w * 0.45359237)));
+      }
+    }
+  };
 
   // Vaccine Milestone Store Selectors & Actions
   const vaccineMilestones = useSafeScaleStore((s) => s.vaccineMilestones) || [];
@@ -257,13 +293,16 @@ export const SettingsScreen: React.FC = () => {
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleSaveProfile = () => {
-    const height = parseFloat(profileHeightInput);
-    const weight = parseFloat(profileWeightInput);
+    const heightVal = parseFloat(profileHeightInput);
+    const weightVal = parseFloat(profileWeightInput);
 
     if (profileNameInput.trim() === '') {
       Alert.alert('Required Field', 'Please enter your name.');
       return;
     }
+
+    const height = unitPreference === 'imperial' ? heightVal * 2.54 : heightVal;
+    const weight = unitPreference === 'imperial' ? weightVal * 0.45359237 : weightVal;
 
     updateProfile({
       name: profileNameInput.trim(),
@@ -272,6 +311,10 @@ export const SettingsScreen: React.FC = () => {
       height: isNaN(height) ? profile.height : height,
       weight: isNaN(weight) ? profile.weight : weight,
       organDonor: profileOrganDonorInput,
+      unitPreference,
+      useGeminiFoodVision,
+      geminiApiKey,
+      useGeminiWeeklyReport,
     });
 
     setIsProfileSaved(true);
@@ -632,11 +675,58 @@ export const SettingsScreen: React.FC = () => {
             </View>
           </View>
 
+          {/* Unit Preference Segmented Control */}
+          <View style={{ marginBottom: 16 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
+              Unit Preference
+            </Text>
+            <View style={{ flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: 12, padding: 4 }}>
+              <Pressable
+                onPress={() => handleUnitPreferenceChange('metric')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  alignItems: 'center',
+                  borderRadius: 8,
+                  backgroundColor: unitPreference === 'metric' ? COLORS.surface : 'transparent',
+                  shadowColor: unitPreference === 'metric' ? '#000' : 'transparent',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: unitPreference === 'metric' ? 0.1 : 0,
+                  shadowRadius: 2,
+                  elevation: unitPreference === 'metric' ? 1 : 0,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: unitPreference === 'metric' ? COLORS.primary : COLORS.textSecondary }}>
+                  Metric (cm / kg)
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleUnitPreferenceChange('imperial')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  alignItems: 'center',
+                  borderRadius: 8,
+                  backgroundColor: unitPreference === 'imperial' ? COLORS.surface : 'transparent',
+                  shadowColor: unitPreference === 'imperial' ? '#000' : 'transparent',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: unitPreference === 'imperial' ? 0.1 : 0,
+                  shadowRadius: 2,
+                  elevation: unitPreference === 'imperial' ? 1 : 0,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: unitPreference === 'imperial' ? COLORS.primary : COLORS.textSecondary }}>
+                  Imperial (in / lbs)
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
           {/* Height & Weight Row */}
           <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
-                Height (cm)
+                Height ({unitPreference === 'imperial' ? 'inches' : 'cm'})
               </Text>
               <TextInput
                 style={{
@@ -651,13 +741,13 @@ export const SettingsScreen: React.FC = () => {
                 keyboardType="numeric"
                 value={profileHeightInput}
                 onChangeText={setProfileHeightInput}
-                placeholder="168"
+                placeholder={unitPreference === 'imperial' ? "66" : "168"}
                 placeholderTextColor="#A0AAB2"
               />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
-                Weight (kg)
+                Weight ({unitPreference === 'imperial' ? 'lbs' : 'kg'})
               </Text>
               <TextInput
                 style={{
@@ -672,7 +762,7 @@ export const SettingsScreen: React.FC = () => {
                 keyboardType="numeric"
                 value={profileWeightInput}
                 onChangeText={setProfileWeightInput}
-                placeholder="62"
+                placeholder={unitPreference === 'imperial' ? "135" : "62"}
                 placeholderTextColor="#A0AAB2"
               />
             </View>
@@ -932,6 +1022,123 @@ export const SettingsScreen: React.FC = () => {
                 placeholderTextColor="#A0AAB2"
               />
             </View>
+          </View>
+        </View>
+
+        {/* ── Section: AI Assistant Settings ────────────────────────── */}
+        <View
+          style={{
+            backgroundColor: COLORS.surface,
+            borderRadius: 24,
+            padding: 20,
+            marginBottom: 20,
+            shadowColor: '#1A2129',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.05,
+            shadowRadius: 10,
+            elevation: 2,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <MaterialCommunityIcons name="brain" size={20} color={COLORS.primary} />
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginLeft: 8 }}>
+              AI Assistant Settings
+            </Text>
+          </View>
+          
+          <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 16, lineHeight: 16 }}>
+            Enable advanced Google Gemini features for food photo scanning and weekly report coaching. Your key is stored securely offline on your device.
+          </Text>
+
+          {/* Gemini API Key Input */}
+          <View style={{ marginBottom: 16 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
+              Gemini API Key
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 14,
+                color: COLORS.textPrimary,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+              secureTextEntry={true}
+              value={geminiApiKey}
+              onChangeText={setGeminiApiKey}
+              placeholder="Paste your Gemini API Key here"
+              placeholderTextColor="#A0AAB2"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {/* Gemini Food Vision Toggle Switch */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <View style={{ flex: 1, paddingRight: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>
+                Enable Gemini Food Vision AI
+              </Text>
+              <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 14 }}>
+                Uses Gemini 1.5 Flash Vision to identify food items and estimate macros from captured photos.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setUseGeminiFoodVision(!useGeminiFoodVision)}
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: useGeminiFoodVision ? COLORS.primary : '#E8EDF0',
+                padding: 2,
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: '#FFFFFF',
+                  transform: [{ translateX: useGeminiFoodVision ? 18 : 0 }],
+                }}
+              />
+            </Pressable>
+          </View>
+
+          {/* Gemini Weekly Report Toggle Switch */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, paddingRight: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>
+                Enable Gemini Health Coaching
+              </Text>
+              <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 14 }}>
+                Generates a personalized narrative coaching summary of your weekly biometrics and logs.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setUseGeminiWeeklyReport(!useGeminiWeeklyReport)}
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: useGeminiWeeklyReport ? COLORS.primary : '#E8EDF0',
+                padding: 2,
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: '#FFFFFF',
+                  transform: [{ translateX: useGeminiWeeklyReport ? 18 : 0 }],
+                }}
+              />
+            </Pressable>
           </View>
         </View>
 

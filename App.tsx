@@ -34,7 +34,7 @@ export default function App() {
       case 0:
         return <HomeScreen onNavigate={handleTabPress} />;
       case 1:
-        return <ScanScreen />;
+        return <ScanScreen onNavigate={handleTabPress} />;
       case 2:
         return <MapScreen />;
       case 3:

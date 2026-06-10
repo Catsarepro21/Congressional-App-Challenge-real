@@ -9,11 +9,14 @@ import {
   Share,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect, Line, Circle, Polyline, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeScaleStore, selectBiometricCore, selectIsTestMode, selectMoodLogs, selectVitalsLogs } from '../store/useSafeScaleStore';
+import { WeeklyReportService } from '../services';
+import type { WeeklyReport } from '../types';
 
 const COLORS = {
   primary: '#227C54',
@@ -41,11 +44,230 @@ export const AnalyticsScreen: React.FC = () => {
   const moodLogs = useSafeScaleStore(selectMoodLogs) || [];
   const vitalsLogs = useSafeScaleStore(selectVitalsLogs) || [];
   const [activeSubTab, setActiveSubTab] = React.useState<'Biometrics' | 'Vitals'>('Biometrics');
-
   const [isReportOpen, setIsReportOpen] = React.useState(false);
+
+  // Weekly Health Report States
+  const [weeklyReport, setWeeklyReport] = React.useState<WeeklyReport | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = React.useState(false);
 
   // Ungate: show data if either score > 0 or we have weekly history
   const hasData = biometricCore.dailyStabilityScore > 0 || (weeklyHistory && weeklyHistory.length > 0);
+
+  // Unit Preference Conversions
+  const isMetric = profile.unitPreference === 'metric' || !profile.unitPreference;
+  const glucoseUnitDisplay = isMetric ? 'mmol/L' : 'mg/dL';
+  const tempUnitDisplay = isMetric ? '°C' : '°F';
+
+  const formatGlucose = (val?: number): string => {
+    if (val === undefined || val === null) return '--';
+    if (isMetric) {
+      return (val / 18).toFixed(1);
+    }
+    return String(Math.round(val));
+  };
+
+  const formatTemp = (val?: number): string => {
+    if (val === undefined || val === null) return '--';
+    if (isMetric) {
+      return ((val - 32) * 5 / 9).toFixed(1);
+    }
+    return val.toFixed(1);
+  };
+
+  // Automatically generate the offline report when variables change
+  React.useEffect(() => {
+    const fetchOfflineReport = async () => {
+      try {
+        const report = await WeeklyReportService.generateReport(
+          weeklyHistory,
+          useSafeScaleStore.getState().loggedItems,
+          vitalsLogs,
+          moodLogs,
+          biometricCore,
+          false // Force offline initially
+        );
+        setWeeklyReport(report);
+      } catch (err) {
+        console.error('Failed to generate offline report:', err);
+      }
+    };
+    if (hasData) {
+      fetchOfflineReport();
+    }
+  }, [weeklyHistory, vitalsLogs, moodLogs, biometricCore, hasData]);
+
+  const handleGenerateAINarrative = async () => {
+    if (!profile.geminiApiKey) {
+      Alert.alert('API Key Required', 'Please configure your Gemini API Key in the Settings tab to generate AI Coaching Narratives.');
+      return;
+    }
+    setIsGeneratingAI(true);
+    try {
+      const report = await WeeklyReportService.generateReport(
+        weeklyHistory,
+        useSafeScaleStore.getState().loggedItems,
+        vitalsLogs,
+        moodLogs,
+        biometricCore,
+        true,
+        profile.geminiApiKey
+      );
+      setWeeklyReport(report);
+    } catch (err: any) {
+      Alert.alert('AI Generation Failed', err.message || 'Could not reach Gemini API.');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  // Helper for 7-day vitals trend charts
+  const get7DayVitalData = (
+    key: 'bloodGlucose' | 'spo2' | 'temperature'
+  ): { date: string; value: number }[] => {
+    const list: { date: string; value: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      
+      const logsForDay = vitalsLogs.filter((v) => v.timestamp === dateStr && v[key] !== undefined && v[key]! > 0);
+      let rawVal = 0;
+      if (logsForDay.length > 0) {
+        const values = logsForDay.map((v) => v[key] as number);
+        rawVal = values.reduce((sum, val) => sum + val, 0) / values.length;
+      } else {
+        if (isTestMode) {
+          if (key === 'bloodGlucose') {
+            const defaults = [90, 105, 130, 95, 110, 100, 95];
+            rawVal = defaults[6 - i];
+          } else if (key === 'spo2') {
+            const defaults = [98, 97, 99, 98, 96, 98, 99];
+            rawVal = defaults[6 - i];
+          } else {
+            const defaults = [98.6, 98.4, 99.1, 98.2, 98.6, 98.7, 98.5];
+            rawVal = defaults[6 - i];
+          }
+        } else {
+          rawVal = key === 'bloodGlucose' ? 95 : key === 'spo2' ? 98 : 98.6;
+        }
+      }
+
+      // Convert value based on unit preference!
+      let convertedVal = rawVal;
+      if (key === 'bloodGlucose' && isMetric) {
+        convertedVal = Math.round((rawVal / 18) * 10) / 10;
+      } else if (key === 'temperature' && isMetric) {
+        convertedVal = Math.round(((rawVal - 32) * 5 / 9) * 10) / 10;
+      } else {
+        convertedVal = Math.round(rawVal * 10) / 10;
+      }
+
+      list.push({ date: dateStr, value: convertedVal });
+    }
+    return list;
+  };
+
+  const renderVitalLineChart = (
+    key: 'bloodGlucose' | 'spo2' | 'temperature',
+    mainColor: string,
+    defaultMin: number,
+    defaultMax: number,
+    unit: string
+  ) => {
+    const data = get7DayVitalData(key);
+    const width = Dimensions.get('window').width - 72;
+    const height = 120;
+    const padding = 15;
+
+    const values = data.map(d => d.value);
+    const minVal = Math.min(...values, defaultMin) - (key === 'temperature' ? 0.5 : 5);
+    const maxVal = Math.max(...values, defaultMax) + (key === 'temperature' ? 0.5 : 5);
+    const range = Math.max(1, maxVal - minVal);
+
+    const getX = (index: number) => padding + (index * (width - 2 * padding)) / (data.length - 1);
+    const getY = (val: number) => height - padding - 8 - ((val - minVal) * (height - 2 * padding - 8)) / range;
+
+    const points = data.map((entry, idx) => `${getX(idx)},${getY(entry.value)}`).join(' ');
+
+    const highGlucoseThreshold = isMetric ? 7.8 : 140;
+    const warningSpo2Threshold = 95;
+    const highTempThreshold = isMetric ? 37.5 : 99.5;
+
+    return (
+      <View style={{ marginTop: 12, alignItems: 'center' }}>
+        <Svg width={width} height={height}>
+          <Defs>
+            <LinearGradient id={`${key}Grad`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <Stop offset="0%" stopColor={mainColor} />
+              <Stop offset="100%" stopColor={mainColor} stopOpacity={0.6} />
+            </LinearGradient>
+          </Defs>
+          
+          {key === 'bloodGlucose' && (
+            <>
+              <Line x1={padding} y1={getY(highGlucoseThreshold)} x2={width - padding} y2={getY(highGlucoseThreshold)} stroke={COLORS.alert} strokeWidth={1} strokeDasharray="3 3" />
+              <SvgText x={padding + 4} y={getY(highGlucoseThreshold) - 2} fontSize="7" fontWeight="600" fill={COLORS.alert}>High ({highGlucoseThreshold})</SvgText>
+            </>
+          )}
+          {key === 'spo2' && (
+            <>
+              <Line x1={padding} y1={getY(warningSpo2Threshold)} x2={width - padding} y2={getY(warningSpo2Threshold)} stroke={COLORS.alert} strokeWidth={1} strokeDasharray="3 3" />
+              <SvgText x={padding + 4} y={getY(warningSpo2Threshold) - 2} fontSize="7" fontWeight="600" fill={COLORS.alert}>Warning (95%)</SvgText>
+            </>
+          )}
+          
+          <Line x1={padding} y1={height / 2} x2={width - padding} y2={height / 2} stroke={COLORS.border} strokeWidth={1} strokeDasharray="4 4" />
+          
+          <Polyline
+            fill="none"
+            stroke={`url(#${key}Grad)`}
+            strokeWidth={3}
+            points={points}
+          />
+
+          {data.map((entry, idx) => {
+            let pointColor = mainColor;
+            if (key === 'bloodGlucose' && entry.value > highGlucoseThreshold) pointColor = COLORS.alert;
+            if (key === 'spo2' && entry.value < warningSpo2Threshold) pointColor = COLORS.alert;
+            if (key === 'temperature' && (entry.value > highTempThreshold || entry.value < (isMetric ? 36.1 : 97.0))) pointColor = COLORS.alert;
+
+            return (
+              <React.Fragment key={idx}>
+                <Circle
+                  cx={getX(idx)}
+                  cy={getY(entry.value)}
+                  r={4}
+                  fill={COLORS.surface}
+                  stroke={pointColor}
+                  strokeWidth={2}
+                />
+                <SvgText
+                  x={getX(idx)}
+                  y={getY(entry.value) - 8}
+                  fontSize="8"
+                  fontWeight="700"
+                  fill={COLORS.textPrimary}
+                  textAnchor="middle"
+                >
+                  {entry.value}{unit}
+                </SvgText>
+                <SvgText
+                  x={getX(idx)}
+                  y={height - 2}
+                  fontSize="8"
+                  fontWeight="600"
+                  fill={COLORS.textSecondary}
+                  textAnchor="middle"
+                >
+                  {getDayName(entry.date)}
+                </SvgText>
+              </React.Fragment>
+            );
+          })}
+        </Svg>
+      </View>
+    );
+  };
 
   // Helper to format date label
   const getDayName = (dateStr: string) => {
@@ -463,11 +685,18 @@ export const AnalyticsScreen: React.FC = () => {
     report += `Generated on: ${todayStr}\n`;
     report += `========================================\n\n`;
 
+    const heightStr = profile.unitPreference === 'imperial'
+      ? `${Math.round(profile.height / 2.54)} in`
+      : `${Math.round(profile.height)} cm`;
+    const weightStr = profile.unitPreference === 'imperial'
+      ? `${Math.round(profile.weight / 0.45359237)} lbs`
+      : `${Math.round(profile.weight)} kg`;
+
     report += `[Patient Profile]\n`;
     report += `Name: ${profile.name}\n`;
     report += `DOB: ${profile.dob}\n`;
     report += `Blood Type: ${profile.bloodType}\n`;
-    report += `Height: ${profile.height} cm · Weight: ${profile.weight} kg\n`;
+    report += `Height: ${heightStr} · Weight: ${weightStr}\n`;
     report += `Organ Donor: ${profile.organDonor ? 'YES' : 'NO'}\n`;
     report += `Active Allergens: ${userAllergies.length > 0 ? userAllergies.join(', ') : 'None registered'}\n\n`;
 
@@ -482,7 +711,13 @@ export const AnalyticsScreen: React.FC = () => {
       report += `No vitals logs recorded.\n\n`;
     } else {
       vitalsLogs.slice(0, 5).forEach((v) => {
-        report += `- ${v.timestamp}: BP ${v.systolicBP || '--'}/${v.diastolicBP || '--'} mmHg, Glucose ${v.bloodGlucose || '--'} mg/dL (${v.glucoseContext || 'General'}), SpO2 ${v.spo2 || '--'}%, Temp ${v.temperature || '--'}°F\n`;
+        const glucoseStr = v.bloodGlucose !== undefined
+          ? `${formatGlucose(v.bloodGlucose)} ${glucoseUnitDisplay}`
+          : '--';
+        const tempStr = v.temperature !== undefined
+          ? `${formatTemp(v.temperature)}°${tempUnitDisplay}`
+          : '--';
+        report += `- ${v.timestamp}: BP ${v.systolicBP || '--'}/${v.diastolicBP || '--'} mmHg, Glucose ${glucoseStr} (${v.glucoseContext || 'General'}), SpO2 ${v.spo2 || '--'}%, Temp ${tempStr}\n`;
       });
       report += `\n`;
     }
@@ -611,6 +846,95 @@ export const AnalyticsScreen: React.FC = () => {
         ) : (
           /* Analytics Dashboard */
           <View style={{ gap: 16 }}>
+            {/* Weekly Health Report Card */}
+            {weeklyReport && (
+              <View
+                style={{
+                  backgroundColor: COLORS.surface,
+                  borderRadius: 24,
+                  padding: 20,
+                  shadowColor: '#1A2129',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 10,
+                  elevation: 2,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialCommunityIcons name="clipboard-text-play-outline" size={20} color={COLORS.primary} />
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginLeft: 8 }}>
+                      Weekly Health Report
+                    </Text>
+                  </View>
+                  {profile.useGeminiWeeklyReport && (
+                    <View style={{ backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      <Text style={{ color: '#1E88E5', fontSize: 10, fontWeight: '800' }}>AI READY</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Quick Metrics Grid */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                  <View style={{ flex: 1, minWidth: 100, backgroundColor: COLORS.background, borderRadius: 12, padding: 10 }}>
+                    <Text style={{ fontSize: 10, color: COLORS.textSecondary, fontWeight: '600' }}>Steps Total</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary, marginTop: 4 }}>
+                      {weeklyReport.totalSteps.toLocaleString()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 100, backgroundColor: COLORS.background, borderRadius: 12, padding: 10 }}>
+                    <Text style={{ fontSize: 10, color: COLORS.textSecondary, fontWeight: '600' }}>Avg Sleep</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary, marginTop: 4 }}>
+                      {(weeklyReport.avgSleepMinutes / 60).toFixed(1)} hrs
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 100, backgroundColor: COLORS.background, borderRadius: 12, padding: 10 }}>
+                    <Text style={{ fontSize: 10, color: COLORS.textSecondary, fontWeight: '600' }}>Avg Calories</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary, marginTop: 4 }}>
+                      {weeklyReport.avgDailyCalories > 0 ? `${weeklyReport.avgDailyCalories} kcal` : 'N/A'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Narrative / Coach Commentary */}
+                <View style={{ borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 12 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 6 }}>
+                    Coach Commentary
+                  </Text>
+                  <Text style={{ fontSize: 12.5, color: COLORS.textSecondary, lineHeight: 18 }}>
+                    {weeklyReport.narrative}
+                  </Text>
+                </View>
+
+                {/* AI Assistant Generate Button */}
+                {profile.useGeminiWeeklyReport && (
+                  <Pressable
+                    onPress={handleGenerateAINarrative}
+                    disabled={isGeneratingAI}
+                    style={({ pressed }) => ({
+                      marginTop: 16,
+                      backgroundColor: COLORS.primaryContainer,
+                      borderRadius: 14,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      opacity: pressed || isGeneratingAI ? 0.8 : 1,
+                    })}
+                  >
+                    {isGeneratingAI ? (
+                      <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 8 }} />
+                    ) : (
+                      <MaterialCommunityIcons name="brain" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
+                    )}
+                    <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 13 }}>
+                      {isGeneratingAI ? 'Generating AI Coaching...' : 'Generate AI Coaching Narrative'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
             {/* Segmented SubTab Control */}
             <View style={{ flexDirection: 'row', backgroundColor: '#E8EDF0', borderRadius: 12, padding: 4 }}>
               <Pressable
@@ -831,6 +1155,70 @@ export const AnalyticsScreen: React.FC = () => {
               <>
                 {/* ── Vitals & Trends View ── */}
                 <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginTop: 4 }}>
+                  7-Day Vitals Trends
+                </Text>
+                
+                {/* Blood Glucose Trend Card */}
+                <View
+                  style={{
+                    backgroundColor: COLORS.surface,
+                    borderRadius: 24,
+                    padding: 20,
+                    shadowColor: '#1A2129',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 8,
+                    elevation: 2,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Blood Glucose Trend ({glucoseUnitDisplay})
+                  </Text>
+                  {renderVitalLineChart('bloodGlucose', COLORS.secondary, 80, 130, '')}
+                </View>
+
+                {/* SpO2 Trend Card */}
+                <View
+                  style={{
+                    backgroundColor: COLORS.surface,
+                    borderRadius: 24,
+                    padding: 20,
+                    shadowColor: '#1A2129',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 8,
+                    elevation: 2,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Oxygen Saturation Trend (SpO2)
+                  </Text>
+                  {renderVitalLineChart('spo2', COLORS.primary, 95, 100, '%')}
+                </View>
+
+                {/* Body Temperature Trend Card */}
+                <View
+                  style={{
+                    backgroundColor: COLORS.surface,
+                    borderRadius: 24,
+                    padding: 20,
+                    shadowColor: '#1A2129',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 8,
+                    elevation: 2,
+                    marginBottom: 16,
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Body Temperature Trend ({tempUnitDisplay})
+                  </Text>
+                  {renderVitalLineChart('temperature', '#E88C30', 97.5, 99.0, '°')}
+                </View>
+
+                <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginTop: 4 }}>
                   Recorded Vital Signs
                 </Text>
                 
@@ -911,7 +1299,7 @@ export const AnalyticsScreen: React.FC = () => {
                                 <View style={{ minWidth: 100 }}>
                                   <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Glucose ({log.glucoseContext})</Text>
                                   <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
-                                    {log.bloodGlucose} <Text style={{ fontSize: 10, fontWeight: '500', color: COLORS.textSecondary }}>mg/dL</Text>
+                                    {formatGlucose(log.bloodGlucose)} <Text style={{ fontSize: 10, fontWeight: '500', color: COLORS.textSecondary }}>{glucoseUnitDisplay}</Text>
                                   </Text>
                                 </View>
                               )}
@@ -927,7 +1315,7 @@ export const AnalyticsScreen: React.FC = () => {
                                 <View style={{ minWidth: 60 }}>
                                   <Text style={{ fontSize: 10, color: COLORS.textSecondary }}>Temp</Text>
                                   <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginTop: 2 }}>
-                                    {log.temperature}°F
+                                    {formatTemp(log.temperature)}°{tempUnitDisplay}
                                   </Text>
                                 </View>
                               )}
