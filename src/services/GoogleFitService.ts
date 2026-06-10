@@ -179,9 +179,8 @@ export interface GoogleProfileData {
 export const GoogleFitService = {
   /**
    * Hardcoded default OAuth 2.0 Client ID for iOS.
-   * Replace this with your Google Cloud Console Client ID.
    */
-  DEFAULT_CLIENT_ID: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+  DEFAULT_CLIENT_ID: '386274527686-ou82vu9atibl8ckmlsj37cp7oo9o708b.apps.googleusercontent.com',
 
   /**
    * Starts the Google OAuth flow using expo-web-browser.
