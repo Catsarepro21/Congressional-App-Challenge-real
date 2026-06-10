@@ -33,8 +33,11 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 // Google Fitness API base URL
 const FITNESS_API_BASE = 'https://www.googleapis.com/fitness/v1/users/me';
 
-// Required OAuth scopes for Fitness data
+// Required OAuth scopes for Fitness and Profile data
 const SCOPES = [
+  'profile',
+  'https://www.googleapis.com/auth/user.birthday.read',
+  'https://www.googleapis.com/auth/fitness.body.read',
   'https://www.googleapis.com/auth/fitness.activity.read',
   'https://www.googleapis.com/auth/fitness.heart_rate.read',
   'https://www.googleapis.com/auth/fitness.sleep.read',
@@ -166,7 +169,20 @@ async function fetchFitnessDataset(
 // Public API
 // ---------------------------------------------------------------------------
 
+export interface GoogleProfileData {
+  name?: string;
+  dob?: string;
+  heightCm?: number;
+  weightKg?: number;
+}
+
 export const GoogleFitService = {
+  /**
+   * Hardcoded default OAuth 2.0 Client ID for iOS.
+   * Replace this with your Google Cloud Console Client ID.
+   */
+  DEFAULT_CLIENT_ID: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+
   /**
    * Starts the Google OAuth flow using expo-web-browser.
    * Returns an access token if successful, null if cancelled.
@@ -317,5 +333,112 @@ export const GoogleFitService = {
     }
 
     return results;
+  },
+
+  /**
+   * Fetches the user's name, DOB, height, and weight from Google.
+   */
+  fetchProfileData: async (accessToken: string): Promise<GoogleProfileData> => {
+    const result: GoogleProfileData = {};
+
+    // 1. Fetch name and date of birth from Google People API
+    try {
+      const response = await fetch(
+        'https://people.googleapis.com/v1/people/me?personFields=names,birthdays',
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data.names && data.names.length > 0) {
+          result.name = data.names[0].displayName;
+        }
+        if (data.birthdays && data.birthdays.length > 0) {
+          const bday = data.birthdays.find((b: any) => b.date);
+          if (bday && bday.date) {
+            const { year, month, day } = bday.date;
+            if (year && month && day) {
+              const mm = String(month).padStart(2, '0');
+              const dd = String(day).padStart(2, '0');
+              result.dob = `${year}-${mm}-${dd}`;
+            }
+          }
+        }
+      } else {
+        console.warn('[GoogleFit] People API responded with error:', await response.text());
+      }
+    } catch (e) {
+      console.warn('[GoogleFit] Error fetching People API profile:', e);
+    }
+
+    // Helper to fetch latest metric from Google Fitness API dataSources
+    const fetchLatestBodyMetric = async (metricType: 'height' | 'weight'): Promise<number | null> => {
+      try {
+        const nowMs = Date.now();
+        // Look back up to 5 years for weight/height log
+        const startMs = nowMs - 5 * 365 * 24 * 60 * 60 * 1000;
+        const startNanos = startMs * 1_000_000;
+        const endNanos = nowMs * 1_000_000;
+
+        const streamId = metricType === 'height'
+          ? 'derived:com.google.height:com.google.android.gms:merge_height'
+          : 'derived:com.google.weight:com.google.android.gms:merge_weight';
+
+        const url = `${FITNESS_API_BASE}/dataSources/${streamId}/datasets/${startNanos}-${endNanos}`;
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          console.warn(`[GoogleFit] Fitness API dataSource error for ${metricType}:`, await response.text());
+          return null;
+        }
+
+        const data = await response.json() as DatasetResponse;
+        if (data.point && data.point.length > 0) {
+          // Find the last point (most recent)
+          const lastPoint = data.point[data.point.length - 1];
+          if (lastPoint.value && lastPoint.value.length > 0) {
+            const val = lastPoint.value[0];
+            return val.fpVal !== undefined ? val.fpVal : (val.intVal !== undefined ? val.intVal : null);
+          }
+        }
+      } catch (err) {
+        console.warn(`[GoogleFit] Failed to fetch body metric ${metricType}:`, err);
+      }
+      return null;
+    };
+
+    // 2. Fetch height
+    try {
+      const height = await fetchLatestBodyMetric('height');
+      if (height) {
+        // Fitness API stores height in meters (e.g. 1.75). Convert to cm (175).
+        result.heightCm = height < 3 ? Math.round(height * 100) : Math.round(height);
+      }
+    } catch (e) {
+      console.warn('[GoogleFit] Error processing height:', e);
+    }
+
+    // 3. Fetch weight
+    try {
+      const weight = await fetchLatestBodyMetric('weight');
+      if (weight) {
+        result.weightKg = Math.round(weight);
+      }
+    } catch (e) {
+      console.warn('[GoogleFit] Error processing weight:', e);
+    }
+
+    return result;
   },
 };

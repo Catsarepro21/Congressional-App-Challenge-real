@@ -1179,9 +1179,9 @@ export const SettingsScreen: React.FC = () => {
               autoCorrect={false}
             />
             <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 6, lineHeight: 14 }}>
-              Allows Google Fit sync on iOS for Fitbit, Garmin, etc. Get a free iOS Client ID at{' '}
+              Optional. If left blank, SafeScale uses the developer's default embedded Client ID. Allows Google Fit sync on iOS for Fitbit, Garmin, etc. Get your own Client ID at{' '}
               <Text style={{ color: '#4285F4', fontWeight: '700' }}>
-                console.cloud.google.com → Fitness API → Credentials
+                console.cloud.google.com
               </Text>
               {'. Bundle ID: com.anonymous.safescalehealth'}
             </Text>
