@@ -28,7 +28,7 @@ jobs:
       - name: Patch Expo Packages for Swift Tools version compatibility
         run: |
           python3 -c "
-          import glob, re
+          import glob
           for path in glob.glob('node_modules/**/Package.swift', recursive=True):
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
@@ -37,34 +37,9 @@ jobs:
                   content = content.replace('// swift-tools-version: 6.2', '// swift-tools-version: 6.0')
                   modified = True
                   print(f'Patched Swift tools version to 6.0 in: {path}')
-              if 'expo-modules-jsi' in path:
-                  # Remove trailing commas in function argument lists to satisfy 6.0 compiler
-                  content = content.replace('targets: [\"ExpoModulesJSI\"],\n    )', 'targets: [\"ExpoModulesJSI\"]\n    )')
-                  content = content.replace('targets: [\"ExpoModulesJSI\"],\r\n    )', 'targets: [\"ExpoModulesJSI\"]\r\n    )')
-                  content = re.sub(r'(\s+\]),\r?\n(\s+)\),', r'\1\n\2),', content)
-                  content = content.replace('dependencies: testFrameworks.dependencies,\n    )', 'dependencies: testFrameworks.dependencies\n    )')
-                  content = content.replace('dependencies: testFrameworks.dependencies,\r\n    )', 'dependencies: testFrameworks.dependencies\r\n    )')
-                  content = content.replace('swiftLanguageModes: [.v6],', 'swiftLanguageModes: [.v5],')
-                  # Add NonescapableTypes experimental feature flag
-                  target_flags = '\"-enable-library-evolution\",'
-                  replacement_flags = '\"-enable-library-evolution\",\n          \"-enable-experimental-feature\", \"NonescapableTypes\",'
-                  if target_flags in content and 'NonescapableTypes' not in content:
-                      content = content.replace(target_flags, replacement_flags)
-                  modified = True
-                  print('Applied Package.swift patches for JSI')
               if modified:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
-
-          # Patch 'weak let' to 'weak var' in JSI Swift files
-          for path in glob.glob('node_modules/expo-modules-jsi/**/*.swift', recursive=True):
-              with open(path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              if 'weak let' in content:
-                  content = content.replace('weak let', 'weak var')
-                  with open(path, 'w', encoding='utf-8') as f:
-                      f.write(content)
-                  print(f'Patched weak let in: {path}')
           "
 
       - name: Show active Xcode and Swift versions
