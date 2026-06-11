@@ -43,8 +43,9 @@ jobs:
                   content = re.sub(r'(\s+\]),\r?\n(\s+)\),', r'\1\n\2),', content)
                   content = content.replace('dependencies: testFrameworks.dependencies,\n    )', 'dependencies: testFrameworks.dependencies\n    )')
                   content = content.replace('dependencies: testFrameworks.dependencies,\r\n    )', 'dependencies: testFrameworks.dependencies\r\n    )')
+                  content = content.replace('swiftLanguageModes: [.v6],', 'swiftLanguageModes: [.v5],')
                   modified = True
-                  print('Removed trailing commas in JSI Package.swift')
+                  print('Removed trailing commas and downgraded to swiftLanguageModes v5 in JSI Package.swift')
               if modified:
                   with open(path, 'w') as f:
                       f.write(content)
