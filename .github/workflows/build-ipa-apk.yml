@@ -27,15 +27,27 @@ jobs:
       - name: Patch Expo Packages for Swift Tools version compatibility
         run: |
           python3 -c "
-          import glob
+          import glob, re
           for path in glob.glob('node_modules/**/Package.swift', recursive=True):
               with open(path, 'r') as f:
                   content = f.read()
+              modified = False
               if '// swift-tools-version: 6.2' in content:
                   content = content.replace('// swift-tools-version: 6.2', '// swift-tools-version: 6.0')
+                  modified = True
+                  print(f'Patched Swift tools version to 6.0 in: {path}')
+              if 'expo-modules-jsi' in path:
+                  # Remove trailing commas in function argument lists to satisfy 6.0 compiler
+                  content = content.replace('targets: [\"ExpoModulesJSI\"],\n    )', 'targets: [\"ExpoModulesJSI\"]\n    )')
+                  content = content.replace('targets: [\"ExpoModulesJSI\"],\r\n    )', 'targets: [\"ExpoModulesJSI\"]\r\n    )')
+                  content = re.sub(r'(\s+\]),\r?\n(\s+)\),', r'\1\n\2),', content)
+                  content = content.replace('dependencies: testFrameworks.dependencies,\n    )', 'dependencies: testFrameworks.dependencies\n    )')
+                  content = content.replace('dependencies: testFrameworks.dependencies,\r\n    )', 'dependencies: testFrameworks.dependencies\r\n    )')
+                  modified = True
+                  print('Removed trailing commas in JSI Package.swift')
+              if modified:
                   with open(path, 'w') as f:
                       f.write(content)
-                  print(f'Patched Swift tools version to 6.0 in: {path}')
           "
 
       - name: Setup Java for Android Build
