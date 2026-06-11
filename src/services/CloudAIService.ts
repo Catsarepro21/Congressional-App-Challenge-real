@@ -1,0 +1,170 @@
+/**
+ * @file src/services/CloudAIService.ts
+ * @description Cloud-backed Visual AI services using Google Gemini 1.5 Flash Vision.
+ *
+ * Provides:
+ *   - analyzeIngredientsOCR: extracts product name, brand, and clean ingredients list.
+ *   - analyzeDocumentOCR: reads medical records (prescriptions, labs, vaccines) with strict PII removal.
+ */
+
+const GEMINI_API_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+
+// Prompt to extract food ingredients
+const INGREDIENT_OCR_PROMPT = `You are a professional food label scanner.
+Analyze this image of a food ingredient label. Extract the brand name, product name, and the list of ingredients.
+
+Respond ONLY with a valid JSON object in this exact format (no markdown, no explanations, no other text):
+{
+  "brand": "The brand name of the product (or empty string if not found)",
+  "name": "The name of the product (or empty string if not found)",
+  "ingredients": ["Ingredient 1", "Ingredient 2", "Ingredient 3", ...]
+}
+
+Base ingredients on the printed panel. Convert all text to standard title casing and remove accidental symbols.
+Strict privacy guideline: Do NOT include any person's name or other identifying details.`;
+
+// Prompt to parse medical documents with strict PII removal
+const DOCUMENT_OCR_PROMPT = `You are an expert clinical records parser.
+Analyze this medical document image (such as a prescription, lab report, or vaccination card).
+Identify the document type and extract the structured clinical details.
+
+Strict privacy guideline: You MUST redact/exclude all personally identifiable information (PII) of the patient, such as names, dates of birth, social security numbers, phone numbers, email addresses, and home addresses. Never include them in your output.
+
+Respond ONLY with a valid JSON object in this exact format (no markdown, no explanations, no other text):
+{
+  "type": "Prescription" | "LabResult" | "Immunization",
+  "title": "A short descriptive title (e.g. 'Amoxicillin 500mg', 'Metabolic Panel', 'COVID-19 Vaccine')",
+  "value": "The clinical details (e.g. dosage instructions '1 pill daily', lab values 'Glucose: 105 mg/dL', or vaccine details '0.5mL Dose 2')",
+  "provider": "The clinic, doctor, laboratory, or pharmacy name (or empty string if not found)",
+  "status": "A status description (e.g. 'Active', 'Final Report', 'Completed')"
+}
+`;
+
+/**
+ * Convert a local image URI to a base64-encoded string for the Gemini API.
+ */
+const uriToBase64 = async (uri: string): Promise<string> => {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // Strip the data:image/...;base64, prefix
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+/**
+ * Executes a Gemini 1.5 Flash Vision content generation request.
+ */
+const executeGeminiRequest = async (
+  imageUri: string,
+  apiKey: string,
+  promptText: string,
+): Promise<string> => {
+  const base64Image = await uriToBase64(imageUri);
+  const mimeType = imageUri.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg';
+
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          { text: promptText },
+          {
+            inline_data: {
+              mime_type: mimeType,
+              data: base64Image,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 1024,
+    },
+  };
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errText}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  return rawText;
+};
+
+export const CloudAIService = {
+  /**
+   * Scans a food label photo and extracts ingredients details.
+   */
+  analyzeIngredientsOCR: async (
+    imageUri: string,
+    apiKey: string,
+  ): Promise<{ brand: string; name: string; ingredients: string[] }> => {
+    const rawText = await executeGeminiRequest(imageUri, apiKey, INGREDIENT_OCR_PROMPT);
+    const jsonText = rawText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    
+    const parsed = JSON.parse(jsonText) as {
+      brand?: string;
+      name?: string;
+      ingredients?: string[];
+    };
+
+    return {
+      brand: parsed.brand || '',
+      name: parsed.name || 'Scanned Label',
+      ingredients: parsed.ingredients && parsed.ingredients.length > 0
+        ? parsed.ingredients
+        : ['Ingredients details unavailable'],
+    };
+  },
+
+  /**
+   * Scans a medical document photo and extracts clinical info with PII redacted.
+   */
+  analyzeDocumentOCR: async (
+    imageUri: string,
+    apiKey: string,
+  ): Promise<{
+    type: 'Prescription' | 'LabResult' | 'Immunization';
+    title: string;
+    value: string;
+    provider: string;
+    status: string;
+  }> => {
+    const rawText = await executeGeminiRequest(imageUri, apiKey, DOCUMENT_OCR_PROMPT);
+    const jsonText = rawText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    
+    const parsed = JSON.parse(jsonText) as {
+      type?: 'Prescription' | 'LabResult' | 'Immunization';
+      title?: string;
+      value?: string;
+      provider?: string;
+      status?: string;
+    };
+
+    return {
+      type: parsed.type || 'Prescription',
+      title: parsed.title || 'Scanned Record',
+      value: parsed.value || 'Extraction details unavailable',
+      provider: parsed.provider || 'Clinical Provider',
+      status: parsed.status || 'Active',
+    };
+  },
+};

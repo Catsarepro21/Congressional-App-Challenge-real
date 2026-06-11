@@ -129,6 +129,7 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   useGeminiFoodVision: false,
   geminiApiKey: '',
   useGeminiWeeklyReport: false,
+  useCloudAIDocuments: false,
 };
 
 /**
@@ -926,6 +927,74 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       userAllergies: allergies,
       vaccineMilestones: generateMilestones(profile.dob),
     }));
+  },
+
+  importPatientFHIRData: (
+    patientProfile: Partial<UserProfile>,
+    records: Omit<MedicalRecord, 'id'>[],
+    medications: Omit<MedicationItem, 'id' | 'status'>[],
+    vitals: Omit<VitalLogEntry, 'id' | 'timestamp'>[],
+    completedVaccines: string[]
+  ): void => {
+    set((state) => {
+      const updatedProfile = {
+        ...state.profile,
+        ...patientProfile,
+      };
+
+      const baseMilestones = generateMilestones(updatedProfile.dob);
+      const lowercaseCompleted = completedVaccines.map((v) => v.toLowerCase().trim());
+      const updatedMilestones = baseMilestones.map((milestone) => {
+        const targetLower = milestone.targetDisease.toLowerCase();
+        const nameLower = milestone.name.toLowerCase();
+        const isMatch = lowercaseCompleted.some(
+          (cv) => cv.includes(targetLower) || targetLower.includes(cv) || cv.includes(nameLower) || nameLower.includes(cv)
+        );
+        return isMatch ? { ...milestone, status: 'Completed' as const } : milestone;
+      });
+
+      const importedRecords: MedicalRecord[] = records.map((r, index) => ({
+        ...r,
+        id: `fhir_rec_${Date.now()}_${index}`,
+      }));
+
+      const importedMeds: MedicationItem[] = medications.map((m, index) => ({
+        ...m,
+        id: `fhir_med_${Date.now()}_${index}`,
+        status: 'Pending',
+      }));
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const importedVitals: VitalLogEntry[] = vitals.map((v, index) => ({
+        ...v,
+        id: `fhir_vit_${Date.now()}_${index}`,
+        timestamp: todayStr,
+      }));
+
+      // Cancel all existing scheduled reminders first
+      state.medicationSchedule.forEach((med) => {
+        NotificationService.cancelMedicationReminder(med.id);
+      });
+
+      // Schedule reminders for new imported meds
+      importedMeds.forEach((med) => {
+        NotificationService.scheduleMedicationReminder(
+          med.id,
+          med.name,
+          med.dosage,
+          med.time
+        );
+      });
+
+      return {
+        profile: updatedProfile,
+        vaccineMilestones: updatedMilestones,
+        medicalRecords: importedRecords,
+        medicationSchedule: importedMeds,
+        vitalsLogs: [...importedVitals, ...state.vitalsLogs].slice(0, 50),
+        lastSyncedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+    });
   },
     }),
     {

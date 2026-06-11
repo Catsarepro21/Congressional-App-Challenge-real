@@ -45,7 +45,9 @@ else:
             content = content.replace('    [self.callableJSModules setBridge:self.bridge];\n', '')
             print("SUCCESS: Removed setBridge lines directly in RCTAppleHealthKit.m")
         else:
-            print("WARNING: Could not find emitEventInternal target in RCTAppleHealthKit.m")
+            print("ERROR: Could not find emitEventInternal target in RCTAppleHealthKit.m")
+            import sys
+            sys.exit(1)
 
 with open(file_path, 'w') as f:
     f.write(content)

@@ -90,6 +90,13 @@ const DEFAULT_TABS: ReadonlyArray<NavTab> = [
     a11yHint: 'View your health analytics dashboard',
   },
   {
+    key: 'emergency',
+    label: 'Emergency',
+    icon: 'card-account-details-outline',
+    activeIcon: 'card-account-details',
+    a11yHint: 'Open emergency medical ID card',
+  },
+  {
     key: 'settings',
     label: 'Settings',
     icon: 'cog-outline',
