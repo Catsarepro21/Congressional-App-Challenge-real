@@ -24,6 +24,20 @@ jobs:
       - name: Install JS Dependencies
         run: npm ci
 
+      - name: Patch Expo Packages for Swift Tools version compatibility
+        run: |
+          python3 -c "
+          import glob
+          for path in glob.glob('node_modules/**/Package.swift', recursive=True):
+              with open(path, 'r') as f:
+                  content = f.read()
+              if '// swift-tools-version: 6.2' in content:
+                  content = content.replace('// swift-tools-version: 6.2', '// swift-tools-version: 6.0')
+                  with open(path, 'w') as f:
+                      f.write(content)
+                  print(f'Patched Swift tools version to 6.0 in: {path}')
+          "
+
       - name: Setup Java for Android Build
         uses: actions/setup-java@v4
         with:
