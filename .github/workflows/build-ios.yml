@@ -30,7 +30,7 @@ jobs:
           python3 -c "
           import glob, re
           for path in glob.glob('node_modules/**/Package.swift', recursive=True):
-              with open(path, 'r') as f:
+              with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
               modified = False
               if '// swift-tools-version: 6.2' in content:
@@ -45,11 +45,26 @@ jobs:
                   content = content.replace('dependencies: testFrameworks.dependencies,\n    )', 'dependencies: testFrameworks.dependencies\n    )')
                   content = content.replace('dependencies: testFrameworks.dependencies,\r\n    )', 'dependencies: testFrameworks.dependencies\r\n    )')
                   content = content.replace('swiftLanguageModes: [.v6],', 'swiftLanguageModes: [.v5],')
+                  # Add NonescapableTypes experimental feature flag
+                  target_flags = '\"-enable-library-evolution\",'
+                  replacement_flags = '\"-enable-library-evolution\",\n          \"-enable-experimental-feature\", \"NonescapableTypes\",'
+                  if target_flags in content and 'NonescapableTypes' not in content:
+                      content = content.replace(target_flags, replacement_flags)
                   modified = True
-                  print('Removed trailing commas and downgraded to swiftLanguageModes v5 in JSI Package.swift')
+                  print('Applied Package.swift patches for JSI')
               if modified:
-                  with open(path, 'w') as f:
+                  with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
+
+          # Patch 'weak let' to 'weak var' in JSI Swift files
+          for path in glob.glob('node_modules/expo-modules-jsi/**/*.swift', recursive=True):
+              with open(path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              if 'weak let' in content:
+                  content = content.replace('weak let', 'weak var')
+                  with open(path, 'w', encoding='utf-8') as f:
+                      f.write(content)
+                  print(f'Patched weak let in: {path}')
           "
 
       - name: Show active Xcode and Swift versions
