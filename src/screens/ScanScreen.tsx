@@ -143,7 +143,7 @@ const DOC_PRESETS: ScannedDocPreset[] = [
   }
 ];
 
-import { FoodVisionService } from '../services/FoodVisionService';
+import { FoodVisionService, CloudAIService } from '../services';
 import type { FoodAnalysisResult } from '../types';
 
 interface ScanScreenProps {
@@ -157,6 +157,9 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
   const addLoggedItem = useSafeScaleStore((s) => s.addLoggedItem);
   const crowdsourcedReports = useSafeScaleStore((s) => s.crowdsourcedReports) || [];
   const addScannedDocument = useSafeScaleStore((s) => s.addScannedDocument);
+  const addMedication = useSafeScaleStore((s) => s.addMedication);
+  const completeVaccineMilestone = useSafeScaleStore((s) => s.completeVaccineMilestone);
+  const addVitalLog = useSafeScaleStore((s) => s.addVitalLog);
   const profile = useSafeScaleStore((s) => s.profile);
 
   // Camera permissions hook
@@ -437,16 +440,91 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
           }
           return;
         }
-      }
 
-      if (scanMode === 'Document') {
-        setTimeout(() => {
-          runDocumentOCR();
-        }, 2000);
-      } else {
-        setTimeout(() => {
-          runVisualRecognition();
-        }, 2000);
+        if (scanMode === 'Allergen') {
+          if (profile.geminiApiKey && profile.geminiApiKey.trim().length > 0) {
+            try {
+              const result = await CloudAIService.analyzeIngredientsOCR(
+                photo.uri,
+                profile.geminiApiKey.trim()
+              );
+              
+              const product = {
+                name: result.name,
+                brand: result.brand,
+                ingredients: result.ingredients,
+                icon: 'image-filter-frames',
+              };
+              
+              setSelectedProduct(product);
+              
+              const coreMatch = AllergenEngine.analyzeIngredients(
+                product.ingredients,
+                userAllergies,
+                product.name
+              );
+              
+              let localAiRes: LocalAIAnalysisResult | null = null;
+              if (isLocalAIOptedIn) {
+                localAiRes = LocalAIService.analyzeIngredients(
+                  product.ingredients,
+                  userAllergies,
+                  product.name
+                );
+              }
+              
+              setAllergenResult(coreMatch);
+              setAiResult(localAiRes);
+            } catch (e) {
+              console.error('Ingredient OCR error:', e);
+              Alert.alert('OCR Failed', 'Could not parse ingredients using Gemini. Falling back to presets.');
+              runPresetSimulation();
+            } finally {
+              setIsScanning(false);
+            }
+          } else {
+            Alert.alert(
+              'Gemini Key Required',
+              'To scan physical food ingredient labels using visual AI, please enter a Gemini API Key in the Settings tab. Reverting to local offline preset simulation.',
+              [{ text: 'OK', onPress: () => runPresetSimulation() }]
+            );
+          }
+          return;
+        }
+
+        if (scanMode === 'Document') {
+          if (profile.useCloudAIDocuments && profile.geminiApiKey && profile.geminiApiKey.trim().length > 0) {
+            try {
+              const result = await CloudAIService.analyzeDocumentOCR(
+                photo.uri,
+                profile.geminiApiKey.trim()
+              );
+              setDocScanResult(result);
+              setIsDocImported(false);
+            } catch (e) {
+              console.error('Document OCR error:', e);
+              Alert.alert('Parsing Failed', 'Could not parse document details using Gemini. Falling back to local offline presets.');
+              runDocumentOCR();
+            } finally {
+              setIsScanning(false);
+            }
+          } else {
+            if (profile.geminiApiKey) {
+              Alert.alert(
+                'Cloud AI Disabled',
+                'Cloud AI Document Parsing is turned off in Settings. Reverting to local offline presets.',
+                [{ text: 'OK', onPress: () => runDocumentOCR() }]
+              );
+            } else {
+              Alert.alert(
+                'Gemini Key Required',
+                'To read physical documents using visual AI, please configure a Gemini API Key in the Settings tab. Reverting to local offline presets.',
+                [{ text: 'OK', onPress: () => runDocumentOCR() }]
+              );
+            }
+          }
+          return;
+        }
       }
 
     } catch (error) {
@@ -1221,10 +1299,10 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>
-                  Local AI Document Scan
+                  {profile.useCloudAIDocuments && profile.geminiApiKey ? 'Cloud AI Document Scan' : 'Local AI Document Scan'}
                 </Text>
                 <Text style={{ fontSize: 11, color: COLORS.textSecondary }}>
-                  Offline OCR extraction complete
+                  {profile.useCloudAIDocuments && profile.geminiApiKey ? 'Secure PII-redacted analysis complete' : 'Offline OCR extraction complete'}
                 </Text>
               </View>
             </View>
@@ -1279,8 +1357,67 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
                     status: docScanResult.status,
                     documentImage: capturedPhoto || undefined,
                   });
+
+                  // Auto-integrate scanned facts into active store slices
+                  if (docScanResult.type === 'Prescription') {
+                    // Extract dosage or default to instructions
+                    const dosageMatch = docScanResult.value.match(/(\d+\s*(mg|mcg|ml|g|pill|tablet|capsule|pills|tablets|capsules|puff|puffs))/i);
+                    const dosage = dosageMatch ? dosageMatch[1] : docScanResult.value;
+                    const timeMatch = docScanResult.value.match(/(\d{2}:\d{2})/);
+                    const time = timeMatch ? timeMatch[1] : '09:00';
+                    
+                    addMedication({
+                      name: docScanResult.title,
+                      dosage: dosage,
+                      time: time,
+                      icon: 'pill',
+                    });
+                  } else if (docScanResult.type === 'Immunization') {
+                    const milestones = useSafeScaleStore.getState().vaccineMilestones;
+                    const cleanTitle = docScanResult.title.toLowerCase();
+                    const matchedMilestone = milestones.find(m => 
+                      m.status === 'Pending' && (
+                        cleanTitle.includes(m.name.toLowerCase()) || 
+                        cleanTitle.includes(m.targetDisease.toLowerCase()) ||
+                        m.name.toLowerCase().includes(cleanTitle) ||
+                        m.targetDisease.toLowerCase().includes(cleanTitle)
+                      )
+                    );
+                    if (matchedMilestone) {
+                      completeVaccineMilestone(
+                        matchedMilestone.id,
+                        new Date().toLocaleDateString(),
+                        docScanResult.provider
+                      );
+                    }
+                  } else if (docScanResult.type === 'LabResult') {
+                    const bpMatch = docScanResult.value.match(/(\d{2,3})\s*\/\s*(\d{2,3})/);
+                    const systolic = bpMatch ? parseInt(bpMatch[1], 10) : undefined;
+                    const diastolic = bpMatch ? parseInt(bpMatch[2], 10) : undefined;
+                    
+                    const glucoseMatch = docScanResult.value.match(/(glucose|sugar)\D*(\d{2,3})/i);
+                    const glucose = glucoseMatch ? parseInt(glucoseMatch[2], 10) : undefined;
+                    
+                    const spo2Match = docScanResult.value.match(/(spo2|oxygen|o2)\D*(\d{2,3})/i);
+                    const spo2 = spo2Match ? parseInt(spo2Match[2], 10) : undefined;
+                    
+                    const tempMatch = docScanResult.value.match(/(temp|temperature)\D*(\d{2,3}\.?\d?)/i);
+                    const temperature = tempMatch ? parseFloat(tempMatch[2]) : undefined;
+                    
+                    if (systolic !== undefined || diastolic !== undefined || glucose !== undefined || spo2 !== undefined || temperature !== undefined) {
+                      addVitalLog({
+                        systolicBP: systolic,
+                        diastolicBP: diastolic,
+                        bloodGlucose: glucose,
+                        glucoseContext: 'General',
+                        spo2: spo2,
+                        temperature: temperature,
+                      });
+                    }
+                  }
+
                   setIsDocImported(true);
-                  Alert.alert('Vault Archive Completed', 'Document archived securely in your medical vault.');
+                  Alert.alert('Vault Archive Completed', 'Document archived and relevant health records integrated.');
                 }}
                 style={({ pressed }) => ({
                   backgroundColor: COLORS.primary,

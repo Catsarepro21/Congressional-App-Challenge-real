@@ -17,6 +17,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import ScanScreen from './src/screens/ScanScreen';
 import MapScreen from './src/screens/MapScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
+import EmergencyScreen from './src/screens/EmergencyScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import { BottomNavBar } from './src/components/BottomNavBar';
@@ -54,6 +55,8 @@ export default function App() {
       case 3:
         return <AnalyticsScreen />;
       case 4:
+        return <EmergencyScreen />;
+      case 5:
         return <SettingsScreen />;
       default:
         return <HomeScreen onNavigate={handleTabPress} />;

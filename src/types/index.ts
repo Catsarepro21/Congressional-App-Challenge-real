@@ -432,6 +432,16 @@ export interface SafeScaleState {
   hasCompletedOnboarding: boolean;
   /** Marks onboarding as complete and saves user-entered profile data */
   completeOnboarding: (profile: UserProfile, allergies: string[]) => void;
+
+  // ----- FHIR Portal Sync Action -----
+  /** Imports a synced patient's FHIR profile, records, medications, and vitals */
+  importPatientFHIRData: (
+    patientProfile: Partial<UserProfile>,
+    records: Omit<MedicalRecord, 'id'>[],
+    medications: Omit<MedicationItem, 'id' | 'status'>[],
+    vitals: Omit<VitalLogEntry, 'id' | 'timestamp'>[],
+    completedVaccines: string[]
+  ) => void;
 }
 
 /**
@@ -483,6 +493,7 @@ export interface UserProfile {
   useGeminiFoodVision?: boolean;
   geminiApiKey?: string;
   useGeminiWeeklyReport?: boolean;
+  useCloudAIDocuments?: boolean;
   /** Google OAuth 2.0 Client ID (iOS client type) for Google Fit REST API access */
   googleOAuthClientId?: string;
 }

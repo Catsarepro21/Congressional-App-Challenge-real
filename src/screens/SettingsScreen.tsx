@@ -18,14 +18,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  useSafeScaleStore,
-  selectUserAllergies,
-  selectIsLocalAIOptedIn,
-  selectIsTestMode,
-} from '../store/useSafeScaleStore';
+import { useSafeScaleStore, selectUserAllergies, selectIsLocalAIOptedIn, selectIsTestMode } from '../store/useSafeScaleStore';
 import type { MedicalRecord } from '../types';
-import { NotificationService } from '../services';
+import { NotificationService, FHIRService } from '../services';
 import Svg, { Rect, Path } from 'react-native-svg';
 
 
@@ -92,6 +87,7 @@ export const SettingsScreen: React.FC = () => {
   const addMedicalRecord = useSafeScaleStore((s) => s.addMedicalRecord);
   const deleteMedicalRecord = useSafeScaleStore((s) => s.deleteMedicalRecord);
   const updateProfile = useSafeScaleStore((s) => s.updateProfile);
+  const importPatientFHIRData = useSafeScaleStore((s) => s.importPatientFHIRData);
 
   const hydrationNotificationsEnabled = useSafeScaleStore((s) => s.hydrationNotificationsEnabled);
   const hydrationIntervalHours = useSafeScaleStore((s) => s.hydrationIntervalHours);
@@ -106,6 +102,11 @@ export const SettingsScreen: React.FC = () => {
   const [selectedPortal, setSelectedPortal] = useState<string | null>(null);
   const [isConnectingPortal, setIsConnectingPortal] = useState(false);
   const [fhirInputText, setFhirInputText] = useState('');
+
+  const [patientsList, setPatientsList] = useState<any[]>([]);
+  const [showPatientPicker, setShowPatientPicker] = useState(false);
+  const [isSyncingPatient, setIsSyncingPatient] = useState(false);
+  const [syncProgressText, setSyncProgressText] = useState('');
 
   // Profile Form States
   const [profileNameInput, setProfileNameInput] = useState(profile.name);
@@ -122,6 +123,7 @@ export const SettingsScreen: React.FC = () => {
   const [useGeminiFoodVision, setUseGeminiFoodVision] = useState(profile.useGeminiFoodVision || false);
   const [geminiApiKey, setGeminiApiKey] = useState(profile.geminiApiKey || '');
   const [useGeminiWeeklyReport, setUseGeminiWeeklyReport] = useState(profile.useGeminiWeeklyReport || false);
+  const [useCloudAIDocuments, setUseCloudAIDocuments] = useState(profile.useCloudAIDocuments || false);
   const [googleOAuthClientId, setGoogleOAuthClientId] = useState(profile.googleOAuthClientId || '');
 
   // Auto-enable Gemini features when user types an API key
@@ -130,6 +132,7 @@ export const SettingsScreen: React.FC = () => {
     if (key.trim().length > 10) {
       setUseGeminiFoodVision(true);
       setUseGeminiWeeklyReport(true);
+      setUseCloudAIDocuments(true);
     }
   };
   const [isProfileSaved, setIsProfileSaved] = useState(false);
@@ -150,6 +153,7 @@ export const SettingsScreen: React.FC = () => {
     setUseGeminiFoodVision(profile.useGeminiFoodVision || false);
     setGeminiApiKey(profile.geminiApiKey || '');
     setUseGeminiWeeklyReport(profile.useGeminiWeeklyReport || false);
+    setUseCloudAIDocuments(profile.useCloudAIDocuments || false);
     setGoogleOAuthClientId(profile.googleOAuthClientId || '');
   }, [profile]);
 
@@ -326,6 +330,7 @@ export const SettingsScreen: React.FC = () => {
       useGeminiFoodVision,
       geminiApiKey,
       useGeminiWeeklyReport,
+      useCloudAIDocuments,
       googleOAuthClientId,
     });
 
@@ -344,108 +349,70 @@ export const SettingsScreen: React.FC = () => {
     setNewAllergen('');
   }, [newAllergen, addAllergy]);
 
-  const handleConnectPortal = (portalName: string) => {
+  const handleConnectPortal = async (portalName: string) => {
     setSelectedPortal(portalName);
     setIsConnectingPortal(true);
+    setShowPatientPicker(false);
 
-    setTimeout(() => {
-      let recordsToImport: Omit<MedicalRecord, 'id'>[] = [];
-      if (portalName === 'Quest Diagnostics') {
-        recordsToImport = [
-          {
-            type: 'LabResult',
-            title: 'Basic Metabolic Panel',
-            value: 'Glucose: 92 mg/dL (Normal)',
-            date: new Date().toLocaleDateString(),
-            provider: 'Quest Diagnostics Labs',
-            status: 'Final Result',
-            fhirData: JSON.stringify({ resourceType: 'Observation', code: { text: 'Basic Metabolic Panel' }, valueQuantity: { value: 92, unit: 'mg/dL' } }, null, 2),
-          },
-          {
-            type: 'LabResult',
-            title: 'Lipid Panel',
-            value: 'Cholesterol: 180 mg/dL (Desirable)',
-            date: new Date().toLocaleDateString(),
-            provider: 'Quest Diagnostics Labs',
-            status: 'Final Result',
-            fhirData: JSON.stringify({ resourceType: 'Observation', code: { text: 'Lipid Panel' }, valueQuantity: { value: 180, unit: 'mg/dL' } }, null, 2),
-          }
-        ];
-      } else if (portalName === 'Kaiser Permanente') {
-        recordsToImport = [
-          {
-            type: 'Condition',
-            title: 'Essential Hypertension',
-            value: 'Mild, controlled with medication',
-            date: '2024-11-20',
-            provider: 'Kaiser Permanente Medical Group',
-            status: 'Active Diagnosis',
-            fhirData: JSON.stringify({ resourceType: 'Condition', clinicalStatus: { coding: [{ code: 'active' }] }, code: { text: 'Essential Hypertension' } }, null, 2),
-          },
-          {
-            type: 'Immunization',
-            title: 'Influenza Vaccine',
-            value: 'Seasonal dose (0.5 mL)',
-            date: '2025-10-15',
-            provider: 'Kaiser Permanente Immunization Clinic',
-            status: 'Completed',
-            fhirData: JSON.stringify({ resourceType: 'Immunization', status: 'completed', vaccineCode: { text: 'Influenza Vaccine' } }, null, 2),
-          }
-        ];
-      } else if (portalName === 'CVS Pharmacy') {
-        recordsToImport = [
-          {
-            type: 'Prescription',
-            title: 'Lisinopril 10mg',
-            value: 'Take 1 tablet daily by mouth',
-            date: '2026-05-01',
-            provider: 'CVS Pharmacy #4823',
-            status: 'Active (3 refills remaining)',
-            fhirData: JSON.stringify({ resourceType: 'MedicationRequest', status: 'active', medicationCodeableConcept: { text: 'Lisinopril 10mg' } }, null, 2),
-          },
-          {
-            type: 'Immunization',
-            title: 'COVID-19 Vaccine (Pfizer)',
-            value: 'Dose 2 (0.3 mL)',
-            date: '2021-08-15',
-            provider: 'CVS Pharmacy #4823',
-            status: 'Completed',
-            fhirData: JSON.stringify({ resourceType: 'Immunization', status: 'completed', vaccineCode: { text: 'COVID-19 Vaccine (Pfizer)' } }, null, 2),
-          }
-        ];
-      } else if (portalName === 'Mayo Clinic') {
-        recordsToImport = [
-          {
-            type: 'Condition',
-            title: 'Type 2 Diabetes Mellitus',
-            value: 'Diet and exercise regulated',
-            date: '2025-02-14',
-            provider: 'Mayo Clinic Endocrinology',
-            status: 'Active',
-            fhirData: JSON.stringify({ resourceType: 'Condition', clinicalStatus: { coding: [{ code: 'active' }] }, code: { text: 'Type 2 Diabetes' } }, null, 2),
-          },
-          {
-            type: 'LabResult',
-            title: 'HbA1c Blood Test',
-            value: 'HbA1c: 5.7% (Pre-diabetic baseline)',
-            date: '2026-03-10',
-            provider: 'Mayo Clinic Laboratories',
-            status: 'Final Result',
-            fhirData: JSON.stringify({ resourceType: 'Observation', code: { text: 'HbA1c' }, valueQuantity: { value: 5.7, unit: '%' } }, null, 2),
-          }
-        ];
-      }
-
-      recordsToImport.forEach(rec => addMedicalRecord(rec));
-
-      setIsConnectingPortal(false);
-      setSelectedPortal(null);
-      setIsRecordModalOpen(false);
+    try {
+      const patients = await FHIRService.fetchPatients();
+      setPatientsList(patients);
+      setShowPatientPicker(true);
+    } catch (error) {
+      console.warn('[handleConnectPortal] Error:', error);
       Alert.alert(
-        'Connection Successful',
-        `Successfully linked with your ${portalName} patient portal and retrieved ${recordsToImport.length} FHIR-compliant medical records.`
+        'Connection Error',
+        'Could not retrieve test patient listings from the FHIR sandbox server. Please verify your internet connection and try again.'
       );
-    }, 2000);
+    } finally {
+      setIsConnectingPortal(false);
+    }
+  };
+
+  const handleSyncPatientData = async (
+    patientId: string,
+    patientName: string,
+    patientDob: string,
+    patientGender: string
+  ) => {
+    setIsSyncingPatient(true);
+    setSyncProgressText('Connecting to patient portal...');
+
+    try {
+      setSyncProgressText('Retrieving clinical records (Observations, Immunizations, Medications)...');
+      const data = await FHIRService.fetchPatientData(patientId);
+
+      setSyncProgressText('Normalizing FHIR payload & updating database...');
+      importPatientFHIRData(
+        {
+          name: patientName,
+          dob: patientDob,
+          bloodType: patientGender === 'male' ? 'A-Positive' : 'O-Positive',
+        },
+        data.records,
+        data.medications,
+        data.vitals,
+        data.completedVaccines
+      );
+
+      setIsRecordModalOpen(false);
+      setShowPatientPicker(false);
+      
+      Alert.alert(
+        'Connection Successful 🎉',
+        `Successfully linked with your ${selectedPortal} patient portal and synced records for ${patientName}:\n\n` +
+        `• ${data.records.length} Clinical records imported\n` +
+        `• ${data.medications.length} Prescriptions scheduled\n` +
+        `• ${data.vitals.length} Vital signs logs updated\n` +
+        `• ${data.completedVaccines.length} Verified vaccinations verified`
+      );
+    } catch (error) {
+      console.warn('[handleSyncPatientData] Error:', error);
+      Alert.alert('Sync Failed', 'Failed to retrieve patient resources from the SMART on FHIR server.');
+    } finally {
+      setIsSyncingPatient(false);
+      setSyncProgressText('');
+    }
   };
 
   const handleParseCustomFHIR = () => {
@@ -1153,39 +1120,39 @@ export const SettingsScreen: React.FC = () => {
             </Pressable>
           </View>
 
-          {/* Google Fit OAuth Client ID Input */}
-          <View style={{ marginTop: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-              <MaterialCommunityIcons name="google-fit" size={15} color="#4285F4" />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginLeft: 6 }}>
-                Google Fit Client ID (iOS)
+          {/* Gemini Cloud AI Document Parsing Toggle Switch */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 16 }}>
+            <View style={{ flex: 1, paddingRight: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>
+                Enable Cloud AI Document Parsing
+              </Text>
+              <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 14 }}>
+                Uses Gemini 1.5 Flash Vision to securely extract clinical records from scanned document photos. Strict PII removal runs on-device.
               </Text>
             </View>
-            <TextInput
+            <Pressable
+              onPress={() => setUseCloudAIDocuments(!useCloudAIDocuments)}
               style={{
-                backgroundColor: COLORS.background,
+                width: 44,
+                height: 24,
                 borderRadius: 12,
-                padding: 12,
-                fontSize: 13,
-                color: COLORS.textPrimary,
-                borderWidth: 1,
-                borderColor: COLORS.border,
+                backgroundColor: useCloudAIDocuments ? COLORS.primary : '#E8EDF0',
+                padding: 2,
+                justifyContent: 'center',
               }}
-              value={googleOAuthClientId}
-              onChangeText={setGoogleOAuthClientId}
-              placeholder="Paste your iOS OAuth Client ID here"
-              placeholderTextColor="#A0AAB2"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 6, lineHeight: 14 }}>
-              Optional. If left blank, SafeScale uses the developer's default embedded Client ID. Allows Google Fit sync on iOS for Fitbit, Garmin, etc. Get your own Client ID at{' '}
-              <Text style={{ color: '#4285F4', fontWeight: '700' }}>
-                console.cloud.google.com
-              </Text>
-              {'. Bundle ID: com.anonymous.safescalehealth'}
-            </Text>
+            >
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: '#FFFFFF',
+                  transform: [{ translateX: useCloudAIDocuments ? 18 : 0 }],
+                }}
+              />
+            </Pressable>
           </View>
+
         </View>
 
         {/* ── Section: Hydration Alarms ────────────────────────────────── */}
@@ -1864,10 +1831,81 @@ export const SettingsScreen: React.FC = () => {
                 <View style={{ paddingVertical: 40, alignItems: 'center', justifyContent: 'center' }}>
                   <ActivityIndicator size="large" color={COLORS.primary} style={{ marginBottom: 16 }} />
                   <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, textAlign: 'center' }}>
-                    Authenticating with {selectedPortal}...
+                    Connecting to {selectedPortal}...
                   </Text>
                   <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 4, textAlign: 'center' }}>
-                    Securing clinical OAuth 2.0 handshake and fetching patient FHIR resources...
+                    Securing clinical OAuth 2.0 handshake & fetching test patient listings...
+                  </Text>
+                </View>
+              ) : isSyncingPatient ? (
+                <View style={{ paddingVertical: 40, alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator size="large" color={COLORS.primary} style={{ marginBottom: 16 }} />
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, textAlign: 'center' }}>
+                    Syncing Records...
+                  </Text>
+                  <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 6, textAlign: 'center', paddingHorizontal: 12 }}>
+                    {syncProgressText}
+                  </Text>
+                </View>
+              ) : showPatientPicker ? (
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                    <Pressable
+                      onPress={() => setShowPatientPicker(false)}
+                      style={({ pressed }) => ({
+                        marginRight: 10,
+                        padding: 6,
+                        borderRadius: 100,
+                        backgroundColor: pressed ? COLORS.border : 'transparent',
+                      })}
+                    >
+                      <MaterialCommunityIcons name="arrow-left" size={20} color={COLORS.primary} />
+                    </Pressable>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary }}>
+                      Select patient to sync from {selectedPortal}
+                    </Text>
+                  </View>
+                  <ScrollView style={{ maxHeight: 320, marginBottom: 16 }} showsVerticalScrollIndicator={true}>
+                    <View style={{ gap: 8 }}>
+                      {patientsList.length === 0 ? (
+                        <Text style={{ fontSize: 13, color: COLORS.textSecondary, fontStyle: 'italic', textAlign: 'center', marginVertical: 20 }}>
+                          No patients found on sandbox.
+                        </Text>
+                      ) : (
+                        patientsList.map((pat) => (
+                          <Pressable
+                            key={pat.id}
+                            onPress={() => handleSyncPatientData(pat.id, pat.name, pat.dob, pat.gender)}
+                            style={({ pressed }) => ({
+                              backgroundColor: COLORS.background,
+                              borderRadius: 16,
+                              padding: 16,
+                              borderWidth: 1.5,
+                              borderColor: COLORS.border,
+                              opacity: pressed ? 0.8 : 1,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                            })}
+                          >
+                            <View style={{ flex: 1, marginRight: 8 }}>
+                              <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>
+                                {pat.name}
+                              </Text>
+                              <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, fontWeight: '600' }}>
+                                DOB: {pat.dob} · Gender: {pat.gender.toUpperCase()}
+                              </Text>
+                            </View>
+                            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.primaryContainer, alignItems: 'center', justifyContent: 'center' }}>
+                              <MaterialCommunityIcons name="cloud-download" size={18} color={COLORS.primary} />
+                            </View>
+                          </Pressable>
+                        ))
+                      )}
+                    </View>
+                  </ScrollView>
+                  <Text style={{ fontSize: 11, color: COLORS.textSecondary, fontStyle: 'italic', textAlign: 'center' }}>
+                    Queries live records from public SMART R4 server.
                   </Text>
                 </View>
               ) : (
