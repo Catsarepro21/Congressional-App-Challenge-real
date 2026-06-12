@@ -75,7 +75,7 @@ inline RuntimeScheduler* createDefaultRuntimeScheduler() noexcept {
 patch_header(
     'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/NativeState.h',
     '} // namespace expo',
-    '''inline NativeState* createNativeState(void* context, void (*deallocator)(void*)) noexcept {
+    '''inline NativeState* createNativeState(RetainedSwiftPointer::Context context, RetainedSwiftPointer::Deallocator* deallocator) noexcept {
   return new NativeState(context, deallocator);
 }'''
 )
@@ -83,7 +83,7 @@ patch_header(
 patch_header(
     'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/HostFunctionClosure.h',
     '} // namespace expo',
-    '''inline HostFunctionClosure* createHostFunctionClosure(void* context, HostFunctionClosure::Closure closure, void (*deallocator)(void*)) noexcept {
+    '''inline HostFunctionClosure* createHostFunctionClosure(RetainedSwiftPointer::Context context, HostFunctionClosure::Closure* closure, RetainedSwiftPointer::Deallocator* deallocator) noexcept {
   return new HostFunctionClosure(context, closure, deallocator);
 }'''
 )
@@ -119,10 +119,6 @@ try:
         content = content.replace('expo.HostFunctionClosure(context, call, deallocate)', 'expo.createHostFunctionClosure(context, call, deallocate)')
         modified = True
         print('Patched HostFunctionClosure constructor call')
-    if 'vector.push_back(consuming: propNameId)' in content:
-        content = content.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(propNameId)')
-        modified = True
-        print('Patched vector.push_back label')
     if modified:
         with open(js_runtime_path, 'w', encoding='utf-8') as f:
             f.write(content)
