@@ -118,6 +118,10 @@ try:
         content = content.replace('expo.HostFunctionClosure(context, call, deallocate)', 'expo.createHostFunctionClosure(context, call, deallocate)')
         modified = True
         print('Patched HostFunctionClosure constructor call')
+    if 'vector.push_back(consuming: propNameId)' in content:
+        content = content.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(propNameId)')
+        modified = True
+        print('Patched vector.push_back label')
     if modified:
         with open(js_runtime_path, 'w', encoding='utf-8') as f:
             f.write(content)
