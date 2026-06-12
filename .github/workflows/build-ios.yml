@@ -60,16 +60,6 @@ jobs:
               if modified:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
-
-          # Patch 'weak let' to 'weak var' in JSI Swift files
-          for path in glob.glob('node_modules/expo-modules-jsi/**/*.swift', recursive=True):
-              with open(path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              if 'weak let' in content:
-                  content = content.replace('weak let', 'weak var')
-                  with open(path, 'w', encoding='utf-8') as f:
-                      f.write(content)
-                  print(f'Patched weak let in: {path}')
           "
 
       - name: Show active Xcode and Swift versions
