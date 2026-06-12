@@ -4,10 +4,7 @@
   },
   "build": {
     "preview": {
-      "distribution": "internal",
-      "ios": {
-        "simulator": true
-      }
+      "distribution": "internal"
     }
   }
 }
