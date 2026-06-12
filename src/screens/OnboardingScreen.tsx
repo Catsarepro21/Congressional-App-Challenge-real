@@ -32,13 +32,6 @@ import { GoogleFitService } from '../services/GoogleFitService';
 
 // Lazy-load HealthKit only on iOS
 let AppleHealthKit: any = null;
-if (Platform.OS === 'ios') {
-  try {
-    AppleHealthKit = require('react-native-health').default;
-  } catch (e) {
-    // Native module not available in this build
-  }
-}
 
 const { width: SCREEN_W } = Dimensions.get('window');
 

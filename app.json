@@ -42,13 +42,6 @@
     },
     "plugins": [
       [
-        "react-native-health",
-        {
-          "healthSharePermission": "SafeScale Health requires access to your health data to sync steps, heart rate, sleep, and active calories.",
-          "healthUpdatePermission": "SafeScale Health requires permission to write health updates."
-        }
-      ],
-      [
         "expo-camera",
         {
           "cameraPermission": "SafeScale Health requires access to the camera to scan food barcodes and medical document records."
