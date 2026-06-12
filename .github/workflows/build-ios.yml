@@ -132,7 +132,7 @@ jobs:
                   print(f"{i}: {line}")
 
           # Fix 1: Remove -quiet so we can see the real error in CI logs
-          content = re.sub(r'\s*-quiet\s*\\?\r?\n', '', content)
+          content = re.sub(r'[ \t]*-quiet[ \t]*\\?\r?\n', '', content)
 
           # Fix 2: Add CODE_SIGNING flags as xcodebuild BUILD SETTINGS
           #        (must come after the existing build settings, not before xcodebuild)
