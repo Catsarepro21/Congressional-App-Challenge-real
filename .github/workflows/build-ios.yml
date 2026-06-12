@@ -32,8 +32,26 @@ jobs:
           python3 << 'PYEOF'
           import glob, re
 
-          # 1. Patch Package.swift in expo-modules-jsi
-          path = 'node_modules/expo-modules-jsi/Package.swift'
+          # Find and patch all Package.swift files to use Swift 6.0
+          for package_swift in glob.glob('node_modules/**/Package.swift', recursive=True):
+              try:
+                  with open(package_swift, 'r', encoding='utf-8') as f:
+                      content = f.read()
+                  
+                  # Downgrade Swift tools version from 6.2.0 to 6.0.0
+                  content = re.sub(r'\.swift\("6\.2\.0"\)', '.swift("6.0.0")', content)
+                  content = re.sub(r'swift-tools-version:6\.2\.0', 'swift-tools-version:6.0.0', content)
+                  content = re.sub(r'swift-tools-version:\s*6\.2\.0', 'swift-tools-version: 6.0.0', content)
+                  content = re.sub(r'swift-tools-version:\s*6\.2', 'swift-tools-version: 6.0', content)
+                  
+                  with open(package_swift, 'w', encoding='utf-8') as f:
+                      f.write(content)
+                  print(f'Patched Swift version in: {package_swift}')
+              except Exception as e:
+                  print(f'Error patching {package_swift}: {e}')
+
+          # 1. Patch Package.swift in expo-modules-jsi (correct path is under apple/)
+          path = 'node_modules/expo-modules-jsi/apple/Package.swift'
           try:
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
