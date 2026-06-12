@@ -20,7 +20,6 @@ for path in glob.glob('node_modules/**/Package.swift', recursive=True):
         content = re.sub(r'(\s+\]),\r?\n(\s+)\),', r'\1\n\2),', content)
         content = content.replace('dependencies: testFrameworks.dependencies,\n    )', 'dependencies: testFrameworks.dependencies\n    )')
         content = content.replace('dependencies: testFrameworks.dependencies,\r\n    )', 'dependencies: testFrameworks.dependencies\r\n    )')
-        content = content.replace('swiftLanguageModes: [.v6],', 'swiftLanguageModes: [.v5],')
         # Remove Swift 6.2 upcoming features incompatible with Xcode 16.2 (Swift 6.0)
         content = content.replace('.enableUpcomingFeature("NonisolatedNonsendingByDefault"),', '')
         content = content.replace('.enableUpcomingFeature("InferIsolatedConformances"),', '')
@@ -119,11 +118,6 @@ try:
         content = content.replace('expo.HostFunctionClosure(context, call, deallocate)', 'expo.createHostFunctionClosure(context, call, deallocate)')
         modified = True
         print('Patched HostFunctionClosure constructor call')
-    # push_back consuming label
-    if 'vector.push_back(consuming: propNameId)' in content:
-        content = content.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(consuming propNameId)')
-        modified = True
-        print('Patched vector.push_back consuming label')
     if modified:
         with open(js_runtime_path, 'w', encoding='utf-8') as f:
             f.write(content)
