@@ -70,6 +70,9 @@ jobs:
                 config.build_settings['CODE_SIGN_IDENTITY']            = ''
                 config.build_settings['EXPANDED_CODE_SIGN_IDENTITY']   = ''
                 config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                if target.name == 'ExpoModulesJSI'
+                  config.build_settings['SWIFT_VERSION'] = '6.0'
+                end
               end
             end
           """
@@ -108,7 +111,7 @@ jobs:
           # Fix 1: Remove -quiet so we can see the real error in CI logs
           content = re.sub(r'[ \t]*-quiet[ \t]*\\?\r?\n', '', content)
 
-          # Fix 2: Add CODE_SIGNING flags as xcodebuild BUILD SETTINGS
+          # Fix 2: Add CODE_SIGNING flags and SWIFT_VERSION as xcodebuild BUILD SETTINGS
           #        (must come after the existing build settings, not before xcodebuild)
           old_marker = '    SKIP_INSTALL=NO \\\n'
           signing_flags = (
@@ -117,11 +120,12 @@ jobs:
               '    CODE_SIGNING_REQUIRED=NO \\\n'
               '    CODE_SIGN_IDENTITY="" \\\n'
               '    EXPANDED_CODE_SIGN_IDENTITY="" \\\n'
+              '    SWIFT_VERSION=6.0 \\\n'
           )
 
           if old_marker in content:
               content = content.replace(old_marker, signing_flags, 1)
-              print("\nSUCCESS: Added signing flags as xcodebuild build settings after SKIP_INSTALL=NO")
+              print("\nSUCCESS: Added signing flags and SWIFT_VERSION as xcodebuild build settings after SKIP_INSTALL=NO")
           else:
               # The marker changed — do a best-effort insert before SWIFT_COMPILATION_MODE
               old_marker2 = '    SWIFT_COMPILATION_MODE=wholemodule \\\n'
@@ -130,11 +134,12 @@ jobs:
                   '    CODE_SIGNING_REQUIRED=NO \\\n'
                   '    CODE_SIGN_IDENTITY="" \\\n'
                   '    EXPANDED_CODE_SIGN_IDENTITY="" \\\n'
+                  '    SWIFT_VERSION=6.0 \\\n'
                   '    SWIFT_COMPILATION_MODE=wholemodule \\\n'
               )
               if old_marker2 in content:
                   content = content.replace(old_marker2, signing_flags2, 1)
-                  print("\nFALLBACK: Added signing flags before SWIFT_COMPILATION_MODE")
+                  print("\nFALLBACK: Added signing flags and SWIFT_VERSION before SWIFT_COMPILATION_MODE")
               else:
                   print("\nWARNING: Could not find patch anchor — printing full script for diagnosis:")
                   print(content)
