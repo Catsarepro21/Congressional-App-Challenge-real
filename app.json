@@ -69,7 +69,8 @@
           }
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font"
     ],
     "scheme": "com.anonymous.safescalehealth"
   }

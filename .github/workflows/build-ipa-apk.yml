@@ -7,6 +7,9 @@ jobs:
   build:
     name: Build iOS IPA and Android APK
     runs-on: macos-latest
+    env:
+      IPA_PATH: ''
+      APK_PATH: ''
 
     steps:
       - name: Checkout Repository
@@ -44,6 +47,9 @@ jobs:
                   content = content.replace('dependencies: testFrameworks.dependencies,\n    )', 'dependencies: testFrameworks.dependencies\n    )')
                   content = content.replace('dependencies: testFrameworks.dependencies,\r\n    )', 'dependencies: testFrameworks.dependencies\r\n    )')
                   content = content.replace('swiftLanguageModes: [.v6],', 'swiftLanguageModes: [.v5],')
+                  # Remove Swift 6.2 upcoming features incompatible with Xcode 16.2 (Swift 6.0)
+                  content = content.replace('.enableUpcomingFeature("NonisolatedNonsendingByDefault"),', '')
+                  content = content.replace('.enableUpcomingFeature("InferIsolatedConformances"),', '')
                   # Add NonescapableTypes experimental feature flag
                   target_flags = '\"-enable-library-evolution\",'
                   replacement_flags = '\"-enable-library-evolution\",\n          \"-enable-experimental-feature\", \"NonescapableTypes\",'
@@ -131,6 +137,7 @@ jobs:
           SCRIPT="node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh"
 
           python3 << 'PYEOF'
+          import re
           script_path = 'node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh'
           with open(script_path, 'r') as f:
               content = f.read()
@@ -141,7 +148,7 @@ jobs:
                   print(f"{i}: {line}")
 
           # Fix 1: Remove -quiet so we can see the real error in CI logs
-          content = content.replace('    -quiet \\\n', '')
+          content = re.sub(r'\s*-quiet\s*\\?\r?\n', '', content)
 
           # Fix 2: Add CODE_SIGNING flags as xcodebuild BUILD SETTINGS
           #        (must come after the existing build settings, not before xcodebuild)
