@@ -48,46 +48,6 @@ for path in glob.glob('node_modules/expo-modules-jsi/**/*.swift', recursive=True
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
 
-# 3. Patch C++ Header files to add inline factories for Swift 6.0 compatibility
-def patch_header(path, search_term, factory_code):
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        if search_term in content and factory_code not in content:
-            content = content.replace(search_term, factory_code + '\n' + search_term)
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            print(f"Patched C++ header: {path}")
-    except Exception as e:
-        print(f"Error patching header {path}: {e}")
-
-patch_header(
-    'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h',
-    '} // namespace expo',
-    '''inline RuntimeScheduler* createRuntimeScheduler(void *scheduler, RuntimeScheduler::ScheduleFn fn) noexcept {
-  return new RuntimeScheduler(scheduler, fn);
-}
-inline RuntimeScheduler* createDefaultRuntimeScheduler() noexcept {
-  return new RuntimeScheduler();
-}'''
-)
-
-patch_header(
-    'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/NativeState.h',
-    '} // namespace expo',
-    '''inline NativeState* createNativeState(RetainedSwiftPointer::Context context, RetainedSwiftPointer::Deallocator* deallocator) noexcept {
-  return new NativeState(context, deallocator);
-}'''
-)
-
-patch_header(
-    'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/HostFunctionClosure.h',
-    '} // namespace expo',
-    '''inline HostFunctionClosure* createHostFunctionClosure(RetainedSwiftPointer::Context context, HostFunctionClosure::Closure* closure, RetainedSwiftPointer::Deallocator* deallocator) noexcept {
-  return new HostFunctionClosure(context, closure, deallocator);
-}'''
-)
-
 # 4. Patch JavaScriptRuntime.swift
 js_runtime_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift'
 try:
@@ -106,40 +66,11 @@ try:
         content = content.replace(old_comma, new_comma)
         modified = True
         print('Patched trailing comma in JavaScriptRuntime.swift')
-    # Constructors to factories
-    if 'expo.RuntimeScheduler()' in content:
-        content = content.replace('expo.RuntimeScheduler()', 'expo.createDefaultRuntimeScheduler()')
-        modified = True
-        print('Patched RuntimeScheduler() constructor call')
-    if 'expo.RuntimeScheduler(scheduler, fn)' in content:
-        content = content.replace('expo.RuntimeScheduler(scheduler, fn)', 'expo.createRuntimeScheduler(scheduler, fn)')
-        modified = True
-        print('Patched RuntimeScheduler(...) constructor call')
-    if 'expo.HostFunctionClosure(context, call, deallocate)' in content:
-        content = content.replace('expo.HostFunctionClosure(context, call, deallocate)', 'expo.createHostFunctionClosure(context, call, deallocate)')
-        modified = True
-        print('Patched HostFunctionClosure constructor call')
     if modified:
         with open(js_runtime_path, 'w', encoding='utf-8') as f:
             f.write(content)
 except FileNotFoundError:
     print('JavaScriptRuntime.swift not found')
-
-# 5. Patch JavaScriptNativeState.swift
-js_native_state_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptNativeState.swift'
-try:
-    with open(js_native_state_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    modified = False
-    if 'expo.NativeState(ptr, deallocate)' in content:
-        content = content.replace('expo.NativeState(ptr, deallocate)', 'expo.createNativeState(ptr, deallocate)')
-        modified = True
-        print('Patched NativeState(...) constructor call')
-    if modified:
-        with open(js_native_state_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-except FileNotFoundError:
-    print('JavaScriptNativeState.swift not found')
 
 # 6. Patch JavaScriptError.swift
 js_error_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptError.swift'
