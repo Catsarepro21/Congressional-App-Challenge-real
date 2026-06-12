@@ -32,7 +32,7 @@ jobs:
           python3 << 'PYEOF'
           import glob, re
 
-          # Find and patch all Package.swift files to use Swift 6.0
+          # Find and patch all Package.swift files to use Swift 6.0 and remove upcoming features
           for package_swift in glob.glob('node_modules/**/Package.swift', recursive=True):
               try:
                   with open(package_swift, 'r', encoding='utf-8') as f:
@@ -44,9 +44,12 @@ jobs:
                   content = re.sub(r'swift-tools-version:\s*6\.2\.0', 'swift-tools-version: 6.0.0', content)
                   content = re.sub(r'swift-tools-version:\s*6\.2', 'swift-tools-version: 6.0', content)
                   
+                  # Remove all Swift upcoming feature flags along with their trailing commas and formatting safely
+                  content = re.sub(r'\s*\.enableUpcomingFeature\((?:"[^"]+"|\'[^\']+\')\),?\s*\n', '\n', content)
+                  
                   with open(package_swift, 'w', encoding='utf-8') as f:
                       f.write(content)
-                  print(f'Patched Swift version in: {package_swift}')
+                  print(f'Patched Swift version & features in: {package_swift}')
               except Exception as e:
                   print(f'Error patching {package_swift}: {e}')
 
@@ -55,15 +58,14 @@ jobs:
           try:
               with open(path, 'r', encoding='utf-8') as f:
                   content = f.read()
-              content = content.replace('.enableUpcomingFeature("NonisolatedNonsendingByDefault"),', '')
-              content = content.replace('.enableUpcomingFeature("InferIsolatedConformances"),', '')
+              
               target_flags = '"-enable-library-evolution",'
               replacement_flags = '"-enable-library-evolution",\n          "-enable-experimental-feature", "NonescapableTypes",'
               if target_flags in content and 'NonescapableTypes' not in content:
                   content = content.replace(target_flags, replacement_flags)
               with open(path, 'w', encoding='utf-8') as f:
                   f.write(content)
-              print('Package.swift patched')
+              print('Package.swift flags patched')
           except Exception as e:
               print(f'Error Package.swift: {e}')
 
