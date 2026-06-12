@@ -1,22 +1,20 @@
-name: Build iOS IPA and Android APK
+name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ master, main ]
 
 jobs:
   build:
-    name: Build iOS IPA and Android APK
-    runs-on: macos-latest
+    name: Build Android APK
+    runs-on: ubuntu-latest
     env:
-      IPA_PATH: ''
       APK_PATH: ''
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Select Xcode Version
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -27,185 +25,14 @@ jobs:
       - name: Install JS Dependencies
         run: npm ci
 
-      - name: Patch Expo Packages for Swift Tools version compatibility
-        run: python3 .github/scripts/patch-jsi.py
-
       - name: Setup Java for Android Build
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Show active Xcode and Swift versions
-        run: |
-          xcode-select -p
-          xcodebuild -version
-          swift --version
-
-      - name: Generate Native Projects (iOS and Android)
-        run: npx expo prebuild --clean
-
-      - name: Configure Node path for Xcode scripts
-        run: |
-          NODE_PATH=$(command -v node)
-          echo "NODE_BINARY=$NODE_PATH" >> $GITHUB_ENV
-          echo "export NODE_BINARY=$NODE_PATH" > ios/.xcode.env.local
-          sudo mkdir -p /usr/local/bin
-          sudo ln -sf "$NODE_PATH" /usr/local/bin/node
-
-      - name: Patch Podfile for CI (disable code signing in all pod targets)
-        run: |
-          python3 << 'PYEOF'
-          import re
-
-          with open('ios/Podfile', 'r') as f:
-              content = f.read()
-
-          injection = """
-            # CI: disable code signing and script sandboxing
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['CODE_SIGNING_ALLOWED']          = 'NO'
-                config.build_settings['CODE_SIGNING_REQUIRED']         = 'NO'
-                config.build_settings['CODE_SIGN_IDENTITY']            = ''
-                config.build_settings['EXPANDED_CODE_SIGN_IDENTITY']   = ''
-                config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                if target.name == 'ExpoModulesJSI'
-                  config.build_settings['SWIFT_VERSION'] = '6.0'
-                end
-              end
-            end
-          """
-
-          if 'post_install do |installer|' in content:
-              patched = re.sub(
-                  r'(post_install do \|installer\|)',
-                  r'\1' + injection,
-                  content,
-                  count=1
-              )
-          else:
-              patched = content + "\npost_install do |installer|\n" + injection + "\nend\n"
-
-          with open('ios/Podfile', 'w') as f:
-              f.write(patched)
-
-          print("Podfile patched successfully")
-          PYEOF
-
-      - name: Patch ExpoModulesJSI build script (signing flags as xcodebuild build settings)
-        run: |
-          SCRIPT="node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh"
-
-          python3 << 'PYEOF'
-          import re
-          script_path = 'node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh'
-          with open(script_path, 'r') as f:
-              content = f.read()
-
-          print("=== BEFORE patch: xcodebuild-related lines ===")
-          for i, line in enumerate(content.splitlines(), 1):
-              if any(k in line for k in ['xcodebuild', 'SKIP_INSTALL', 'BUILD_LIBRARY', 'quiet', 'CODE_SIGNING']):
-                  print(f"{i}: {line}")
-
-          # Fix 1: Remove -quiet so we can see the real error in CI logs
-          content = re.sub(r'[ \t]*-quiet[ \t]*\\?\r?\n', '', content)
-
-          # Fix 2: Add CODE_SIGNING flags and SWIFT_VERSION as xcodebuild BUILD SETTINGS
-          #        (must come after the existing build settings, not before xcodebuild)
-          old_marker = '    SKIP_INSTALL=NO \\\n'
-          signing_flags = (
-              '    SKIP_INSTALL=NO \\\n'
-              '    CODE_SIGNING_ALLOWED=NO \\\n'
-              '    CODE_SIGNING_REQUIRED=NO \\\n'
-              '    CODE_SIGN_IDENTITY="" \\\n'
-              '    EXPANDED_CODE_SIGN_IDENTITY="" \\\n'
-              '    SWIFT_VERSION=6.0 \\\n'
-          )
-
-          if old_marker in content:
-              content = content.replace(old_marker, signing_flags, 1)
-              print("\nSUCCESS: Added signing flags and SWIFT_VERSION as xcodebuild build settings after SKIP_INSTALL=NO")
-          else:
-              # The marker changed — do a best-effort insert before SWIFT_COMPILATION_MODE
-              old_marker2 = '    SWIFT_COMPILATION_MODE=wholemodule \\\n'
-              signing_flags2 = (
-                  '    CODE_SIGNING_ALLOWED=NO \\\n'
-                  '    CODE_SIGNING_REQUIRED=NO \\\n'
-                  '    CODE_SIGN_IDENTITY="" \\\n'
-                  '    EXPANDED_CODE_SIGN_IDENTITY="" \\\n'
-                  '    SWIFT_VERSION=6.0 \\\n'
-                  '    SWIFT_COMPILATION_MODE=wholemodule \\\n'
-              )
-              if old_marker2 in content:
-                  content = content.replace(old_marker2, signing_flags2, 1)
-                  print("\nFALLBACK: Added signing flags and SWIFT_VERSION before SWIFT_COMPILATION_MODE")
-              else:
-                  print("\nWARNING: Could not find patch anchor — printing full script for diagnosis:")
-                  print(content)
-
-          with open(script_path, 'w') as f:
-              f.write(content)
-
-          print("\n=== AFTER patch: xcodebuild-related lines ===")
-          with open(script_path, 'r') as f:
-              patched = f.read()
-          for i, line in enumerate(patched.splitlines(), 1):
-              if any(k in line for k in ['xcodebuild', 'SKIP_INSTALL', 'BUILD_LIBRARY', 'CODE_SIGNING', 'SWIFT_COMPILATION']):
-                  print(f"{i}: {line}")
-
-          assert 'CODE_SIGNING_ALLOWED=NO' in patched, "PATCH FAILED: signing flags not in script"
-          print("\nVerification PASSED")
-          PYEOF
-
-      - name: Patch react-native-health for React Native 0.85 compatibility
-        run: python3 .github/scripts/patch-healthkit.py
-
-      - name: Install CocoaPods
-        working-directory: ios
-        run: pod install --repo-update
-
-      - name: Build Unsigned iOS App with Xcode
-        env:
-          NODE_BINARY: ${{ env.NODE_BINARY }}
-        run: |
-          set -o pipefail
-          xcodebuild \
-            -workspace ios/SafeScaleHealth.xcworkspace \
-            -scheme SafeScaleHealth \
-            -sdk iphoneos \
-            -configuration Release \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE="" \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            NODE_BINARY="$NODE_BINARY" \
-            clean build 2>&1 | tee xcodebuild.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "====== BUILD ERRORS ======"
-            grep -E "error:|Error:|BUILD FAILED|PhaseScriptExecution" xcodebuild.log | head -80
-            exit $EXIT_CODE
-          fi
-
-      - name: Package App into iOS IPA
-        run: |
-          set -euo pipefail
-          APP_PATH=$(find build/Build/Products -type d -path "*/Release-iphoneos/*.app" -print -quit)
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found under */Release-iphoneos/*.app."
-            find build/Build/Products -type d -name "*.app" -print
-            exit 1
-          fi
-          APP_NAME=$(basename "$APP_PATH" .app)
-          IPA_NAME="${APP_NAME}.ipa"
-          rm -rf ./Payload
-          mkdir -p Payload
-          ditto "$APP_PATH" "Payload/${APP_NAME}.app"
-          ditto -c -k --sequesterRsrc --keepParent Payload "$IPA_NAME"
-          printf '%s\n' "IPA_PATH=$IPA_NAME" >> "$GITHUB_ENV"
+      - name: Generate Native Android Project
+        run: npx expo prebuild --platform android --clean
 
       - name: Build Unsigned Android APK
         working-directory: android
@@ -235,13 +62,6 @@ jobs:
           cp "$APK_PATH" .
           printf '%s\n' "APK_PATH=$APK_NAME" >> "$GITHUB_ENV"
 
-      - name: Upload iOS IPA Artifact
-        if: env.IPA_PATH != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: SafeScaleHealth-Unsigned-IPA
-          path: ${{ env.IPA_PATH }}
-
       - name: Upload Android APK Artifact
         if: env.APK_PATH != ''
         uses: actions/upload-artifact@v4
@@ -254,6 +74,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: |
-            xcodebuild.log
-            android/gradle.log
+          path: android/gradle.log
