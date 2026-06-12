@@ -119,9 +119,9 @@ try:
         modified = True
         print('Patched HostFunctionClosure constructor call')
     if 'vector.push_back(consuming: propNameId)' in content:
-        content = content.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(propNameId)')
+        content = content.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(consume propNameId)')
         modified = True
-        print('Patched vector.push_back label')
+        print('Patched vector.push_back label to consume')
     if modified:
         with open(js_runtime_path, 'w', encoding='utf-8') as f:
             f.write(content)
