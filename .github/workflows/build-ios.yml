@@ -47,9 +47,12 @@ jobs:
                   # Remove all Swift upcoming feature flags along with their trailing commas and formatting safely
                   content = re.sub(r'\s*\.enableUpcomingFeature\((?:"[^"]+"|\'[^\']+\')\),?\s*\n', '\n', content)
                   
+                  # Remove trailing commas in argument lists before closing parentheses (invalid in Swift 6.0)
+                  content = re.sub(r',\s*\n\s*\)', lambda m: m.group(0).replace(',', '', 1), content)
+                  
                   with open(package_swift, 'w', encoding='utf-8') as f:
                       f.write(content)
-                  print(f'Patched Swift version & features in: {package_swift}')
+                  print(f'Patched Swift version, features & commas in: {package_swift}')
               except Exception as e:
                   print(f'Error patching {package_swift}: {e}')
 
