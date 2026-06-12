@@ -48,8 +48,8 @@ jobs:
                   content = content.replace('dependencies: testFrameworks.dependencies,\r\n    )', 'dependencies: testFrameworks.dependencies\r\n    )')
                   content = content.replace('swiftLanguageModes: [.v6],', 'swiftLanguageModes: [.v5],')
                   # Remove Swift 6.2 upcoming features incompatible with Xcode 16.2 (Swift 6.0)
-                  content = content.replace('.enableUpcomingFeature("NonisolatedNonsendingByDefault"),', '')
-                  content = content.replace('.enableUpcomingFeature("InferIsolatedConformances"),', '')
+                  content = content.replace('.enableUpcomingFeature(\"NonisolatedNonsendingByDefault\"),', '')
+                  content = content.replace('.enableUpcomingFeature(\"InferIsolatedConformances\"),', '')
                   # Add NonescapableTypes experimental feature flag
                   target_flags = '\"-enable-library-evolution\",'
                   replacement_flags = '\"-enable-library-evolution\",\n          \"-enable-experimental-feature\", \"NonescapableTypes\",'
@@ -60,6 +60,59 @@ jobs:
               if modified:
                   with open(path, 'w', encoding='utf-8') as f:
                       f.write(content)
+
+          # 1. Patch 'weak let' to 'weak var' in JSI Swift files
+          for path in glob.glob('node_modules/expo-modules-jsi/**/*.swift', recursive=True):
+              with open(path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              modified = False
+              if 'weak let' in content:
+                  content = content.replace('weak let', 'weak var')
+                  modified = True
+                  print(f'Patched weak let in: {path}')
+              if modified:
+                  with open(path, 'w', encoding='utf-8') as f:
+                      f.write(content)
+
+          # 2. Patch JavaScriptRuntime.swift
+          js_runtime_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift'
+          try:
+              with open(js_runtime_path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              modified = False
+              if '/^[a-zA-Z_$][a-zA-Z0-9_$]*$/' in content:
+                  content = content.replace('/^[a-zA-Z_$][a-zA-Z0-9_$]*$/', 'try! Regex(\"^[a-zA-Z_$][a-zA-Z0-9_$]*$\")')
+                  modified = True
+                  print('Patched Regex literal in JavaScriptRuntime.swift')
+              old_comma = '_ arguments: consuming JavaScriptValuesBuffer,'
+              new_comma = '_ arguments: consuming JavaScriptValuesBuffer'
+              if old_comma in content:
+                  content = content.replace(old_comma, new_comma)
+                  modified = True
+                  print('Patched trailing comma in JavaScriptRuntime.swift')
+              if modified:
+                  with open(js_runtime_path, 'w', encoding='utf-8') as f:
+                      f.write(content)
+          except FileNotFoundError:
+              print('JavaScriptRuntime.swift not found')
+
+          # 3. Patch JavaScriptError.swift
+          js_error_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptError.swift'
+          try:
+              with open(js_error_path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              modified = False
+              old_line = '  public var message: String {'
+              new_line = '  var message: String {'
+              if 'extension expo.CppError: Error' in content and old_line in content:
+                  content = content.replace(old_line, new_line)
+                  modified = True
+                  print('Patched public var message to var message in JavaScriptError.swift')
+              if modified:
+                  with open(js_error_path, 'w', encoding='utf-8') as f:
+                      f.write(content)
+          except FileNotFoundError:
+              print('JavaScriptError.swift not found')
           "
 
       - name: Show active Xcode and Swift versions
