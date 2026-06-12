@@ -40,9 +40,9 @@ for path in glob.glob('node_modules/expo-modules-jsi/**/*.swift', recursive=True
         content = f.read()
     modified = False
     if 'weak let' in content:
-        content = content.replace('weak let', 'weak var')
+        content = content.replace('weak let', 'nonisolated(unsafe) weak var')
         modified = True
-        print(f'Patched weak let in: {path}')
+        print(f'Patched weak let to nonisolated(unsafe) weak var in: {path}')
     if modified:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
