@@ -973,7 +973,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const [syncStep, setSyncStep] = useState(0);
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
   const [isSyncPickerOpen, setIsSyncPickerOpen] = useState(false);
-  const [syncPlatform, setSyncPlatform] = useState<'apple' | 'google' | null>(null);
+  const [syncPlatform, setSyncPlatform] = useState<'apple' | 'google' | 'google-fit-rest' | null>(null);
 
   const [isICEModalOpen, setIsICEModalOpen] = useState(false);
   const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
@@ -1129,8 +1129,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               } catch (e) {
                 console.warn('[HealthKit] Failed to fetch real health data:', e);
               }
-            } else if (Platform.OS === 'ios' && syncPlatform === 'google') {
-              // Google Fit REST API on iOS — uses stored OAuth access token or fallback client ID
+            } else if (syncPlatform === 'google-fit-rest') {
+              // Google Fit REST API (works on both iOS and Android)
               try {
                 let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
                 if (!clientId.trim() || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
@@ -1149,9 +1149,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                   }
                 }
               } catch (e) {
-                console.warn('[GoogleFit] iOS REST API fetch failed:', e);
+                console.warn('[GoogleFit] REST API fetch failed:', e);
               }
             } else if (Platform.OS === 'android' && syncPlatform === 'google') {
+              // Android Health Connect
               try {
                 const realData = await HealthDataService.fetchHealthConnectData();
                 if (realData) {
@@ -1213,8 +1214,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
    * Checks for health data permission before syncing.
    * Prompts the user if permission is unrequested or previously denied.
    */
-  const handleSyncHealthData = useCallback((platform: 'apple' | 'google') => {
-    if (Platform.OS === 'ios' && platform === 'apple') {
+  const handleSyncHealthData = useCallback((platform: 'apple' | 'google' | 'google-fit-rest') => {
+    if (platform === 'apple') {
+      if (Platform.OS === 'android') {
+        setIsSyncPickerOpen(false);
+        Alert.alert(
+          'Apple Health on Android',
+          'Apple Health is exclusive to iOS devices.\n\nPlease select Google Health Connect or Google Fit to sync your fitness and activity data on Android.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
       setSyncPlatform('apple');
       setIsSyncPickerOpen(false);
       if (hasHealthPermission === true) {
@@ -1225,17 +1235,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       return;
     }
 
-    if (Platform.OS === 'android' && platform === 'apple') {
+    if (platform === 'google-fit-rest') {
+      setSyncPlatform('google-fit-rest');
       setIsSyncPickerOpen(false);
-      Alert.alert(
-        'Apple Health on Android',
-        'Apple Health is exclusive to iOS devices.\n\nPlease select Google Health Connect to sync your fitness and activity data on Android.',
-        [{ text: 'OK' }]
-      );
+      executeSync();
       return;
     }
 
-    // Google sync — works on both iOS (Google Fit REST API) and Android (Health Connect)
+    // Google Health Connect (Android only)
     setSyncPlatform('google');
     setIsSyncPickerOpen(false);
     if (hasHealthPermission === true) {
@@ -1248,8 +1255,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const handleApprovePermission = useCallback(async () => {
     setIsPermissionModalOpen(false);
     
-    // For Google Fit on iOS — use OAuth flow directly, no system permission dialog needed
-    if (syncPlatform === 'google' && Platform.OS === 'ios') {
+    // For Google Fit REST API — use OAuth flow directly, no system permission dialog needed
+    if (syncPlatform === 'google-fit-rest') {
       let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
       if (!clientId.trim() || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
         clientId = GoogleFitService.DEFAULT_CLIENT_ID;
@@ -1257,7 +1264,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       if (!clientId || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
         Alert.alert(
           'Google Client ID Required',
-          'To sync with Google Fit on iOS, please configure your Google OAuth Client ID in Settings → AI & Integration Settings or hardcode it in GoogleFitService.ts.',
+          'To sync with Google Fit, please configure your Google OAuth Client ID in Settings → AI & Integration Settings or hardcode it in GoogleFitService.ts.',
           [{ text: 'OK' }]
         );
         return;
@@ -2619,7 +2626,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         </View>
       </Modal>
 
-      {/* ── Health Sync Platform Picker Modal ─────────────────────────── */}
+      {/* ── Health Sync Platform Picker Modal ───────────────────────── */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -2647,27 +2654,83 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               Choose your health platform to import biometric data including heart rate, sleep, steps, and active calories.
             </Text>
 
-            {/* Apple Health Option */}
+            {/* iOS specific: Apple Health */}
+            {Platform.OS === 'ios' && (
+              <Pressable
+                onPress={() => handleSyncHealthData('apple')}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                  borderRadius: 18,
+                  padding: 16,
+                  marginBottom: 12,
+                  borderWidth: 1.5,
+                  borderColor: syncPlatform === 'apple' ? COLORS.primary : COLORS.border,
+                })}
+              >
+                <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#FFEBEA', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                  <MaterialCommunityIcons name="apple" size={28} color="#FF2D55" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Apple Health</Text>
+                  <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                    HealthKit · Heart Rate · Sleep · Steps · Active Calories
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+              </Pressable>
+            )}
+
+            {/* Android specific: Google Health Connect */}
+            {Platform.OS === 'android' && (
+              <Pressable
+                onPress={() => handleSyncHealthData('google')}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                  borderRadius: 18,
+                  padding: 16,
+                  marginBottom: 12,
+                  borderWidth: 1.5,
+                  borderColor: syncPlatform === 'google' ? COLORS.primary : COLORS.border,
+                })}
+              >
+                <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                  <MaterialCommunityIcons name="google-fit" size={28} color={COLORS.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health Connect</Text>
+                  <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                    Health Connect · Fitbit · Samsung Health · Garmin
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+              </Pressable>
+            )}
+
+            {/* Cross-platform: Google Fit Cloud API */}
             <Pressable
-              onPress={() => handleSyncHealthData('apple')}
+              onPress={() => handleSyncHealthData('google-fit-rest')}
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
                 backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
                 borderRadius: 18,
                 padding: 16,
-                marginBottom: 12,
+                marginBottom: 4,
                 borderWidth: 1.5,
-                borderColor: syncPlatform === 'apple' ? COLORS.primary : COLORS.border,
+                borderColor: syncPlatform === 'google-fit-rest' ? COLORS.primary : COLORS.border,
               })}
             >
-              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#FFEBEA', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                <MaterialCommunityIcons name="apple" size={28} color="#FF2D55" />
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                <MaterialCommunityIcons name="google" size={28} color="#4285F4" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Apple Health</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Fit (Cloud API)</Text>
                 <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
-                  HealthKit · Heart Rate · Sleep · Steps · Active Calories
+                  Fitbit App · Google Fit app · Google Account Sync
                 </Text>
               </View>
               <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
