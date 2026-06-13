@@ -1,28 +1,20 @@
 /**
  * @file src/services/GoogleFitService.ts
- * @description Google Fit REST API integration for iOS (and Android as fallback).
+ * @description Google Fit REST API integration for Android and iOS.
  *
  * Uses OAuth 2.0 via expo-web-browser to authenticate the user with their
  * Google account, then queries the Google Fitness REST API to retrieve:
- *   - Step count (steps today)
- *   - Active calories burned (today)
- *   - Heart rate samples (last 24h)
- *   - Sleep sessions (last 24h)
+ * - Step count (steps today)
+ * - Active calories burned (today)
+ * - Heart rate samples (last 24h)
+ * - Sleep sessions (last 24h)
  *
- * This enables iOS users who have Fitbit, Garmin, Polar, or any other
+ * This enables users who have Fitbit, Garmin, Polar, or any other
  * device that syncs to Google Fit to read their data in SafeScale Health.
- *
- * SETUP REQUIRED:
- *   The user must provide a Google OAuth 2.0 iOS Client ID from Google Cloud Console:
- *   https://console.cloud.google.com/apis/credentials
- *   - Create a project → Enable "Fitness API"
- *   - Create credentials → OAuth 2.0 Client ID → iOS Application type
- *   - Enter the Bundle Identifier: com.anonymous.safescalehealth
- *   - Paste the resulting Client ID into the app's Settings tab
  */
 
 import * as WebBrowser from 'expo-web-browser';
-import { Platform, Linking } from 'react-native';
+import { Platform } from 'react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -125,8 +117,6 @@ async function fetchFitnessDataset(
   startMs: number,
   endMs: number,
 ): Promise<DatasetResponse> {
-  const datasetId = `${startMs * 1000000}-${endMs * 1000000}`;
-  // Use aggregate endpoint for more reliable data
   const url = `${FITNESS_API_BASE}/dataset:aggregate`;
 
   const body = {
@@ -154,7 +144,6 @@ async function fetchFitnessDataset(
     bucket?: Array<{ dataset?: Array<{ point?: DatasetResponse['point'] }> }>;
   };
 
-  // Flatten bucket -> dataset -> points
   const points: DatasetResponse['point'] = [];
   (data.bucket || []).forEach((bucket) => {
     (bucket.dataset || []).forEach((dataset) => {
@@ -178,30 +167,34 @@ export interface GoogleProfileData {
 
 export const GoogleFitService = {
   /**
-   * Hardcoded default OAuth 2.0 Client ID for iOS.
+   * Hardcoded OAuth 2.0 Client IDs assigned dynamically by target environment.
    */
-  DEFAULT_CLIENT_ID: '386274527686-ou82vu9atibl8ckmlsj37cp7oo9o708b.apps.googleusercontent.com',
+  CLIENT_ID: Platform.select({
+    ios: '386274527686-ou82vu9atibl8ckmlsj37cp7oo9o708b.apps.googleusercontent.com',
+    android: '386274527686-ug0ea412sbbg40ska0i4ds7b4qau8ori.apps.googleusercontent.com',
+    default: '386274527686-ug0ea412sbbg40ska0i4ds7b4qau8ori.apps.googleusercontent.com'
+  }),
 
   /**
    * Starts the Google OAuth flow using expo-web-browser.
    * Returns an access token if successful, null if cancelled.
-   *
-   * @param clientId - The Google OAuth 2.0 iOS Client ID from Google Cloud Console.
    */
-  authorize: async (clientId: string): Promise<string | null> => {
-    if (!clientId.trim()) {
+  authorize: async (customClientId?: string): Promise<string | null> => {
+    // Intercept UI parameters to dodge empty settings configurations
+    let clientId = GoogleFitService.CLIENT_ID;
+    
+    if (customClientId && customClientId.trim() && !customClientId.includes('YOUR_')) {
+      clientId = customClientId.trim();
+    }
+
+    if (!clientId) {
       throw new Error('NO_CLIENT_ID');
     }
 
-    // The redirect URI for installed apps — uses reverse DNS of the client ID
-    // e.g. com.googleusercontent.apps.XXXXXXX:/oauth2callback
-    const clientIdBase = clientId.replace('.apps.googleusercontent.com', '');
-    const redirectUri = Platform.OS === 'ios'
-      ? `${clientIdBase.split('').reverse().join('')}:/oauth2redirect`
-      : 'com.anonymous.safescalehealth:/oauth2redirect';
-
-    // Actually use a custom scheme redirect that expo-web-browser can intercept
-    const expoRedirectUri = 'com.anonymous.safescalehealth://oauth2';
+    // Android requires a localhost loopback channel for secure external sessions
+    const finalRedirectUri = Platform.OS === 'android'
+      ? 'https://localhost'
+      : 'com.anonymous.safescalehealth://oauth2';
 
     const codeVerifier = generateCodeVerifier();
     const state = Math.random().toString(36).slice(2);
@@ -209,34 +202,32 @@ export const GoogleFitService = {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,
-      redirect_uri: expoRedirectUri,
+      redirect_uri: finalRedirectUri,
       scope: SCOPES,
       state,
-      code_challenge: codeVerifier, // simplified - full PKCE would SHA256 hash this
+      code_challenge: codeVerifier, 
       code_challenge_method: 'plain',
       access_type: 'online',
     });
 
     const authUrl = `${GOOGLE_AUTH_URL}?${params.toString()}`;
 
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, expoRedirectUri);
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, finalRedirectUri);
 
     if (result.type !== 'success' || !result.url) {
       return null;
     }
 
-    // Parse code from returned URL
     const returnedUrl = new URL(result.url);
     const code = returnedUrl.searchParams.get('code');
     if (!code) {
       throw new Error('No authorization code in redirect URL');
     }
 
-    // Exchange code for access token
     const accessToken = await exchangeCodeForToken(
       code,
       clientId,
-      expoRedirectUri,
+      finalRedirectUri,
       codeVerifier,
     );
 
@@ -312,7 +303,6 @@ export const GoogleFitService = {
       const sleepData = await fetchFitnessDataset(accessToken, DATA_TYPE_SLEEP, last24hStart, now);
       let totalSleepMs = 0;
       (sleepData.point || []).forEach((point) => {
-        // Sleep segment value 1 = sleeping, 4 = light, 5 = deep, 6 = REM
         const isSleep = (point.value || []).some(
           (v) => v.intVal !== undefined && [1, 4, 5, 6].includes(v.intVal),
         );
@@ -324,7 +314,6 @@ export const GoogleFitService = {
       });
       if (totalSleepMs > 0) {
         results.sleepMinutes = Math.round(totalSleepMs / 60_000);
-        // Compute basic sleep consistency (100 if >= 7h, scaled down below)
         results.sleepConsistency = Math.min(100, Math.round((results.sleepMinutes / 420) * 100));
       }
     } catch (e) {
@@ -340,7 +329,6 @@ export const GoogleFitService = {
   fetchProfileData: async (accessToken: string): Promise<GoogleProfileData> => {
     const result: GoogleProfileData = {};
 
-    // 1. Fetch name and date of birth from Google People API
     try {
       const response = await fetch(
         'https://people.googleapis.com/v1/people/me?personFields=names,birthdays',
@@ -374,11 +362,9 @@ export const GoogleFitService = {
       console.warn('[GoogleFit] Error fetching People API profile:', e);
     }
 
-    // Helper to fetch latest metric from Google Fitness API dataSources
     const fetchLatestBodyMetric = async (metricType: 'height' | 'weight'): Promise<number | null> => {
       try {
         const nowMs = Date.now();
-        // Look back up to 5 years for weight/height log
         const startMs = nowMs - 5 * 365 * 24 * 60 * 60 * 1000;
         const startNanos = startMs * 1_000_000;
         const endNanos = nowMs * 1_000_000;
@@ -404,7 +390,6 @@ export const GoogleFitService = {
 
         const data = await response.json() as DatasetResponse;
         if (data.point && data.point.length > 0) {
-          // Find the last point (most recent)
           const lastPoint = data.point[data.point.length - 1];
           if (lastPoint.value && lastPoint.value.length > 0) {
             const val = lastPoint.value[0];
@@ -417,18 +402,15 @@ export const GoogleFitService = {
       return null;
     };
 
-    // 2. Fetch height
     try {
       const height = await fetchLatestBodyMetric('height');
       if (height) {
-        // Fitness API stores height in meters (e.g. 1.75). Convert to cm (175).
         result.heightCm = height < 3 ? Math.round(height * 100) : Math.round(height);
       }
     } catch (e) {
       console.warn('[GoogleFit] Error processing height:', e);
     }
 
-    // 3. Fetch weight
     try {
       const weight = await fetchLatestBodyMetric('weight');
       if (weight) {
