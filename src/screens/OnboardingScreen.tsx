@@ -254,7 +254,7 @@ export default function OnboardingScreen({ onDone }: Props) {
       if (!clientId || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
         Alert.alert(
           'Google Client ID Required',
-          'A Google OAuth Client ID must be configured in Settings or hardcoded in GoogleFitService.ts to use this feature.',
+          'A Google OAuth Client ID must be hardcoded in GoogleFitService.ts to use this feature.',
           [{ text: 'OK' }]
         );
         setImportingHealth(false);

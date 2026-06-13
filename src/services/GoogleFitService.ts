@@ -174,6 +174,9 @@ export const GoogleFitService = {
     android: '386274527686-ug0ea412sbbg40ska0i4ds7b4qau8ori.apps.googleusercontent.com',
     default: '386274527686-ug0ea412sbbg40ska0i4ds7b4qau8ori.apps.googleusercontent.com'
   }),
+  get DEFAULT_CLIENT_ID(): string {
+    return GoogleFitService.CLIENT_ID || '';
+  },
 
   /**
    * Starts the Google OAuth flow using expo-web-browser.

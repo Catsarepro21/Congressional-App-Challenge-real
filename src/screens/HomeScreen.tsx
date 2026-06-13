@@ -1264,7 +1264,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       if (!clientId || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
         Alert.alert(
           'Google Client ID Required',
-          'To sync with Google Fit, please configure your Google OAuth Client ID in Settings → AI & Integration Settings or hardcode it in GoogleFitService.ts.',
+          'A Google Client ID is required to sync. Please ensure it is configured in GoogleFitService.ts.',
           [{ text: 'OK' }]
         );
         return;
