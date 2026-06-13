@@ -194,9 +194,9 @@ export const GoogleFitService = {
       throw new Error('NO_CLIENT_ID');
     }
 
-    // Android requires a localhost loopback channel for secure external sessions
+    // Android native app client types demand your raw package name with a single trailing slash
     const finalRedirectUri = Platform.OS === 'android'
-      ? 'https://localhost'
+      ? 'com.anonymous.safescalehealth:/'
       : 'com.anonymous.safescalehealth://oauth2';
 
     const codeVerifier = generateCodeVerifier();
