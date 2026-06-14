@@ -40,6 +40,12 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    externalNativeBuild {
+        cmake {
+            buildStagingDirectory = file("../../c")
+        }
+    }
+
     namespace 'com.anonymous.safescalehealth'
     defaultConfig {
         applicationId 'com.anonymous.safescalehealth'

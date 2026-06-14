@@ -76,11 +76,11 @@ const DEFAULT_TABS: ReadonlyArray<NavTab> = [
     a11yHint: 'Open the allergen scanner',
   },
   {
-    key: 'map',
-    label: 'Map',
-    icon: 'map-outline',
-    activeIcon: 'map',
-    a11yHint: 'View regional pollen and air quality map',
+    key: 'fitness',
+    label: 'Fitness',
+    icon: 'run',
+    activeIcon: 'run',
+    a11yHint: 'View your live fitness tracker and workouts log',
   },
   {
     key: 'analytics',

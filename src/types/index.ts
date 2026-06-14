@@ -200,6 +200,20 @@ export interface ScanState {
   lastMatchResult: AllergenMatchResult | null;
 }
 
+/**
+ * Represents a logged activity/workout from the built-in GPS tracker.
+ */
+export interface AppWorkout {
+  readonly id: string;
+  readonly type: 'Run' | 'Walk' | 'Cycle';
+  readonly startTime: string; // ISO
+  readonly endTime: string; // ISO
+  readonly steps: number;
+  readonly calories: number;
+  readonly distance: number; // meters
+  readonly path: Array<{ latitude: number; longitude: number; timestamp: number }>;
+}
+
 // ---------------------------------------------------------------------------
 // Global Store Shape
 // ---------------------------------------------------------------------------
@@ -255,6 +269,17 @@ export interface SafeScaleState {
 
   /** Rolling history of daily biometric records for the past week (max 7 days). */
   weeklyHistory: WeeklyHistoryEntry[];
+
+  // ----- Built-in GPS & Step Tracker Slices -----
+  isTrackingActive: boolean;
+  trackingType: 'Run' | 'Walk' | 'Cycle' | null;
+  trackingStartTime: string | null;
+  trackingPath: Array<{ latitude: number; longitude: number; timestamp: number }>;
+  trackingSteps: number;
+  trackingDistance: number; // in meters
+  trackingCalories: number; // in kcal
+  appWorkouts: AppWorkout[];
+  lastSuccessfulSync: string | null; // Anchored timestamp for delta sync
 
   // ----- Actions ------------------------------------------------------------
 
@@ -432,6 +457,8 @@ export interface SafeScaleState {
   hasCompletedOnboarding: boolean;
   /** Marks onboarding as complete and saves user-entered profile data */
   completeOnboarding: (profile: UserProfile, allergies: string[]) => void;
+  /** Resets onboarding status back to incomplete */
+  resetOnboarding: () => void;
 
   // ----- FHIR Portal Sync Action -----
   /** Imports a synced patient's FHIR profile, records, medications, and vitals */
@@ -442,6 +469,17 @@ export interface SafeScaleState {
     vitals: Omit<VitalLogEntry, 'id' | 'timestamp'>[],
     completedVaccines: string[]
   ) => void;
+
+  // ----- GPS Workout Actions -----
+  startWorkout: (type: 'Run' | 'Walk' | 'Cycle') => void;
+  updateWorkoutProgress: (
+    coords: { latitude: number; longitude: number; timestamp: number },
+    steps: number,
+    distance: number,
+    calories: number
+  ) => void;
+  stopWorkout: () => void;
+  deleteWorkout: (id: string) => void;
 }
 
 /**
@@ -496,6 +534,8 @@ export interface UserProfile {
   useCloudAIDocuments?: boolean;
   /** Google OAuth 2.0 Client ID (iOS client type) for Google Fit REST API access */
   googleOAuthClientId?: string;
+  googleAccessToken?: string;
+  googleRefreshToken?: string;
 }
 
 export interface FoodAnalysisResult {

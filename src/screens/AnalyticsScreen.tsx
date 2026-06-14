@@ -54,7 +54,7 @@ export const AnalyticsScreen: React.FC = () => {
   const hasData = biometricCore.dailyStabilityScore > 0 || (weeklyHistory && weeklyHistory.length > 0);
 
   // Unit Preference Conversions
-  const isMetric = profile.unitPreference === 'metric' || !profile.unitPreference;
+  const isMetric = profile.unitPreference === 'metric';
   const glucoseUnitDisplay = isMetric ? 'mmol/L' : 'mg/dL';
   const tempUnitDisplay = isMetric ? '°C' : '°F';
 
@@ -97,7 +97,9 @@ export const AnalyticsScreen: React.FC = () => {
   }, [weeklyHistory, vitalsLogs, moodLogs, biometricCore, hasData]);
 
   const handleGenerateAINarrative = async () => {
-    if (!profile.geminiApiKey) {
+    const activeApiKey = (profile.geminiApiKey && profile.geminiApiKey.trim())
+      || (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
+    if (!activeApiKey) {
       Alert.alert('API Key Required', 'Please configure your Gemini API Key in the Settings tab to generate AI Coaching Narratives.');
       return;
     }
@@ -110,7 +112,7 @@ export const AnalyticsScreen: React.FC = () => {
         moodLogs,
         biometricCore,
         true,
-        profile.geminiApiKey
+        activeApiKey
       );
       setWeeklyReport(report);
     } catch (err: any) {
@@ -272,11 +274,16 @@ export const AnalyticsScreen: React.FC = () => {
   // Helper to format date label
   const getDayName = (dateStr: string) => {
     try {
+      if (!dateStr) return '--';
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const d = new Date(dateStr + 'T00:00:00');
-      return days[d.getDay()];
+      const dayIdx = d.getDay();
+      if (isNaN(dayIdx)) {
+        return dateStr.substring(5) || '--';
+      }
+      return days[dayIdx] || '--';
     } catch {
-      return dateStr.substring(5);
+      return dateStr ? (dateStr.substring(5) || '--') : '--';
     }
   };
 
@@ -293,7 +300,7 @@ export const AnalyticsScreen: React.FC = () => {
     const maxVal = Math.max(...data.map(d => d.stabilityScore), 100);
     const range = Math.max(10, maxVal - minVal);
 
-    const getX = (index: number) => padding + (index * (width - 2 * padding)) / (data.length - 1);
+    const getX = (index: number) => padding + (index * (width - 2 * padding)) / (data.length > 1 ? data.length - 1 : 1);
     const getY = (val: number) => height - padding - 8 - ((val - minVal) * (height - 2 * padding - 8)) / range;
 
     const points = data.map((entry, idx) => `${getX(idx)},${getY(entry.stabilityScore)}`).join(' ');
@@ -366,7 +373,7 @@ export const AnalyticsScreen: React.FC = () => {
     const maxVal = Math.max(...data) + 2;
     const range = maxVal - minVal;
 
-    const getX = (index: number) => padding + (index * (width - 2 * padding)) / (data.length - 1);
+    const getX = (index: number) => padding + (index * (width - 2 * padding)) / (data.length > 1 ? data.length - 1 : 1);
     const getY = (val: number) => height - padding - ((val - minVal) * (height - 2 * padding)) / range;
 
     const points = data.map((val, idx) => `${getX(idx)},${getY(val)}`).join(' ');
@@ -936,7 +943,7 @@ export const AnalyticsScreen: React.FC = () => {
             )}
 
             {/* Segmented SubTab Control */}
-            <View style={{ flexDirection: 'row', backgroundColor: '#E8EDF0', borderRadius: 12, padding: 4 }}>
+            <View style={{ flexDirection: 'row', backgroundColor: '#E8EDF0', borderRadius: 12, padding: 4, marginBottom: 16 }}>
               <Pressable
                 onPress={() => setActiveSubTab('Biometrics')}
                 style={{

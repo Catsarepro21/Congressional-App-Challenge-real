@@ -29,6 +29,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeScaleStore } from '../store/useSafeScaleStore';
 import type { UserProfile } from '../types';
 import { GoogleFitService } from '../services/GoogleFitService';
+import { GoogleHealthService } from '../services/GoogleHealthService';
 
 // Lazy-load HealthKit only on iOS
 let AppleHealthKit: any = null;
@@ -79,7 +80,7 @@ export default function OnboardingScreen({ onDone }: Props) {
   const [step, setStep] = useState(0);
   const [importingHealth, setImportingHealth] = useState(false);
   const [healthImportDone, setHealthImportDone] = useState(false);
-  const [importSource, setImportSource] = useState<'apple' | 'google' | null>(null);
+  const [importSource, setImportSource] = useState<'apple' | 'google' | 'google-health' | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   // Step 1 - Identity
@@ -87,9 +88,11 @@ export default function OnboardingScreen({ onDone }: Props) {
   const [dob, setDob] = useState('');
 
   // Step 2 - Physical
-  const [heightCm, setHeightCm] = useState('');
-  const [weightKg, setWeightKg] = useState('');
+  const [heightInput, setHeightInput] = useState('');
+  const [weightInput, setWeightInput] = useState('');
   const [bloodType, setBloodType] = useState('');
+  const [googleToken, setGoogleToken] = useState('');
+  const [googleRefreshToken, setGoogleRefreshToken] = useState('');
 
   // Step 3 - Allergens
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
@@ -201,7 +204,7 @@ export default function OnboardingScreen({ onDone }: Props) {
               // If value < 3, it's in meters → convert to cm
               const cm = h < 3 ? Math.round(h * 100) : Math.round(h);
               if (cm > 50 && cm < 280) {
-                setHeightCm(String(cm));
+                setHeightInput(String(Math.round(cm / 2.54)));
                 filled++;
               }
             }
@@ -212,7 +215,7 @@ export default function OnboardingScreen({ onDone }: Props) {
               if (weights && weights.length > 0) {
                 const kg = Math.round(weights[0].value);
                 if (kg > 10 && kg < 500) {
-                  setWeightKg(String(kg));
+                  setWeightInput(String(Math.round(kg / 0.45359237)));
                   filled++;
                 }
               }
@@ -261,13 +264,17 @@ export default function OnboardingScreen({ onDone }: Props) {
         return;
       }
 
-      const token = await GoogleFitService.authorize(clientId);
-      if (!token) {
+      const tokens = await GoogleFitService.authorize(clientId);
+      if (!tokens) {
         setImportingHealth(false);
         return;
       }
+      setGoogleToken(tokens.accessToken);
+      if (tokens.refreshToken) {
+        setGoogleRefreshToken(tokens.refreshToken);
+      }
 
-      const profileData = await GoogleFitService.fetchProfileData(token);
+      const profileData = await GoogleFitService.fetchProfileData(tokens.accessToken);
       let filled = 0;
 
       if (profileData.name) {
@@ -279,11 +286,11 @@ export default function OnboardingScreen({ onDone }: Props) {
         filled++;
       }
       if (profileData.heightCm) {
-        setHeightCm(String(profileData.heightCm));
+        setHeightInput(String(Math.round(profileData.heightCm / 2.54)));
         filled++;
       }
       if (profileData.weightKg) {
-        setWeightKg(String(profileData.weightKg));
+        setWeightInput(String(Math.round(profileData.weightKg / 0.45359237)));
         filled++;
       }
 
@@ -312,6 +319,73 @@ export default function OnboardingScreen({ onDone }: Props) {
         e.message === 'NO_CLIENT_ID'
           ? 'Google OAuth Client ID is missing. Please configure it.'
           : 'Could not connect to Google Fit. Please try manual onboarding.',
+      );
+    }
+  };
+
+  const handleImportFromGoogleHealth = async () => {
+    setImportingHealth(true);
+    setImportSource(null);
+
+    try {
+      let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
+      if (!clientId.trim() || clientId.includes('YOUR_')) {
+        clientId = GoogleHealthService.DEFAULT_CLIENT_ID;
+      }
+
+      const tokens = await GoogleHealthService.authorize(clientId);
+      if (!tokens) {
+        setImportingHealth(false);
+        return;
+      }
+      setGoogleToken(tokens.accessToken);
+      if (tokens.refreshToken) {
+        setGoogleRefreshToken(tokens.refreshToken);
+      }
+
+      const profileData = await GoogleHealthService.fetchProfileData(tokens.accessToken);
+      let filled = 0;
+
+      if (profileData.name) {
+        setName(profileData.name);
+        filled++;
+      }
+      if (profileData.dob) {
+        setDob(profileData.dob);
+        filled++;
+      }
+      if (profileData.heightCm) {
+        setHeightInput(String(Math.round(profileData.heightCm / 2.54)));
+        filled++;
+      }
+      if (profileData.weightKg) {
+        setWeightInput(String(Math.round(profileData.weightKg / 0.45359237)));
+        filled++;
+      }
+
+      setImportingHealth(false);
+
+      if (filled > 0) {
+        setHealthImportDone(true);
+        setImportSource('google-health');
+        Alert.alert(
+          `Imported ${filled} field${filled !== 1 ? 's' : ''} ✓`,
+          'Your Google Health profile data has been imported. You can review and edit it on the next screens.',
+          [{ text: 'Continue', onPress: () => goToStep(1) }],
+        );
+      } else {
+        Alert.alert(
+          'No Data Found',
+          "We authorized with Google Health, but couldn't find any profile details or body metrics. Please fill them in manually.",
+          [{ text: 'OK', onPress: () => goToStep(1) }],
+        );
+      }
+    } catch (e: any) {
+      setImportingHealth(false);
+      console.warn('[GoogleHealth] Onboarding import failed:', e);
+      Alert.alert(
+        'Import Failed',
+        'Could not connect to Google Health. Please try manual onboarding.',
       );
     }
   };
@@ -352,17 +426,22 @@ export default function OnboardingScreen({ onDone }: Props) {
   };
 
   const handleFinish = () => {
+    const heightVal = parseFloat(heightInput);
+    const weightVal = parseFloat(weightInput);
     const profile: UserProfile = {
       name: name.trim() || 'User',
       dob: dob.trim() || '2000-01-01',
       bloodType: bloodType || 'O-Positive',
-      height: parseFloat(heightCm) || 170,
-      weight: parseFloat(weightKg) || 70,
+      height: isNaN(heightVal) ? 170 : Math.round(heightVal * 2.54 * 10) / 10,
+      weight: isNaN(weightVal) ? 70 : Math.round(weightVal * 0.45359237 * 10) / 10,
       organDonor: false,
-      unitPreference: 'metric',
-      useGeminiFoodVision: false,
+      unitPreference: 'imperial',
+      useGeminiFoodVision: true,
       geminiApiKey: '',
-      useGeminiWeeklyReport: false,
+      useGeminiWeeklyReport: true,
+      useCloudAIDocuments: true,
+      googleAccessToken: googleToken || undefined,
+      googleRefreshToken: googleRefreshToken || undefined,
     };
     completeOnboarding(profile, selectedAllergens);
     onDone();
@@ -460,6 +539,34 @@ export default function OnboardingScreen({ onDone }: Props) {
         </Text>
       </Pressable>
 
+      {/* Auto-import from Google Health */}
+      <Pressable
+        onPress={handleImportFromGoogleHealth}
+        disabled={importingHealth}
+        style={({ pressed }) => ({
+          width: '100%',
+          backgroundColor: importingHealth && importSource === 'google-health' ? '#E8EDF0' : COLORS.primary,
+          borderRadius: 18,
+          paddingVertical: 16,
+          paddingHorizontal: 20,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          marginBottom: 14,
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        {importingHealth && importSource === 'google-health' ? (
+          <ActivityIndicator color="#FFFFFF" size="small" />
+        ) : (
+          <MaterialCommunityIcons name="heart-pulse" size={20} color="#FFFFFF" />
+        )}
+        <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 16 }}>
+          {importingHealth && importSource === 'google-health' ? 'Importing from Google Health…' : 'Import from Google Health'}
+        </Text>
+      </Pressable>
+
       {/* Manual setup */}
       <Pressable
         onPress={() => goToStep(1)}
@@ -497,7 +604,7 @@ export default function OnboardingScreen({ onDone }: Props) {
       <Text style={{ fontSize: 24, fontWeight: '900', color: COLORS.text, marginBottom: 6 }}>Your Identity</Text>
       <Text style={{ fontSize: 13, color: COLORS.textSub, marginBottom: 28, lineHeight: 19 }}>
         Used for your emergency ICE card and personalized health reports.
-        {healthImportDone ? `\n\n✓ Some fields were pre-filled from ${importSource === 'apple' ? 'Apple Health' : 'Google Fit'}.` : ''}
+        {healthImportDone ? `\n\n✓ Some fields were pre-filled from ${importSource === 'apple' ? 'Apple Health' : importSource === 'google-health' ? 'Google Health' : 'Google Fit'}.` : ''}
       </Text>
 
       <Text style={labelStyle}>Full Name</Text>
@@ -545,34 +652,34 @@ export default function OnboardingScreen({ onDone }: Props) {
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}>
-          <Text style={labelStyle}>Height (cm)</Text>
+          <Text style={labelStyle}>Height (inches)</Text>
           <TextInput
-            style={[inputStyle, heightCm && healthImportDone ? { borderColor: COLORS.primary, borderWidth: 2 } : {}]}
-            placeholder="e.g. 175"
+            style={[inputStyle, heightInput && healthImportDone ? { borderColor: COLORS.primary, borderWidth: 2 } : {}]}
+            placeholder="e.g. 69"
             placeholderTextColor="#A0AAB2"
-            value={heightCm}
-            onChangeText={setHeightCm}
+            value={heightInput}
+            onChangeText={setHeightInput}
             keyboardType="decimal-pad"
           />
-          {healthImportDone && heightCm ? (
+          {healthImportDone && heightInput ? (
             <Text style={{ fontSize: 10, color: COLORS.primary, marginTop: 3, fontWeight: '600' }}>
-              ✓ From {importSource === 'apple' ? 'Apple Health' : 'Google Fit'}
+              ✓ From {importSource === 'apple' ? 'Apple Health' : importSource === 'google-health' ? 'Google Health' : 'Google Fit'}
             </Text>
           ) : null}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={labelStyle}>Weight (kg)</Text>
+          <Text style={labelStyle}>Weight (lbs)</Text>
           <TextInput
-            style={[inputStyle, weightKg && healthImportDone ? { borderColor: COLORS.primary, borderWidth: 2 } : {}]}
-            placeholder="e.g. 70"
+            style={[inputStyle, weightInput && healthImportDone ? { borderColor: COLORS.primary, borderWidth: 2 } : {}]}
+            placeholder="e.g. 154"
             placeholderTextColor="#A0AAB2"
-            value={weightKg}
-            onChangeText={setWeightKg}
+            value={weightInput}
+            onChangeText={setWeightInput}
             keyboardType="decimal-pad"
           />
-          {healthImportDone && weightKg ? (
+          {healthImportDone && weightInput ? (
             <Text style={{ fontSize: 10, color: COLORS.primary, marginTop: 3, fontWeight: '600' }}>
-              ✓ From {importSource === 'apple' ? 'Apple Health' : 'Google Fit'}
+              ✓ From {importSource === 'apple' ? 'Apple Health' : importSource === 'google-health' ? 'Google Health' : 'Google Fit'}
             </Text>
           ) : null}
         </View>

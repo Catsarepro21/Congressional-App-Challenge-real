@@ -15,7 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import HomeScreen from './src/screens/HomeScreen';
 import ScanScreen from './src/screens/ScanScreen';
-import MapScreen from './src/screens/MapScreen';
+import { FitnessScreen } from './src/screens/FitnessScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import EmergencyScreen from './src/screens/EmergencyScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -51,7 +51,7 @@ export default function App() {
       case 1:
         return <ScanScreen onNavigate={handleTabPress} />;
       case 2:
-        return <MapScreen />;
+        return <FitnessScreen />;
       case 3:
         return <AnalyticsScreen />;
       case 4:
