@@ -34,7 +34,8 @@ export const FHIRService = {
             const nameObj = res.name?.[0];
             const given = nameObj?.given ? nameObj.given.join(' ') : '';
             const family = nameObj?.family || '';
-            const fullName = `${given} ${family}`.trim() || 'Anonymous Patient';
+            let fullName = `${given} ${family}`.trim() || 'Anonymous Patient';
+            fullName = fullName.replace(/\d+/g, '').replace(/\s+/g, ' ').trim() || 'Anonymous Patient';
             
             patients.push({
               id: res.id,

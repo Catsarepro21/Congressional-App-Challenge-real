@@ -126,10 +126,10 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   weight: 62,
   organDonor: false,
   unitPreference: 'metric',
-  useGeminiFoodVision: false,
+  useGeminiFoodVision: true,
   geminiApiKey: '',
-  useGeminiWeeklyReport: false,
-  useCloudAIDocuments: false,
+  useGeminiWeeklyReport: true,
+  useCloudAIDocuments: true,
 };
 
 /**
@@ -277,6 +277,17 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   lastSyncedAt: null,
 
   weeklyHistory: [],
+
+  // ----- Built-in GPS & Step Tracker Slices -----
+  isTrackingActive: false,
+  trackingType: null,
+  trackingStartTime: null,
+  trackingPath: [],
+  trackingSteps: 0,
+  trackingDistance: 0,
+  trackingCalories: 0,
+  appWorkouts: [],
+  lastSuccessfulSync: null,
 
   userAllergies: [],
 
@@ -929,6 +940,10 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     }));
   },
 
+  resetOnboarding: (): void => {
+    set({ hasCompletedOnboarding: false });
+  },
+
   importPatientFHIRData: (
     patientProfile: Partial<UserProfile>,
     records: Omit<MedicalRecord, 'id'>[],
@@ -996,6 +1011,126 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       };
     });
   },
+
+  startWorkout: (type) => set({
+    isTrackingActive: true,
+    trackingType: type,
+    trackingStartTime: new Date().toISOString(),
+    trackingPath: [],
+    trackingSteps: 0,
+    trackingDistance: 0,
+    trackingCalories: 0,
+  }),
+
+  updateWorkoutProgress: (coords, steps, distance, calories) => set((state) => ({
+    trackingPath: [...state.trackingPath, coords],
+    trackingSteps: state.trackingSteps + steps,
+    trackingDistance: state.trackingDistance + distance,
+    trackingCalories: state.trackingCalories + calories,
+  })),
+
+  stopWorkout: () => set((state) => {
+    if (!state.isTrackingActive || !state.trackingStartTime || !state.trackingType) return {};
+    
+    const endTime = new Date().toISOString();
+    const newWorkout = {
+      id: Date.now().toString(),
+      type: state.trackingType,
+      startTime: state.trackingStartTime,
+      endTime,
+      steps: Math.round(state.trackingSteps),
+      calories: Math.round(state.trackingCalories),
+      distance: Math.round(state.trackingDistance),
+      path: state.trackingPath,
+    };
+
+    const updatedBiometricCore = {
+      ...state.biometricCore,
+      steps: state.biometricCore.steps + newWorkout.steps,
+      activeCalories: state.biometricCore.activeCalories + newWorkout.calories,
+    };
+
+    const today = new Date().toISOString().split('T')[0];
+    const meds = state.medicationSchedule || [];
+    const completed = meds.filter(m => m.status === 'Completed').length;
+    const total = meds.length;
+    const medicationAdherence = total > 0 ? Math.round((completed / total) * 100) : 100;
+
+    let historyUpdated = false;
+    const newHistory = state.weeklyHistory.map((entry) => {
+      if (entry.date === today) {
+        historyUpdated = true;
+        return {
+          ...entry,
+          steps: updatedBiometricCore.steps,
+          activeCalories: updatedBiometricCore.activeCalories,
+        };
+      }
+      return entry;
+    });
+
+    if (!historyUpdated) {
+      newHistory.push({
+        date: today,
+        steps: updatedBiometricCore.steps,
+        activeCalories: updatedBiometricCore.activeCalories,
+        stabilityScore: updatedBiometricCore.dailyStabilityScore || 85,
+        sleepMinutes: updatedBiometricCore.sleepMinutes || 0,
+        heartRate: updatedBiometricCore.heartRate || 72,
+        medicationAdherence,
+      });
+    }
+
+    return {
+      appWorkouts: [...state.appWorkouts, newWorkout],
+      biometricCore: updatedBiometricCore,
+      weeklyHistory: newHistory.slice(-7),
+      isTrackingActive: false,
+      trackingType: null,
+      trackingStartTime: null,
+      trackingPath: [],
+      trackingSteps: 0,
+      trackingDistance: 0,
+      trackingCalories: 0,
+    };
+  }),
+
+  deleteWorkout: (id) => set((state) => {
+    const workout = state.appWorkouts.find(w => w.id === id);
+    if (!workout) return {};
+
+    const nextWorkouts = state.appWorkouts.filter(w => w.id !== id);
+    const today = new Date().toISOString().split('T')[0];
+    const isTodayWorkout = workout.startTime.startsWith(today);
+
+    let updatedBiometricCore = state.biometricCore;
+    let nextHistory = state.weeklyHistory;
+
+    if (isTodayWorkout) {
+      updatedBiometricCore = {
+        ...state.biometricCore,
+        steps: Math.max(0, state.biometricCore.steps - workout.steps),
+        activeCalories: Math.max(0, state.biometricCore.activeCalories - workout.calories),
+      };
+
+      nextHistory = state.weeklyHistory.map((entry) => {
+        if (entry.date === today) {
+          return {
+            ...entry,
+            steps: updatedBiometricCore.steps,
+            activeCalories: updatedBiometricCore.activeCalories,
+          };
+        }
+        return entry;
+      });
+    }
+
+    return {
+      appWorkouts: nextWorkouts,
+      biometricCore: updatedBiometricCore,
+      weeklyHistory: nextHistory,
+    };
+  }),
     }),
     {
       name: 'safescale-storage',
@@ -1022,6 +1157,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         moodLogs: state.moodLogs,
         vitalsLogs: state.vitalsLogs,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
+        appWorkouts: state.appWorkouts,
+        lastSuccessfulSync: state.lastSuccessfulSync,
       }),
     }
   )

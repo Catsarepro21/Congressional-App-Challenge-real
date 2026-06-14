@@ -48,6 +48,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+let Pedometer: any = null;
+try {
+  Pedometer = require('expo-sensors').Pedometer;
+} catch (e) {
+  console.warn('[Pedometer] Native module expo-sensors is not linked/available:', e);
+}
+import * as Location from 'expo-location';
 
 import {
   useSafeScaleStore,
@@ -63,6 +70,9 @@ import {
 import type { MedicationItem } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { GoogleFitService } from '../services/GoogleFitService';
+import { GoogleHealthService } from '../services/GoogleHealthService';
+
+let AppleHealthKit: any = null;
 
 // ---------------------------------------------------------------------------
 // Design constants
@@ -888,6 +898,16 @@ const checkIsEmulator = (): boolean => {
   return false;
 };
 
+const formatDuration = (totalSeconds: number): string => {
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 interface HomeScreenProps {
   /** Passed from the root navigator to drive the BottomNavBar active state. */
   onNavigate: (index: number) => void;
@@ -930,6 +950,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const addMoodLog = useSafeScaleStore((s) => s.addMoodLog);
   const addVitalLog = useSafeScaleStore((s) => s.addVitalLog);
 
+  // ----- Built-in GPS & Step Tracker Slices -----
+  const isTrackingActive = useSafeScaleStore((s) => s.isTrackingActive);
+  const trackingType = useSafeScaleStore((s) => s.trackingType);
+  const trackingStartTime = useSafeScaleStore((s) => s.trackingStartTime);
+  const trackingPath = useSafeScaleStore((s) => s.trackingPath);
+  const trackingSteps = useSafeScaleStore((s) => s.trackingSteps);
+  const trackingDistance = useSafeScaleStore((s) => s.trackingDistance);
+  const trackingCalories = useSafeScaleStore((s) => s.trackingCalories);
+  const appWorkouts = useSafeScaleStore((s) => s.appWorkouts) || [];
+  const lastSuccessfulSync = useSafeScaleStore((s) => s.lastSuccessfulSync);
+
+  const startWorkout = useSafeScaleStore((s) => s.startWorkout);
+  const updateWorkoutProgress = useSafeScaleStore((s) => s.updateWorkoutProgress);
+  const stopWorkout = useSafeScaleStore((s) => s.stopWorkout);
+  const deleteWorkout = useSafeScaleStore((s) => s.deleteWorkout);
+
+  const [selectedWorkoutType, setSelectedWorkoutType] = useState<'Run' | 'Walk' | 'Cycle'>('Run');
+
   const totalHydration = loggedItems
     .filter((item) => item.type === 'Water')
     .reduce((acc, item) => {
@@ -971,9 +1009,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStep, setSyncStep] = useState(0);
+  const [syncMessage1, setSyncMessage1] = useState('Connecting to Platform Health APIs...');
+  const [syncMessage2, setSyncMessage2] = useState('Reading Resting Heart Rate History...');
+  const [syncMessage3, setSyncMessage3] = useState('Importing steps & sleep metrics...');
+  const [syncMessage4, setSyncMessage4] = useState('Calculating Health Stability Index...');
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
   const [isSyncPickerOpen, setIsSyncPickerOpen] = useState(false);
-  const [syncPlatform, setSyncPlatform] = useState<'apple' | 'google' | 'google-fit-rest' | null>(null);
+  const [syncPlatform, setSyncPlatform] = useState<'apple' | 'google' | 'google-fit-rest' | 'google-health-rest' | null>(null);
 
   const [isICEModalOpen, setIsICEModalOpen] = useState(false);
   const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
@@ -1077,144 +1119,391 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   /**
    * Helper that executes the actual animated sync sequence.
    */
-  const executeSync = useCallback(() => {
+  const executeSync = useCallback((platformOverride?: 'apple' | 'google' | 'google-fit-rest' | 'google-health-rest') => {
+    const platform = platformOverride || syncPlatform;
     setIsSyncing(true);
     setSyncStep(1);
+    setSyncMessage1('Connecting to Platform Health APIs...');
+    setSyncMessage2('Reading Resting Heart Rate History...');
+    setSyncMessage3('Importing steps & sleep metrics...');
+    setSyncMessage4('Calculating Health Stability Index...');
 
-    // Step 1: Connecting to Platform Health APIs
-    setTimeout(() => {
-      // Check if we are running on an emulator and test mode is NOT active
-      const runningOnEmulator = checkIsEmulator();
-      if (runningOnEmulator && !isTestMode) {
-        setIsSyncing(false);
-        setSyncStep(0);
-        Alert.alert(
-          'Sync Failed',
-          `No health tracker data found.\n\nReason: Running on an emulator which has no health tracker data configured.\n\nTo view biometric data, please enable Test Mode.`,
-          [{ text: 'OK' }]
-        );
-        return;
-      }
+    // Run async sync logic
+    (async () => {
+      try {
+        let heartRate = Math.floor(68 + Math.random() * 12);
+        let restingHeartRate = Math.floor(58 + Math.random() * 8);
+        let sleepMinutes = Math.floor(420 + Math.random() * 90);
+        let sleepConsistency = Math.floor(82 + Math.random() * 14);
+        let steps = Math.floor(8000 + Math.random() * 4000);
+        let activeCalories = Math.floor(350 + Math.random() * 200);
+        
+        let heightCm: number | undefined;
+        let weightKg: number | undefined;
 
-      setSyncStep(2);
-      
-      // Step 2: Reading Resting Heart Rate History
-      setTimeout(() => {
-        setSyncStep(3);
+        // Step 1: Connecting to Platform Health APIs
+        await new Promise(resolve => setTimeout(resolve, 800));
 
-        // Step 3: Importing steps & sleep metrics
-        setTimeout(() => {
-          setSyncStep(4);
+        // Check if we are running on an emulator and test mode is NOT active
+        const runningOnEmulator = checkIsEmulator();
+        const isCloudSync = platform === 'google-fit-rest' || platform === 'google-health-rest';
+        if (runningOnEmulator && !isTestMode && !isCloudSync) {
+          setIsSyncing(false);
+          setSyncStep(0);
+          Alert.alert(
+            'Sync Failed',
+            `No health tracker data found.\n\nReason: Running on an emulator which has no health tracker data configured.\n\nTo view biometric data, please enable Test Mode.`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
 
-          // Step 4: Import complete, update store
-          setTimeout(async () => {
-            let heartRate = Math.floor(68 + Math.random() * 12);
-            let restingHeartRate = Math.floor(58 + Math.random() * 8);
-            let sleepMinutes = Math.floor(420 + Math.random() * 90);
-            let sleepConsistency = Math.floor(82 + Math.random() * 14);
-            let steps = Math.floor(8000 + Math.random() * 4000);
-            let activeCalories = Math.floor(350 + Math.random() * 200);
+        setSyncMessage1(`Connected to ${platform === 'apple' ? 'Apple Health' : platform === 'google-fit-rest' ? 'Google Fit Cloud' : platform === 'google-health-rest' ? 'Google Health Cloud' : 'Health Connect'} ✓`);
+        setSyncStep(2);
 
-            if (Platform.OS === 'ios' && syncPlatform === 'apple') {
-              try {
-                const realData = await HealthDataService.fetchHealthData();
-                if (realData) {
+        // Step 2: Reading Resting Heart Rate History
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        if (Platform.OS === 'ios' && platform === 'apple') {
+          try {
+            const realData = await HealthDataService.fetchHealthData();
+            if (realData) {
+              heartRate = realData.heartRate;
+              restingHeartRate = realData.restingHeartRate;
+              sleepMinutes = realData.sleepMinutes;
+              sleepConsistency = realData.sleepConsistency;
+              steps = realData.steps;
+              activeCalories = realData.activeCalories;
+            }
+            if (AppleHealthKit) {
+              const now = new Date();
+              const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+              const heightOpts = { startDate: oneYearAgo.toISOString(), endDate: now.toISOString(), limit: 1 };
+              const weightOpts = { startDate: oneYearAgo.toISOString(), endDate: now.toISOString(), limit: 1, unit: 'kg' };
+              
+              await new Promise<void>((resVal) => {
+                AppleHealthKit.getHeightSamples(heightOpts, (_e: any, heights: any[]) => {
+                  if (heights && heights.length > 0) {
+                    const h = heights[0].value;
+                    heightCm = h < 3 ? Math.round(h * 100) : Math.round(h);
+                  }
+                  resVal();
+                });
+              });
+
+              await new Promise<void>((resVal) => {
+                AppleHealthKit.getWeightSamples(weightOpts, (_e: any, weights: any[]) => {
+                  if (weights && weights.length > 0) {
+                    weightKg = Math.round(weights[0].value);
+                  }
+                  resVal();
+                });
+              });
+            }
+          } catch (e) {
+            console.warn('[HealthKit] Failed to fetch real health data:', e);
+          }
+        } else if (platform === 'google-fit-rest') {
+          try {
+            let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
+            if (!clientId.trim() || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
+              clientId = GoogleFitService.DEFAULT_CLIENT_ID;
+            }
+            if (clientId.trim() && !clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
+              let token = useSafeScaleStore.getState().profile.googleAccessToken || '';
+              const refreshToken = useSafeScaleStore.getState().profile.googleRefreshToken;
+              let fetchSucceeded = false;
+
+              if (token) {
+                try {
+                  const realData = await GoogleFitService.fetchFitnessData(token);
                   heartRate = realData.heartRate;
                   restingHeartRate = realData.restingHeartRate;
                   sleepMinutes = realData.sleepMinutes;
                   sleepConsistency = realData.sleepConsistency;
                   steps = realData.steps;
                   activeCalories = realData.activeCalories;
+
+                  const profileData = await GoogleFitService.fetchProfileData(token);
+                  if (profileData.heightCm) heightCm = profileData.heightCm;
+                  if (profileData.weightKg) weightKg = profileData.weightKg;
+                  fetchSucceeded = true;
+                } catch (err) {
+                  console.warn('[GoogleFit] Cached token sync failed:', err);
+                  if (err instanceof Error && err.message === 'UNAUTHENTICATED' && refreshToken) {
+                    try {
+                      console.log('[GoogleFit] Token expired. Attempting silent refresh...');
+                      const newToken = await GoogleFitService.refreshAccessToken(refreshToken, clientId);
+                      token = newToken;
+                      useSafeScaleStore.getState().updateProfile({ googleAccessToken: newToken });
+
+                      const realData = await GoogleFitService.fetchFitnessData(token);
+                      heartRate = realData.heartRate;
+                      restingHeartRate = realData.restingHeartRate;
+                      sleepMinutes = realData.sleepMinutes;
+                      sleepConsistency = realData.sleepConsistency;
+                      steps = realData.steps;
+                      activeCalories = realData.activeCalories;
+
+                      const profileData = await GoogleFitService.fetchProfileData(token);
+                      if (profileData.heightCm) heightCm = profileData.heightCm;
+                      if (profileData.weightKg) weightKg = profileData.weightKg;
+                      fetchSucceeded = true;
+                    } catch (refreshErr) {
+                      console.warn('[GoogleFit] Silent refresh failed:', refreshErr);
+                      useSafeScaleStore.getState().updateProfile({ googleAccessToken: undefined, googleRefreshToken: undefined });
+                      useSafeScaleStore.setState({ lastSyncedAt: 'Link Offline (Re-authenticate)' });
+                    }
+                  } else if (err instanceof Error && err.message === 'UNAUTHENTICATED') {
+                    useSafeScaleStore.getState().updateProfile({ googleAccessToken: undefined, googleRefreshToken: undefined });
+                    useSafeScaleStore.setState({ lastSyncedAt: 'Link Offline (Re-authenticate)' });
+                  }
                 }
-              } catch (e) {
-                console.warn('[HealthKit] Failed to fetch real health data:', e);
               }
-            } else if (syncPlatform === 'google-fit-rest') {
-              // Google Fit REST API (works on both iOS and Android)
-              try {
-                let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
-                if (!clientId.trim() || clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
-                  clientId = GoogleFitService.DEFAULT_CLIENT_ID;
+
+              if (!fetchSucceeded) {
+                const authResult = await GoogleFitService.authorize(clientId);
+                if (authResult) {
+                  token = authResult.accessToken;
+                  useSafeScaleStore.getState().updateProfile({
+                    googleAccessToken: authResult.accessToken,
+                    googleRefreshToken: authResult.refreshToken || undefined,
+                  });
+                  
+                  const realData = await GoogleFitService.fetchFitnessData(token);
+                  heartRate = realData.heartRate;
+                  restingHeartRate = realData.restingHeartRate;
+                  sleepMinutes = realData.sleepMinutes;
+                  sleepConsistency = realData.sleepConsistency;
+                  steps = realData.steps;
+                  activeCalories = realData.activeCalories;
+
+                  const profileData = await GoogleFitService.fetchProfileData(token);
+                  if (profileData.heightCm) heightCm = profileData.heightCm;
+                  if (profileData.weightKg) weightKg = profileData.weightKg;
+                } else {
+                  throw new Error('AUTH_CANCELLED_OR_FAILED');
                 }
-                if (clientId.trim() && !clientId.includes('YOUR_GOOGLE_CLIENT_ID')) {
-                  const token = await GoogleFitService.authorize(clientId);
-                  if (token) {
-                    const realData = await GoogleFitService.fetchFitnessData(token);
+              }
+            }
+          } catch (e) {
+            console.warn('[GoogleFit] REST API fetch failed:', e);
+            if (e instanceof Error && e.message === 'UNAUTHENTICATED') {
+              useSafeScaleStore.getState().updateProfile({ googleAccessToken: undefined, googleRefreshToken: undefined });
+              useSafeScaleStore.setState({ lastSyncedAt: 'Link Offline (Re-authenticate)' });
+            }
+            throw e;
+          }
+        } else if (platform === 'google-health-rest') {
+          try {
+            let clientId = useSafeScaleStore.getState().profile.googleOAuthClientId || '';
+            if (!clientId.trim() || clientId.includes('YOUR_')) {
+              clientId = GoogleHealthService.DEFAULT_CLIENT_ID;
+            }
+            let token = useSafeScaleStore.getState().profile.googleAccessToken || '';
+            const refreshToken = useSafeScaleStore.getState().profile.googleRefreshToken;
+            let fetchSucceeded = false;
+
+            if (token) {
+              try {
+                const realData = await GoogleHealthService.fetchFitnessData(token, null, appWorkouts);
+                heartRate = realData.heartRate;
+                restingHeartRate = realData.restingHeartRate;
+                sleepMinutes = realData.sleepMinutes;
+                sleepConsistency = realData.sleepConsistency;
+                steps = realData.steps;
+                activeCalories = realData.activeCalories;
+
+                const profileData = await GoogleHealthService.fetchProfileData(token);
+                if (profileData.heightCm) heightCm = profileData.heightCm;
+                if (profileData.weightKg) weightKg = profileData.weightKg;
+                fetchSucceeded = true;
+              } catch (err) {
+                console.warn('[GoogleHealth] Cached token sync failed:', err);
+                if (err instanceof Error && err.message === 'UNAUTHENTICATED' && refreshToken) {
+                  try {
+                    console.log('[GoogleHealth] Token expired. Attempting silent refresh...');
+                    const newToken = await GoogleHealthService.refreshAccessToken(refreshToken, clientId);
+                    token = newToken;
+                    useSafeScaleStore.getState().updateProfile({ googleAccessToken: newToken });
+
+                    const realData = await GoogleHealthService.fetchFitnessData(token, null, appWorkouts);
                     heartRate = realData.heartRate;
                     restingHeartRate = realData.restingHeartRate;
                     sleepMinutes = realData.sleepMinutes;
                     sleepConsistency = realData.sleepConsistency;
                     steps = realData.steps;
                     activeCalories = realData.activeCalories;
+
+                    const profileData = await GoogleHealthService.fetchProfileData(token);
+                    if (profileData.heightCm) heightCm = profileData.heightCm;
+                    if (profileData.weightKg) weightKg = profileData.weightKg;
+                    fetchSucceeded = true;
+                  } catch (refreshErr) {
+                    console.warn('[GoogleHealth] Silent refresh failed:', refreshErr);
+                    useSafeScaleStore.getState().updateProfile({ googleAccessToken: undefined, googleRefreshToken: undefined });
+                    useSafeScaleStore.setState({ lastSyncedAt: 'Link Offline (Re-authenticate)' });
                   }
+                } else if (err instanceof Error && err.message === 'UNAUTHENTICATED') {
+                  useSafeScaleStore.getState().updateProfile({ googleAccessToken: undefined, googleRefreshToken: undefined });
+                  useSafeScaleStore.setState({ lastSyncedAt: 'Link Offline (Re-authenticate)' });
                 }
-              } catch (e) {
-                console.warn('[GoogleFit] REST API fetch failed:', e);
-              }
-            } else if (Platform.OS === 'android' && syncPlatform === 'google') {
-              // Android Health Connect
-              try {
-                const realData = await HealthDataService.fetchHealthConnectData();
-                if (realData) {
-                  heartRate = realData.heartRate;
-                  restingHeartRate = realData.restingHeartRate;
-                  sleepMinutes = realData.sleepMinutes;
-                  sleepConsistency = realData.sleepConsistency;
-                  steps = realData.steps;
-                  activeCalories = realData.activeCalories;
-                }
-              } catch (e) {
-                console.warn('[HealthConnect] Failed to fetch real health data:', e);
               }
             }
 
+            if (!fetchSucceeded) {
+              const authResult = await GoogleHealthService.authorize(clientId);
+              if (authResult) {
+                token = authResult.accessToken;
+                useSafeScaleStore.getState().updateProfile({
+                  googleAccessToken: authResult.accessToken,
+                  googleRefreshToken: authResult.refreshToken || undefined,
+                });
+                
+                const realData = await GoogleHealthService.fetchFitnessData(token, null, appWorkouts);
+                heartRate = realData.heartRate;
+                restingHeartRate = realData.restingHeartRate;
+                sleepMinutes = realData.sleepMinutes;
+                sleepConsistency = realData.sleepConsistency;
+                steps = realData.steps;
+                activeCalories = realData.activeCalories;
 
-            const baseHistory = biometricCore.historicalRHR.length >= 3 
-              ? biometricCore.historicalRHR 
-              : [64, 66, 65, 63, 67];
-            const updatedHistory = [...baseHistory, restingHeartRate].slice(-14);
+                const profileData = await GoogleHealthService.fetchProfileData(token);
+                if (profileData.heightCm) heightCm = profileData.heightCm;
+                if (profileData.weightKg) weightKg = profileData.weightKg;
+              } else {
+                throw new Error('AUTH_CANCELLED_OR_FAILED');
+              }
+            }
+          } catch (e) {
+            console.warn('[GoogleHealth] REST API fetch failed:', e);
+            if (e instanceof Error && e.message === 'UNAUTHENTICATED') {
+              useSafeScaleStore.getState().updateProfile({ googleAccessToken: undefined, googleRefreshToken: undefined });
+              useSafeScaleStore.setState({ lastSyncedAt: 'Link Offline (Re-authenticate)' });
+            }
+            throw e;
+          }
+        } else if (Platform.OS === 'android' && platform === 'google') {
+          try {
+            const realData = await HealthDataService.fetchHealthConnectData();
+            if (realData) {
+              heartRate = realData.heartRate;
+              restingHeartRate = realData.restingHeartRate;
+              sleepMinutes = realData.sleepMinutes;
+              sleepConsistency = realData.sleepConsistency;
+              steps = realData.steps;
+              activeCalories = realData.activeCalories;
+            }
+          } catch (e) {
+            console.warn('[HealthConnect] Failed to fetch real health data:', e);
+          }
+        }
 
-            const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
-              restingHeartRate,
-              sleepConsistency,
-              updatedHistory
-            );
+        setSyncMessage2(`Resting Heart Rate: ${restingHeartRate} bpm ✓`);
+        setSyncStep(3);
 
-            updateBiometrics({
-              heartRate,
-              restingHeartRate,
-              sleepMinutes,
-              sleepConsistency,
-              steps,
-              activeCalories,
-              dailyStabilityScore,
-              historicalRHR: updatedHistory,
-            });
+        // Step 3: Importing steps & sleep metrics
+        await new Promise(resolve => setTimeout(resolve, 800));
 
-            // Simulate updating profile weight baseline from health tracker sync
-            const nextWeight = Math.floor(60 + Math.random() * 5);
-            useSafeScaleStore.getState().updateProfile({
-              weight: nextWeight,
-            });
+        const sleepHrs = (sleepMinutes / 60).toFixed(1);
+        setSyncMessage3(`Steps: ${steps.toLocaleString()} · Sleep: ${sleepHrs}h (${sleepMinutes}m) · Cal: ${activeCalories} kcal ✓`);
+        setSyncStep(4);
 
-            const now = new Date();
-            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            useSafeScaleStore.setState({ lastSyncedAt: `Today at ${timeString}` });
+        // Step 4: Import complete, update store
+        await new Promise(resolve => setTimeout(resolve, 800));
 
-            setIsSyncing(false);
-            setSyncStep(0);
-            Alert.alert('Health Sync Complete', 'Successfully imported health metrics from your device tracker.');
-          }, 1000);
-        }, 1200);
-      }, 1200);
-    }, 1200);
-  }, [updateBiometrics, isTestMode, biometricCore.historicalRHR, syncPlatform]);
+        const baseHistory = biometricCore.historicalRHR.length >= 3 
+          ? biometricCore.historicalRHR 
+          : [64, 66, 65, 63, 67];
+        const updatedHistory = [...baseHistory, restingHeartRate].slice(-14);
+
+        const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
+          restingHeartRate,
+          sleepConsistency,
+          updatedHistory
+        );
+
+        updateBiometrics({
+          heartRate,
+          restingHeartRate,
+          sleepMinutes,
+          sleepConsistency,
+          steps,
+          activeCalories,
+          dailyStabilityScore,
+          historicalRHR: updatedHistory,
+        });
+
+        // Update profile height and weight if fetched
+        const profileUpdate: any = {};
+        if (heightCm) profileUpdate.height = heightCm;
+        if (weightKg) profileUpdate.weight = weightKg;
+
+        if (Object.keys(profileUpdate).length > 0) {
+          useSafeScaleStore.getState().updateProfile(profileUpdate);
+          
+          const heightPart = heightCm 
+            ? (profile?.unitPreference === 'imperial' ? `${Math.round(heightCm / 2.54)} in` : `${heightCm} cm`)
+            : '';
+          const weightPart = weightKg
+            ? (profile?.unitPreference === 'imperial' ? `${Math.round(weightKg / 0.45359237)} lbs` : `${weightKg} kg`)
+            : '';
+          const joinedParts = [heightPart, weightPart].filter(Boolean).join(' · ');
+          
+          setSyncMessage4(`Stability Score: ${dailyStabilityScore}% · Updated Profile (${joinedParts}) ✓`);
+        } else {
+          setSyncMessage4(`Stability Score: ${dailyStabilityScore}% ✓`);
+        }
+
+        const nowTime = new Date();
+        const timeString = nowTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        useSafeScaleStore.setState({ lastSyncedAt: `Today at ${timeString}`, lastSuccessfulSync: nowTime.toISOString() });
+
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        setIsSyncing(false);
+        setSyncStep(0);
+
+        const sleepText = `${sleepHrs}h (${sleepMinutes}m)`;
+        const heightWeightAlertText = (heightCm || weightKg) 
+          ? `\n\nProfile updated: ${heightCm ? `Height = ${profile?.unitPreference === 'imperial' ? `${Math.round(heightCm / 2.54)} in` : `${heightCm} cm`}` : ''}${heightCm && weightKg ? ', ' : ''}${weightKg ? `Weight = ${profile?.unitPreference === 'imperial' ? `${Math.round(weightKg / 0.45359237)} lbs` : `${weightKg} kg`}` : ''}`
+          : '';
+
+        Alert.alert(
+          'Health Sync Complete', 
+          `Successfully imported health metrics from your device tracker:\n\n` +
+          `• Steps: ${steps.toLocaleString()}\n` +
+          `• Active Calories: ${activeCalories} kcal\n` +
+          `• Sleep Duration: ${sleepText}\n` +
+          `• Heart Rate (Resting): ${heartRate} bpm (${restingHeartRate} bpm)` +
+          heightWeightAlertText
+        );
+      } catch (err: any) {
+        console.warn('Sync execution error:', err);
+        setIsSyncing(false);
+        setSyncStep(0);
+        if (err instanceof Error && err.message === 'UNAUTHENTICATED') {
+          Alert.alert(
+            'Authentication Failed',
+            'Your Google Health connection is offline or expired. Please link/re-authenticate your account.'
+          );
+        } else if (err instanceof Error && err.message === 'AUTH_CANCELLED_OR_FAILED') {
+          Alert.alert(
+            'Sync Cancelled',
+            'Google Health authentication was cancelled or could not be completed.'
+          );
+        } else {
+          Alert.alert('Sync Failed', 'An unexpected error occurred during health tracker synchronization.');
+        }
+      }
+    })();
+  }, [updateBiometrics, isTestMode, biometricCore.historicalRHR, syncPlatform, profile]);
 
   /**
    * Checks for health data permission before syncing.
    * Prompts the user if permission is unrequested or previously denied.
    */
-  const handleSyncHealthData = useCallback((platform: 'apple' | 'google' | 'google-fit-rest') => {
+  const handleSyncHealthData = useCallback((platform: 'apple' | 'google' | 'google-fit-rest' | 'google-health-rest') => {
     if (platform === 'apple') {
       if (Platform.OS === 'android') {
         setIsSyncPickerOpen(false);
@@ -1228,7 +1517,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       setSyncPlatform('apple');
       setIsSyncPickerOpen(false);
       if (hasHealthPermission === true) {
-        executeSync();
+        executeSync('apple');
       } else {
         setIsPermissionModalOpen(true);
       }
@@ -1238,7 +1527,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     if (platform === 'google-fit-rest') {
       setSyncPlatform('google-fit-rest');
       setIsSyncPickerOpen(false);
-      executeSync();
+      executeSync('google-fit-rest');
+      return;
+    }
+
+    if (platform === 'google-health-rest') {
+      setSyncPlatform('google-health-rest');
+      setIsSyncPickerOpen(false);
+      executeSync('google-health-rest');
       return;
     }
 
@@ -1246,7 +1542,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     setSyncPlatform('google');
     setIsSyncPickerOpen(false);
     if (hasHealthPermission === true) {
-      executeSync();
+      executeSync('google');
     } else {
       setIsPermissionModalOpen(true);
     }
@@ -1274,7 +1570,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         if (token) {
           setHealthPermission(true);
           setTimeout(() => {
-            executeSync();
+            executeSync('google-fit-rest');
           }, 300);
         } else {
           Alert.alert('Cancelled', 'Google Fit authorization was cancelled.');
@@ -1313,7 +1609,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
     if (permissionGranted) {
       setTimeout(() => {
-        executeSync();
+        executeSync(syncPlatform || undefined);
       }, 300);
     } else {
       Alert.alert('Permission Denied', 'SafeScale Health was denied access to your device health tracker.');
@@ -1325,6 +1621,238 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     setIsPermissionModalOpen(false);
     Alert.alert('Permission Denied', 'SafeScale Health was denied access to your device health tracker.');
   }, [setHealthPermission]);
+
+  // ----- Active GPS & Step Tracking useEffect -----
+  const locationSubscription = useRef<any>(null);
+  const pedometerSubscription = useRef<any>(null);
+  const trackingTimer = useRef<any>(null);
+  const [liveDurationSec, setLiveDurationSec] = useState(0);
+  const lastCoords = useRef<{ latitude: number; longitude: number; timestamp: number } | null>(null);
+
+  useEffect(() => {
+    if (isTrackingActive) {
+      setLiveDurationSec(0);
+      lastCoords.current = null;
+
+      // Start duration timer
+      trackingTimer.current = setInterval(() => {
+        setLiveDurationSec((prev) => prev + 1);
+      }, 1000);
+
+      // Start Location watching
+      (async () => {
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission Denied', 'GPS tracking requires location permission.');
+            return;
+          }
+
+          locationSubscription.current = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.BestForNavigation,
+              timeInterval: 2000,
+              distanceInterval: 5,
+            },
+            (loc) => {
+              const newLat = loc.coords.latitude;
+              const newLon = loc.coords.longitude;
+              const timestamp = loc.timestamp;
+
+              let distDelta = 0;
+              if (lastCoords.current) {
+                // Calculate distance using Haversine formula
+                const R = 6371000; // Earth radius in meters
+                const dLat = (newLat - lastCoords.current.latitude) * Math.PI / 180;
+                const dLon = (newLon - lastCoords.current.longitude) * Math.PI / 180;
+                const a =
+                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lastCoords.current.latitude * Math.PI / 180) *
+                    Math.cos(newLat * Math.PI / 180) *
+                    Math.sin(dLon / 2) *
+                    Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                distDelta = R * c; // meters
+              }
+
+              lastCoords.current = { latitude: newLat, longitude: newLon, timestamp };
+
+              // Estimate steps and calories based on distance delta if pedometer isn't running
+              let stepsDelta = 0;
+              if (!pedometerSubscription.current) {
+                // Stride length estimated at 0.75m
+                stepsDelta = distDelta / 0.75;
+              }
+
+              // METs: Run = 9.8, Walk = 3.8, Cycle = 7.5
+              const met = trackingType === 'Run' ? 9.8 : trackingType === 'Cycle' ? 7.5 : 3.8;
+              const weight = profile?.weight || 70; // fallback 70kg
+              const calDelta = met * weight * (distDelta / 1000 / 12); // MET formula relative to distance covered
+
+              updateWorkoutProgress(
+                { latitude: newLat, longitude: newLon, timestamp },
+                Math.round(stepsDelta),
+                distDelta,
+                calDelta
+              );
+            }
+          );
+        } catch (e) {
+          console.warn('[GPS Tracker] Error initializing location watcher:', e);
+        }
+      })();
+
+      // Start Pedometer watching
+      (async () => {
+        try {
+          if (!Pedometer) {
+            console.log('[Pedometer] Pedometer native module is not available. Using GPS steps estimation.');
+            return;
+          }
+          const isAvailable = await Pedometer.isAvailableAsync();
+          if (isAvailable) {
+            let lastPedometerSteps = 0;
+            pedometerSubscription.current = Pedometer.watchStepCount((result: any) => {
+              const stepDelta = result.steps - lastPedometerSteps;
+              lastPedometerSteps = result.steps;
+
+              // Calories estimate for steps: ~0.04 kcal per step
+              const calDelta = stepDelta * 0.04;
+              // Stride length: ~0.75m
+              const distDelta = stepDelta * 0.75;
+
+              updateWorkoutProgress(
+                lastCoords.current || { latitude: 0, longitude: 0, timestamp: Date.now() },
+                stepDelta,
+                distDelta,
+                calDelta
+              );
+            });
+          }
+        } catch (e) {
+          console.warn('[Pedometer] Error starting step counter watcher:', e);
+        }
+      })();
+    } else {
+      // Clean up subscriptions
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+        locationSubscription.current = null;
+      }
+      if (pedometerSubscription.current) {
+        pedometerSubscription.current.remove();
+        pedometerSubscription.current = null;
+      }
+      if (trackingTimer.current) {
+        clearInterval(trackingTimer.current);
+        trackingTimer.current = null;
+      }
+    }
+
+    return () => {
+      if (locationSubscription.current) locationSubscription.current.remove();
+      if (pedometerSubscription.current) pedometerSubscription.current.remove();
+      if (trackingTimer.current) clearInterval(trackingTimer.current);
+    };
+  }, [isTrackingActive, trackingType, updateWorkoutProgress]);
+
+  // ----- 15-minute background sync timer with Timestamp Anchoring and Deduplication -----
+  useEffect(() => {
+    const intervalTime = 15 * 60 * 1000; // 15 minutes
+    const timer = setInterval(async () => {
+      const state = useSafeScaleStore.getState();
+      let token = state.profile.googleAccessToken || '';
+      const refreshToken = state.profile.googleRefreshToken;
+      if (!token) return;
+
+      try {
+        console.log('[BackgroundSync] Executing 15-minute background sync. Anchored timestamp:', state.lastSuccessfulSync);
+        
+        let realData;
+        let profileData;
+        try {
+          realData = await GoogleHealthService.fetchFitnessData(token, state.lastSuccessfulSync, state.appWorkouts);
+          profileData = await GoogleHealthService.fetchProfileData(token);
+        } catch (err) {
+          if (err instanceof Error && err.message === 'UNAUTHENTICATED' && refreshToken) {
+            console.log('[BackgroundSync] Token expired. Attempting silent refresh...');
+            let clientId = state.profile.googleOAuthClientId || '';
+            if (!clientId.trim() || clientId.includes('YOUR_')) {
+              clientId = GoogleHealthService.DEFAULT_CLIENT_ID;
+            }
+            const newToken = await GoogleHealthService.refreshAccessToken(refreshToken, clientId);
+            token = newToken;
+            useSafeScaleStore.getState().updateProfile({ googleAccessToken: newToken });
+            
+            // Retry fetch with new token
+            realData = await GoogleHealthService.fetchFitnessData(token, state.lastSuccessfulSync, state.appWorkouts);
+            profileData = await GoogleHealthService.fetchProfileData(token);
+          } else {
+            throw err;
+          }
+        }
+
+        const profileUpdate: any = {};
+        if (profileData.heightCm) profileUpdate.height = profileData.heightCm;
+        if (profileData.weightKg) profileUpdate.weight = profileData.weightKg;
+
+        const baseHistory = state.biometricCore.historicalRHR.length >= 3 
+          ? state.biometricCore.historicalRHR 
+          : [64, 66, 65, 63, 67];
+        const updatedHistory = [...baseHistory, realData.restingHeartRate].slice(-14);
+
+        const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
+          realData.restingHeartRate,
+          realData.sleepConsistency,
+          updatedHistory
+        );
+
+        if (state.lastSuccessfulSync) {
+          // DELTA SYNC: Add new steps and calories to the existing totals
+          useSafeScaleStore.getState().updateBiometrics({
+            heartRate: realData.heartRate,
+            restingHeartRate: realData.restingHeartRate,
+            sleepMinutes: state.biometricCore.sleepMinutes + realData.sleepMinutes,
+            sleepConsistency: realData.sleepConsistency,
+            steps: state.biometricCore.steps + realData.steps,
+            activeCalories: state.biometricCore.activeCalories + realData.activeCalories,
+            dailyStabilityScore,
+            historicalRHR: updatedHistory,
+          });
+        } else {
+          // FULL SYNC (if lastSuccessfulSync was null): Replace values
+          useSafeScaleStore.getState().updateBiometrics({
+            heartRate: realData.heartRate,
+            restingHeartRate: realData.restingHeartRate,
+            sleepMinutes: realData.sleepMinutes,
+            sleepConsistency: realData.sleepConsistency,
+            steps: realData.steps,
+            activeCalories: realData.activeCalories,
+            dailyStabilityScore,
+            historicalRHR: updatedHistory,
+          });
+        }
+
+        if (Object.keys(profileUpdate).length > 0) {
+          useSafeScaleStore.getState().updateProfile(profileUpdate);
+        }
+
+        // Update anchoring timestamp
+        useSafeScaleStore.setState({
+          lastSuccessfulSync: new Date().toISOString(),
+          lastSyncedAt: `Today at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        });
+      } catch (err) {
+        console.warn('[BackgroundSync] Incremental sync failed:', err);
+        if (err instanceof Error && err.message === 'UNAUTHENTICATED') {
+          useSafeScaleStore.getState().updateProfile({ googleAccessToken: undefined, googleRefreshToken: undefined });
+          useSafeScaleStore.setState({ lastSyncedAt: 'Link Offline (Re-authenticate)' });
+        }
+      }
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const runSymptomTriage = (selected: string[]) => {
     if (selected.length === 0) {
@@ -1828,14 +2356,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
           <Text
             style={{
               fontSize: 12,
-              color: COLORS.textSecondary,
+              color: lastSyncedAt.includes('Offline') ? COLORS.alert : COLORS.textSecondary,
               textAlign: 'center',
               marginTop: -8,
               marginBottom: 16,
               fontWeight: '500',
             }}
           >
-            Last synced: {lastSyncedAt}
+            {lastSyncedAt.includes('Offline') ? lastSyncedAt : `Last synced: ${lastSyncedAt}`}
           </Text>
         ) : null}
 
@@ -2585,7 +3113,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                   color={syncStep >= 1 ? COLORS.primary : COLORS.textSecondary} 
                 />
                 <Text style={{ fontSize: 12, color: syncStep >= 1 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 1 ? '700' : '400' }}>
-                  Connecting to Platform Health APIs...
+                  {syncMessage1}
                 </Text>
               </View>
 
@@ -2596,7 +3124,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                   color={syncStep >= 2 ? COLORS.primary : COLORS.textSecondary} 
                 />
                 <Text style={{ fontSize: 12, color: syncStep >= 2 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 2 ? '700' : '400' }}>
-                  Reading Resting Heart Rate History...
+                  {syncMessage2}
                 </Text>
               </View>
 
@@ -2607,7 +3135,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                   color={syncStep >= 3 ? COLORS.primary : COLORS.textSecondary} 
                 />
                 <Text style={{ fontSize: 12, color: syncStep >= 3 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 3 ? '700' : '400' }}>
-                  Importing steps & sleep metrics...
+                  {syncMessage3}
                 </Text>
               </View>
 
@@ -2618,7 +3146,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                   color={syncStep >= 4 ? COLORS.primary : COLORS.textSecondary} 
                 />
                 <Text style={{ fontSize: 12, color: syncStep >= 4 ? COLORS.textPrimary : COLORS.textSecondary, marginLeft: 8, fontWeight: syncStep === 4 ? '700' : '400' }}>
-                  Calculating Health Stability Index...
+                  {syncMessage4}
                 </Text>
               </View>
             </View>
@@ -2719,7 +3247,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
                 borderRadius: 18,
                 padding: 16,
-                marginBottom: 4,
+                marginBottom: 12,
                 borderWidth: 1.5,
                 borderColor: syncPlatform === 'google-fit-rest' ? COLORS.primary : COLORS.border,
               })}
@@ -2736,27 +3264,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
             </Pressable>
 
-            {/* Google Health Connect Option */}
+            {/* Google Health Cloud (Fitbit) */}
             <Pressable
-              onPress={() => handleSyncHealthData('google')}
+              onPress={() => handleSyncHealthData('google-health-rest')}
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
                 backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
                 borderRadius: 18,
                 padding: 16,
-                marginBottom: 4,
+                marginBottom: 12,
                 borderWidth: 1.5,
-                borderColor: syncPlatform === 'google' ? COLORS.primary : COLORS.border,
+                borderColor: syncPlatform === 'google-health-rest' ? COLORS.primary : COLORS.border,
               })}
             >
-              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                <MaterialCommunityIcons name="google-fit" size={28} color={COLORS.primary} />
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#D5F1E2', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                <MaterialCommunityIcons name="heart-pulse" size={28} color={COLORS.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health Connect</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health (Fitbit Cloud)</Text>
                 <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
-                  Health Connect · Fitbit · Samsung Health · Garmin
+                  Fitbit App · Google Health app · Cloud Sync
                 </Text>
               </View>
               <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />

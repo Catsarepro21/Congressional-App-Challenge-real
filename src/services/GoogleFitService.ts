@@ -75,7 +75,7 @@ async function exchangeCodeForToken(
   clientId: string,
   redirectUri: string,
   codeVerifier: string,
-): Promise<string> {
+): Promise<{ accessToken: string; refreshToken?: string }> {
   const body = new URLSearchParams({
     code,
     client_id: clientId,
@@ -95,8 +95,11 @@ async function exchangeCodeForToken(
     throw new Error(`Token exchange failed: ${err}`);
   }
 
-  const data = await response.json() as { access_token: string };
-  return data.access_token;
+  const data = await response.json() as { access_token: string; refresh_token?: string };
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +140,9 @@ async function fetchFitnessDataset(
 
   if (!response.ok) {
     const err = await response.text();
+    if (response.status === 401) {
+      throw new Error('UNAUTHENTICATED');
+    }
     throw new Error(`Fitness API error for ${dataTypeName}: ${err}`);
   }
 
@@ -152,6 +158,62 @@ async function fetchFitnessDataset(
   });
 
   return { point: points };
+}
+
+/**
+ * Robust helper that searches all data sources of a given type and retrieves the sum of all values.
+ * Useful if the user has third-party sources (like Fitbit) that write under different package names.
+ */
+async function fetchSumFromAllSources(
+  accessToken: string,
+  dataTypeName: string,
+  startMs: number,
+  endMs: number
+): Promise<number> {
+  try {
+    const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataSources', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('UNAUTHENTICATED');
+      return 0;
+    }
+    const dsData = await response.json() as { dataSource?: Array<{ dataStreamId: string; dataType: { name: string } }> };
+    const sources = (dsData.dataSource || []).filter(ds => ds.dataType.name === dataTypeName);
+    
+    let sum = 0;
+    const startNanos = String(startMs * 1000000);
+    const endNanos = String(endMs * 1000000);
+
+    for (const source of sources) {
+      const streamId = source.dataStreamId;
+      const url = `${FITNESS_API_BASE}/dataSources/${streamId}/datasets/${startNanos}-${endNanos}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('UNAUTHENTICATED');
+        continue;
+      }
+      const data = await res.json() as DatasetResponse;
+      (data.point || []).forEach((point) => {
+        (point.value || []).forEach((v) => {
+          const val = v.intVal !== undefined ? v.intVal : (v.fpVal !== undefined ? v.fpVal : 0);
+          sum += val;
+        });
+      });
+    }
+    return sum;
+  } catch (e) {
+    console.warn(`[GoogleFit] fetchSumFromAllSources failed for ${dataTypeName}:`, e);
+    return 0;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -182,9 +244,9 @@ export const GoogleFitService = {
    * Starts the Google OAuth flow using expo-web-browser.
    * Returns an access token if successful, null if cancelled.
    */
-  authorize: async (customClientId?: string): Promise<string | null> => {
+  authorize: async (customClientId?: string): Promise<{ accessToken: string; refreshToken?: string } | null> => {
     // Intercept UI parameters to dodge empty settings configurations
-    let clientId = GoogleFitService.CLIENT_ID;
+    let clientId = GoogleFitService.CLIENT_ID || '';
     
     if (customClientId && customClientId.trim() && !customClientId.includes('YOUR_')) {
       clientId = customClientId.trim();
@@ -210,7 +272,8 @@ export const GoogleFitService = {
       state,
       code_challenge: codeVerifier, 
       code_challenge_method: 'plain',
-      access_type: 'online',
+      access_type: 'offline',
+      prompt: 'consent',
     });
 
     const authUrl = `${GOOGLE_AUTH_URL}?${params.toString()}`;
@@ -227,14 +290,44 @@ export const GoogleFitService = {
       throw new Error('No authorization code in redirect URL');
     }
 
-    const accessToken = await exchangeCodeForToken(
+    const tokens = await exchangeCodeForToken(
       code,
       clientId,
       finalRedirectUri,
       codeVerifier,
     );
 
-    return accessToken;
+    return tokens;
+  },
+
+  /**
+   * Silently refreshes an expired access token using the stored refresh token.
+   */
+  refreshAccessToken: async (refreshToken: string, customClientId?: string): Promise<string> => {
+    let clientId = GoogleFitService.CLIENT_ID || '';
+    if (customClientId && customClientId.trim() && !customClientId.includes('YOUR_')) {
+      clientId = customClientId.trim();
+    }
+
+    const body = new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    });
+
+    const response = await fetch(GOOGLE_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Google Fit token refresh failed: ${err}`);
+    }
+
+    const data = await response.json() as { access_token: string };
+    return data.access_token;
   },
 
   /**
@@ -242,9 +335,7 @@ export const GoogleFitService = {
    */
   fetchFitnessData: async (accessToken: string): Promise<GoogleFitResult> => {
     const now = Date.now();
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const startMs = todayStart.getTime();
+    const startMs = now - 24 * 60 * 60 * 1000; // Query last 24h to avoid local day/UTC alignment issues
     const last24hStart = now - 24 * 60 * 60 * 1000;
 
     const results: GoogleFitResult = {
@@ -256,30 +347,40 @@ export const GoogleFitService = {
       sleepConsistency: 85,
     };
 
-    // 1. Steps (today)
+    // 1. Steps
     try {
+      let steps = 0;
       const stepsData = await fetchFitnessDataset(accessToken, DATA_TYPE_STEPS, startMs, now);
-      let totalSteps = 0;
       (stepsData.point || []).forEach((point) => {
         (point.value || []).forEach((v) => {
-          if (typeof v.intVal === 'number') totalSteps += v.intVal;
+          if (typeof v.intVal === 'number') steps += v.intVal;
         });
       });
-      results.steps = Math.round(totalSteps);
+
+      if (steps === 0) {
+        // Fallback: search all raw/derived data sources for steps
+        steps = await fetchSumFromAllSources(accessToken, DATA_TYPE_STEPS, startMs, now);
+      }
+      results.steps = Math.round(steps);
     } catch (e) {
       console.warn('[GoogleFit] Steps fetch failed:', e);
     }
 
-    // 2. Active Calories (today)
+    // 2. Active Calories
     try {
+      let calories = 0;
       const calData = await fetchFitnessDataset(accessToken, DATA_TYPE_CALORIES, startMs, now);
-      let totalCal = 0;
       (calData.point || []).forEach((point) => {
         (point.value || []).forEach((v) => {
-          if (typeof v.fpVal === 'number') totalCal += v.fpVal;
+          if (typeof v.fpVal === 'number') calories += v.fpVal;
         });
       });
-      results.activeCalories = Math.round(totalCal);
+
+      if (calories === 0) {
+        // Fallback: search all raw/derived data sources for calories
+        calories = await fetchSumFromAllSources(accessToken, DATA_TYPE_CALORIES, startMs, now);
+      }
+      results.activeCalories = Math.round(calories);
     } catch (e) {
       console.warn('[GoogleFit] Calories fetch failed:', e);
     }
@@ -301,26 +402,34 @@ export const GoogleFitService = {
       console.warn('[GoogleFit] Heart rate fetch failed:', e);
     }
 
-    // 4. Sleep (last 24h)
+    // 4. Sleep sessions (Google Fit Sessions API)
     try {
-      const sleepData = await fetchFitnessDataset(accessToken, DATA_TYPE_SLEEP, last24hStart, now);
-      let totalSleepMs = 0;
-      (sleepData.point || []).forEach((point) => {
-        const isSleep = (point.value || []).some(
-          (v) => v.intVal !== undefined && [1, 4, 5, 6].includes(v.intVal),
-        );
-        if (isSleep) {
-          const startNs = parseInt(point.startTimeNanos || '0', 10);
-          const endNs = parseInt(point.endTimeNanos || '0', 10);
-          totalSleepMs += (endNs - startNs) / 1_000_000;
-        }
+      const startTimeISO = new Date(now - 36 * 60 * 60 * 1000).toISOString(); // last 36 hours
+      const endTimeISO = new Date(now).toISOString();
+      const url = `https://www.googleapis.com/fitness/v1/users/me/sessions?startTime=${startTimeISO}&endTime=${endTimeISO}&activityType=72`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
       });
-      if (totalSleepMs > 0) {
-        results.sleepMinutes = Math.round(totalSleepMs / 60_000);
-        results.sleepConsistency = Math.min(100, Math.round((results.sleepMinutes / 420) * 100));
+      if (res.ok) {
+        const data = await res.json() as { session?: Array<{ startTimeMillis: string; endTimeMillis: string }> };
+        let totalSleepMin = 0;
+        (data.session || []).forEach((s) => {
+          const start = parseFloat(s.startTimeMillis);
+          const end = parseFloat(s.endTimeMillis);
+          if (!isNaN(start) && !isNaN(end)) {
+            totalSleepMin += (end - start) / 60_000;
+          }
+        });
+        if (totalSleepMin > 0) {
+          results.sleepMinutes = Math.round(totalSleepMin);
+          results.sleepConsistency = Math.min(100, Math.round((results.sleepMinutes / 480) * 100));
+        }
       }
     } catch (e) {
-      console.warn('[GoogleFit] Sleep fetch failed:', e);
+      console.warn('[GoogleFit] Sleep sessions fetch failed:', e);
     }
 
     return results;
@@ -359,48 +468,76 @@ export const GoogleFitService = {
           }
         }
       } else {
-        console.warn('[GoogleFit] People API responded with error:', await response.text());
+        const errText = await response.text();
+        console.warn('[GoogleFit] People API responded with error:', errText);
+        if (response.status === 401) {
+          throw new Error('UNAUTHENTICATED');
+        }
       }
     } catch (e) {
       console.warn('[GoogleFit] Error fetching People API profile:', e);
+      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
     }
 
     const fetchLatestBodyMetric = async (metricType: 'height' | 'weight'): Promise<number | null> => {
       try {
-        const nowMs = Date.now();
-        const startMs = nowMs - 5 * 365 * 24 * 60 * 60 * 1000;
-        const startNanos = startMs * 1_000_000;
-        const endNanos = nowMs * 1_000_000;
-
-        const streamId = metricType === 'height'
-          ? 'derived:com.google.height:com.google.android.gms:merge_height'
-          : 'derived:com.google.weight:com.google.android.gms:merge_weight';
-
-        const url = `${FITNESS_API_BASE}/dataSources/${streamId}/datasets/${startNanos}-${endNanos}`;
-
-        const response = await fetch(url, {
-          method: 'GET',
+        const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataSources', {
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
         });
-
         if (!response.ok) {
-          console.warn(`[GoogleFit] Fitness API dataSource error for ${metricType}:`, await response.text());
+          if (response.status === 401) throw new Error('UNAUTHENTICATED');
           return null;
         }
+        
+        const dsData = await response.json() as { dataSource?: Array<{ dataStreamId: string; dataType: { name: string } }> };
+        const targetType = metricType === 'height' ? 'com.google.height' : 'com.google.weight';
+        const sources = (dsData.dataSource || []).filter(ds => ds.dataType.name === targetType);
+        if (sources.length === 0) return null;
 
-        const data = await response.json() as DatasetResponse;
-        if (data.point && data.point.length > 0) {
-          const lastPoint = data.point[data.point.length - 1];
-          if (lastPoint.value && lastPoint.value.length > 0) {
-            const val = lastPoint.value[0];
-            return val.fpVal !== undefined ? val.fpVal : (val.intVal !== undefined ? val.intVal : null);
+        let latestVal: number | null = null;
+        let latestTimeNanos = 0;
+
+        const nowMs = Date.now();
+        const startMs = nowMs - 5 * 365 * 24 * 60 * 60 * 1000; // query last 5 years
+        const startNanos = String(startMs * 1000000);
+        const endNanos = String(nowMs * 1000000);
+
+        for (const source of sources) {
+          const streamId = source.dataStreamId;
+          const url = `${FITNESS_API_BASE}/dataSources/${streamId}/datasets/${startNanos}-${endNanos}`;
+          const res = await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (!res.ok) {
+            if (res.status === 401) throw new Error('UNAUTHENTICATED');
+            continue;
+          }
+          const data = await res.json() as DatasetResponse;
+          if (data.point && data.point.length > 0) {
+            const lastPoint = data.point[data.point.length - 1];
+            const pointTime = parseFloat(lastPoint.endTimeNanos || lastPoint.startTimeNanos || '0');
+            if (pointTime > latestTimeNanos) {
+              if (lastPoint.value && lastPoint.value.length > 0) {
+                const val = lastPoint.value[0];
+                const numVal = val.fpVal !== undefined ? val.fpVal : (val.intVal !== undefined ? val.intVal : null);
+                if (numVal !== null) {
+                  latestVal = numVal;
+                  latestTimeNanos = pointTime;
+                }
+              }
+            }
           }
         }
+        return latestVal;
       } catch (err) {
         console.warn(`[GoogleFit] Failed to fetch body metric ${metricType}:`, err);
+        if (err instanceof Error && err.message === 'UNAUTHENTICATED') throw err;
       }
       return null;
     };
@@ -412,6 +549,7 @@ export const GoogleFitService = {
       }
     } catch (e) {
       console.warn('[GoogleFit] Error processing height:', e);
+      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
     }
 
     try {
@@ -421,6 +559,7 @@ export const GoogleFitService = {
       }
     } catch (e) {
       console.warn('[GoogleFit] Error processing weight:', e);
+      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
     }
 
     return result;

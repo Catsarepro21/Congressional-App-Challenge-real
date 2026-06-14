@@ -88,6 +88,7 @@ export const SettingsScreen: React.FC = () => {
   const deleteMedicalRecord = useSafeScaleStore((s) => s.deleteMedicalRecord);
   const updateProfile = useSafeScaleStore((s) => s.updateProfile);
   const importPatientFHIRData = useSafeScaleStore((s) => s.importPatientFHIRData);
+  const resetOnboarding = useSafeScaleStore((s) => s.resetOnboarding);
 
   const hydrationNotificationsEnabled = useSafeScaleStore((s) => s.hydrationNotificationsEnabled);
   const hydrationIntervalHours = useSafeScaleStore((s) => s.hydrationIntervalHours);
@@ -1047,7 +1048,7 @@ export const SettingsScreen: React.FC = () => {
               secureTextEntry={true}
               value={geminiApiKey}
               onChangeText={handleGeminiApiKeyChange}
-              placeholder="Paste your Gemini API Key here"
+              placeholder={process.env.EXPO_PUBLIC_GEMINI_API_KEY ? "Default key active (click to override)" : "Paste your Gemini API Key here"}
               placeholderTextColor="#A0AAB2"
               autoCapitalize="none"
               autoCorrect={false}
@@ -1151,6 +1152,37 @@ export const SettingsScreen: React.FC = () => {
                 }}
               />
             </Pressable>
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: COLORS.border, marginVertical: 16 }} />
+
+          <Text style={{ fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 12 }}>
+            OAuth Integration Settings
+          </Text>
+
+          {/* Google Fit Client ID */}
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6 }}>
+              Google Fit OAuth Client ID
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: COLORS.background,
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 14,
+                color: COLORS.textPrimary,
+                borderWidth: 1,
+                borderColor: COLORS.border,
+              }}
+              value={googleOAuthClientId}
+              onChangeText={setGoogleOAuthClientId}
+              placeholder="Paste your Google Fit Client ID here"
+              placeholderTextColor="#A0AAB2"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
           </View>
 
         </View>
@@ -1776,6 +1808,39 @@ export const SettingsScreen: React.FC = () => {
           <Text style={{ fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 18, marginBottom: 16 }}>
             Purge active user accounts and reset state variables back to initial setup.
           </Text>
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                'Reset to Onboarding?',
+                'This will return you to the onboarding setup flow so you can test importing from Google Fit or Google Health.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Reset',
+                    style: 'destructive',
+                    onPress: () => {
+                      resetOnboarding();
+                    },
+                  },
+                ]
+              );
+            }}
+            style={({ pressed }) => ({
+              backgroundColor: COLORS.secondary,
+              borderRadius: 14,
+              paddingVertical: 12,
+              paddingHorizontal: 24,
+              width: '100%',
+              alignItems: 'center',
+              marginBottom: 10,
+              opacity: pressed ? 0.88 : 1,
+            })}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>
+              Reset to Onboarding
+            </Text>
+          </Pressable>
+
           <Pressable
             onPress={handleClearAllData}
             style={({ pressed }) => ({

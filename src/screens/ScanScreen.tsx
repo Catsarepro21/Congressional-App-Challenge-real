@@ -161,6 +161,8 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
   const completeVaccineMilestone = useSafeScaleStore((s) => s.completeVaccineMilestone);
   const addVitalLog = useSafeScaleStore((s) => s.addVitalLog);
   const profile = useSafeScaleStore((s) => s.profile);
+  const apiKey = (profile.geminiApiKey && profile.geminiApiKey.trim())
+    || (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
 
   // Camera permissions hook
   const [permission, requestPermission] = useCameraPermissions();
@@ -429,7 +431,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
             const result = await FoodVisionService.analyzeImage(
               photo.uri,
               profile.useGeminiFoodVision || false,
-              profile.geminiApiKey || ''
+              apiKey
             );
             setFoodAnalysisResult(result);
           } catch (e) {
@@ -442,11 +444,11 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
         }
 
         if (scanMode === 'Allergen') {
-          if (profile.geminiApiKey && profile.geminiApiKey.trim().length > 0) {
+          if (apiKey) {
             try {
               const result = await CloudAIService.analyzeIngredientsOCR(
                 photo.uri,
-                profile.geminiApiKey.trim()
+                apiKey
               );
               
               const product = {
@@ -493,11 +495,11 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
         }
 
         if (scanMode === 'Document') {
-          if (profile.useCloudAIDocuments && profile.geminiApiKey && profile.geminiApiKey.trim().length > 0) {
+          if (profile.useCloudAIDocuments && apiKey) {
             try {
               const result = await CloudAIService.analyzeDocumentOCR(
                 photo.uri,
-                profile.geminiApiKey.trim()
+                apiKey
               );
               setDocScanResult(result);
               setIsDocImported(false);
@@ -509,7 +511,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
               setIsScanning(false);
             }
           } else {
-            if (profile.geminiApiKey) {
+            if (apiKey) {
               Alert.alert(
                 'Cloud AI Disabled',
                 'Cloud AI Document Parsing is turned off in Settings. Reverting to local offline presets.',
@@ -1299,10 +1301,10 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>
-                  {profile.useCloudAIDocuments && profile.geminiApiKey ? 'Cloud AI Document Scan' : 'Local AI Document Scan'}
+                  {profile.useCloudAIDocuments && apiKey ? 'Cloud AI Document Scan' : 'Local AI Document Scan'}
                 </Text>
                 <Text style={{ fontSize: 11, color: COLORS.textSecondary }}>
-                  {profile.useCloudAIDocuments && profile.geminiApiKey ? 'Secure PII-redacted analysis complete' : 'Offline OCR extraction complete'}
+                  {profile.useCloudAIDocuments && apiKey ? 'Secure PII-redacted analysis complete' : 'Offline OCR extraction complete'}
                 </Text>
               </View>
             </View>
