@@ -71,6 +71,7 @@ import type { MedicationItem } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { GoogleFitService } from '../services/GoogleFitService';
 import { GoogleHealthService } from '../services/GoogleHealthService';
+import { DeviceAPIService } from '../services/DeviceAPIService';
 
 let AppleHealthKit: any = null;
 
@@ -947,6 +948,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const removeEmergencyContact = useSafeScaleStore((s) => s.removeEmergencyContact);
   const profile = useSafeScaleStore((s) => s.profile);
   const unitPreference = profile?.unitPreference || 'imperial';
+  const connectedDevices = useSafeScaleStore((s) => s.connectedDevices);
+  const setDeviceConnected = useSafeScaleStore((s) => s.setDeviceConnected);
   const addMoodLog = useSafeScaleStore((s) => s.addMoodLog);
   const addVitalLog = useSafeScaleStore((s) => s.addVitalLog);
 
@@ -1016,6 +1019,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
   const [isSyncPickerOpen, setIsSyncPickerOpen] = useState(false);
   const [syncPlatform, setSyncPlatform] = useState<'apple' | 'google' | 'google-fit-rest' | 'google-health-rest' | null>(null);
+  const [pickerTab, setPickerTab] = useState<'system' | 'direct'>('system');
+  const [directSyncDevice, setDirectSyncDevice] = useState<'fitbit' | 'strava' | 'polar' | 'withings' | null>(null);
+  const [directSyncStepText, setDirectSyncStepText] = useState('');
+  const [isDirectSyncing, setIsDirectSyncing] = useState(false);
 
   const [isICEModalOpen, setIsICEModalOpen] = useState(false);
   const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
@@ -1216,7 +1223,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
               if (token) {
                 try {
-                  const realData = await GoogleFitService.fetchFitnessData(token);
+                  const realData = await GoogleFitService.fetchFitnessData(token, appWorkouts);
                   heartRate = realData.heartRate;
                   restingHeartRate = realData.restingHeartRate;
                   sleepMinutes = realData.sleepMinutes;
@@ -1237,7 +1244,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                       token = newToken;
                       useSafeScaleStore.getState().updateProfile({ googleAccessToken: newToken });
 
-                      const realData = await GoogleFitService.fetchFitnessData(token);
+                      const realData = await GoogleFitService.fetchFitnessData(token, appWorkouts);
                       heartRate = realData.heartRate;
                       restingHeartRate = realData.restingHeartRate;
                       sleepMinutes = realData.sleepMinutes;
@@ -1270,7 +1277,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                     googleRefreshToken: authResult.refreshToken || undefined,
                   });
                   
-                  const realData = await GoogleFitService.fetchFitnessData(token);
+                  const realData = await GoogleFitService.fetchFitnessData(token, appWorkouts);
                   heartRate = realData.heartRate;
                   restingHeartRate = realData.restingHeartRate;
                   sleepMinutes = realData.sleepMinutes;
@@ -1621,6 +1628,128 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     setIsPermissionModalOpen(false);
     Alert.alert('Permission Denied', 'SafeScale Health was denied access to your device health tracker.');
   }, [setHealthPermission]);
+
+  const handleConnectDirectDevice = useCallback(async (device: 'fitbit' | 'strava' | 'polar' | 'withings') => {
+    setIsDirectSyncing(true);
+    setDirectSyncDevice(device);
+    setDirectSyncStepText(`Initiating secure handshake with ${device.toUpperCase()}...`);
+
+    try {
+      await DeviceAPIService.authorizeDevice(device, (step) => {
+        setDirectSyncStepText(step);
+      });
+      setDeviceConnected(device, true);
+      Alert.alert(
+        'Connection Successful',
+        `Your ${device.charAt(0).toUpperCase() + device.slice(1)} account has been successfully linked with SafeScale Health. You can now sync its metrics.`,
+        [{ text: 'OK' }]
+      );
+    } catch (e) {
+      console.warn(`[DeviceAPIService] Authorization failed for ${device}:`, e);
+      Alert.alert('Connection Failed', `Could not complete the OAuth handshake with ${device}.`);
+    } finally {
+      setIsDirectSyncing(false);
+      setDirectSyncDevice(null);
+      setDirectSyncStepText('');
+    }
+  }, [setDeviceConnected]);
+
+  const handleSyncDirectDevice = useCallback(async (device: 'fitbit' | 'strava' | 'polar' | 'withings') => {
+    setIsDirectSyncing(true);
+    setDirectSyncDevice(device);
+    setDirectSyncStepText(`Synchronizing telemetry from ${device.toUpperCase()} servers...`);
+
+    try {
+      const data = await DeviceAPIService.fetchDeviceData(device);
+      
+      // Merge retrieved metrics
+      if (device === 'fitbit' || device === 'polar') {
+        const heartRate = data.heartRate || biometricCore.heartRate;
+        const restingHeartRate = data.restingHeartRate || biometricCore.restingHeartRate;
+        const sleepMinutes = data.sleepMinutes || biometricCore.sleepMinutes;
+        const sleepConsistency = data.sleepConsistency || biometricCore.sleepConsistency;
+        const steps = data.steps || biometricCore.steps;
+        const activeCalories = data.activeCalories || biometricCore.activeCalories;
+
+        const baseHistory = biometricCore.historicalRHR.length >= 3 
+          ? biometricCore.historicalRHR 
+          : [64, 66, 65, 63, 67];
+        const updatedHistory = [...baseHistory, restingHeartRate].slice(-14);
+
+        const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
+          restingHeartRate,
+          sleepConsistency,
+          updatedHistory
+        );
+
+        updateBiometrics({
+          heartRate,
+          restingHeartRate,
+          sleepMinutes,
+          sleepConsistency,
+          steps,
+          activeCalories,
+          dailyStabilityScore,
+          historicalRHR: updatedHistory,
+        });
+      } else if (device === 'strava') {
+        const heartRate = data.heartRate || biometricCore.heartRate;
+        const activeCalories = biometricCore.activeCalories + (data.activeCalories || 0);
+
+        const baseHistory = biometricCore.historicalRHR.length >= 3 
+          ? biometricCore.historicalRHR 
+          : [64, 66, 65, 63, 67];
+        const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
+          biometricCore.restingHeartRate,
+          biometricCore.sleepConsistency,
+          baseHistory
+        );
+
+        updateBiometrics({
+          heartRate,
+          activeCalories,
+          dailyStabilityScore,
+        });
+      } else if (device === 'withings') {
+        if (data.weightKg) {
+          useSafeScaleStore.getState().updateProfile({
+            weight: data.weightKg,
+          });
+        }
+        if (data.systolicBP && data.diastolicBP) {
+          addVitalLog({
+            systolicBP: data.systolicBP,
+            diastolicBP: data.diastolicBP,
+            spo2: 98,
+            temperature: 98.6,
+          });
+        }
+      }
+
+      const now = new Date();
+      const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      useSafeScaleStore.setState({ lastSyncedAt: `Today at ${timeString}` });
+
+      Alert.alert(
+        'Telemetry Synced',
+        `Successfully imported metrics from ${device.toUpperCase()}:\n` +
+        (data.steps ? `• ${data.steps.toLocaleString()} steps\n` : '') +
+        (data.activeCalories ? `• ${data.activeCalories} kcal burned\n` : '') +
+        (data.sleepMinutes ? `• ${Math.round(data.sleepMinutes / 60)}h sleep duration\n` : '') +
+        (data.weightKg ? `• Body weight updated: ${data.weightKg} kg\n` : '') +
+        (data.systolicBP ? `• Blood pressure logged: ${data.systolicBP}/${data.diastolicBP} mmHg\n` : '') +
+        `• Resting heart rate synced`,
+        [{ text: 'OK' }]
+      );
+    } catch (e) {
+      console.warn(`[DeviceAPIService] Sync failed for ${device}:`, e);
+      Alert.alert('Sync Failed', `Could not fetch telemetry data from ${device}.`);
+    } finally {
+      setIsDirectSyncing(false);
+      setDirectSyncDevice(null);
+      setDirectSyncStepText('');
+    }
+  }, [updateBiometrics, biometricCore, addVitalLog]);
 
   // ----- Active GPS & Step Tracking useEffect -----
   const locationSubscription = useRef<any>(null);
@@ -2162,6 +2291,42 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             </Pressable>
           </View>
         </View>
+
+        {/* Active GPS Workout HUD Banner */}
+        {isTrackingActive && (
+          <Pressable
+            onPress={() => onNavigate(2)}
+            style={({ pressed }) => ({
+              backgroundColor: '#F0FDF4',
+              borderRadius: 16,
+              padding: 14,
+              marginBottom: 16,
+              borderWidth: 1.5,
+              borderColor: '#22C55E',
+              flexDirection: 'row',
+              alignItems: 'center',
+              opacity: pressed ? 0.9 : 1,
+            })}
+          >
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <MaterialCommunityIcons name="play-circle" size={24} color="#15803D" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#166534' }}>
+                Active GPS Tracking: {trackingType}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#15803D', marginTop: 2 }}>
+                Steps: {trackingSteps} · Est. Calories: {Math.round(trackingCalories)} kcal
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#166534', marginRight: 4 }}>
+                Open Tracker
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={16} color="#15803D" />
+            </View>
+          </Pressable>
+        )}
 
         {/* Emergency Action Plan Card */}
         <Pressable
@@ -3182,119 +3347,355 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
               Choose your health platform to import biometric data including heart rate, sleep, steps, and active calories.
             </Text>
 
-            {/* iOS specific: Apple Health */}
-            {Platform.OS === 'ios' && (
+            {/* Tab selector for System Hubs vs Direct Wearables */}
+            <View style={{ flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: 12, padding: 4, marginBottom: 16 }}>
               <Pressable
-                onPress={() => handleSyncHealthData('apple')}
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
+                onPress={() => setPickerTab('system')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  backgroundColor: pickerTab === 'system' ? COLORS.surface : 'transparent',
                   alignItems: 'center',
-                  backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
-                  borderRadius: 18,
-                  padding: 16,
-                  marginBottom: 12,
-                  borderWidth: 1.5,
-                  borderColor: syncPlatform === 'apple' ? COLORS.primary : COLORS.border,
-                })}
+                }}
               >
-                <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#FFEBEA', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                  <MaterialCommunityIcons name="apple" size={28} color="#FF2D55" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Apple Health</Text>
-                  <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
-                    HealthKit · Heart Rate · Sleep · Steps · Active Calories
-                  </Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: pickerTab === 'system' ? COLORS.primary : COLORS.textSecondary }}>
+                  System Hubs
+                </Text>
               </Pressable>
+              <Pressable
+                onPress={() => setPickerTab('direct')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  backgroundColor: pickerTab === 'direct' ? COLORS.surface : 'transparent',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: pickerTab === 'direct' ? COLORS.primary : COLORS.textSecondary }}>
+                  Direct Devices
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* ── TAB 1: System Hubs ── */}
+            {pickerTab === 'system' && (
+              <View>
+                <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginBottom: 14, lineHeight: 16 }}>
+                  Choose your device's native system hub to read consolidated biometrics gathered from your watch, scale, or ring.
+                </Text>
+
+                {/* iOS specific: Apple Health */}
+                {Platform.OS === 'ios' && (
+                  <Pressable
+                    onPress={() => handleSyncHealthData('apple')}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                      borderRadius: 18,
+                      padding: 16,
+                      marginBottom: 12,
+                      borderWidth: 1.5,
+                      borderColor: syncPlatform === 'apple' ? COLORS.primary : COLORS.border,
+                    })}
+                  >
+                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#FFEBEA', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                      <MaterialCommunityIcons name="apple" size={28} color="#FF2D55" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Apple Health</Text>
+                      <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                        HealthKit · Heart Rate · Sleep · Steps · Active Calories
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+                  </Pressable>
+                )}
+
+                {/* Android specific: Google Health Connect */}
+                {Platform.OS === 'android' && (
+                  <Pressable
+                    onPress={() => handleSyncHealthData('google')}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                      borderRadius: 18,
+                      padding: 16,
+                      marginBottom: 12,
+                      borderWidth: 1.5,
+                      borderColor: syncPlatform === 'google' ? COLORS.primary : COLORS.border,
+                    })}
+                  >
+                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                      <MaterialCommunityIcons name="google-fit" size={28} color={COLORS.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health Connect</Text>
+                      <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                        Health Connect · Fitbit · Samsung Health · Garmin
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+                  </Pressable>
+                )}
+
+                {/* Cross-platform: Google Fit Cloud API */}
+                <Pressable
+                  onPress={() => handleSyncHealthData('google-fit-rest')}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                    borderRadius: 18,
+                    padding: 16,
+                    marginBottom: 12,
+                    borderWidth: 1.5,
+                    borderColor: syncPlatform === 'google-fit-rest' ? COLORS.primary : COLORS.border,
+                  })}
+                >
+                  <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                    <MaterialCommunityIcons name="google" size={28} color="#4285F4" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Fit (Cloud API)</Text>
+                    <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                      Fitbit App · Google Fit app · Google Account Sync
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+                </Pressable>
+
+                {/* Google Health Cloud (Fitbit) */}
+                <Pressable
+                  onPress={() => handleSyncHealthData('google-health-rest')}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
+                    borderRadius: 18,
+                    padding: 16,
+                    marginBottom: 12,
+                    borderWidth: 1.5,
+                    borderColor: syncPlatform === 'google-health-rest' ? COLORS.primary : COLORS.border,
+                  })}
+                >
+                  <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#D5F1E2', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                    <MaterialCommunityIcons name="heart-pulse" size={28} color={COLORS.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health (Fitbit Cloud)</Text>
+                    <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
+                      Fitbit App · Google Health app · Cloud Sync
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+                </Pressable>
+              </View>
             )}
 
-            {/* Android specific: Google Health Connect */}
-            {Platform.OS === 'android' && (
-              <Pressable
-                onPress={() => handleSyncHealthData('google')}
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
-                  borderRadius: 18,
-                  padding: 16,
-                  marginBottom: 12,
-                  borderWidth: 1.5,
-                  borderColor: syncPlatform === 'google' ? COLORS.primary : COLORS.border,
-                })}
-              >
-                <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                  <MaterialCommunityIcons name="google-fit" size={28} color={COLORS.primary} />
+            {/* ── TAB 2: Direct Wearables & APIs ── */}
+            {pickerTab === 'direct' && (
+              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginBottom: 14, lineHeight: 16 }}>
+                  Connect directly with wearable cloud services and medical device APIs.
+                </Text>
+
+                <View style={{ gap: 12 }}>
+                  {/* Fitbit */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: COLORS.border }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#E0F2F1', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <MaterialCommunityIcons name="water-percent" size={22} color="#00BFA5" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: COLORS.textPrimary }}>Fitbit Web API</Text>
+                      <Text style={{ fontSize: 10, color: COLORS.textSecondary, marginTop: 1 }}>
+                        {connectedDevices.fitbit ? 'Connected' : 'OAuth 2.0 Cloud'}
+                      </Text>
+                    </View>
+                    {connectedDevices.fitbit ? (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <Pressable
+                          onPress={() => handleSyncDirectDevice('fitbit')}
+                          style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.primary, borderRadius: 8 }}
+                        >
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Sync</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => setDeviceConnected('fitbit', false)}
+                          style={{ padding: 6, backgroundColor: '#FFEBEA', borderRadius: 8 }}
+                        >
+                          <MaterialCommunityIcons name="link-off" size={12} color={COLORS.alert} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => handleConnectDirectDevice('fitbit')}
+                        style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.secondary, borderRadius: 8 }}
+                      >
+                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Connect</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {/* Strava */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: COLORS.border }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#FBE9E7', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <MaterialCommunityIcons name="run" size={22} color="#FC4C02" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: COLORS.textPrimary }}>Strava API</Text>
+                      <Text style={{ fontSize: 10, color: COLORS.textSecondary, marginTop: 1 }}>
+                        {connectedDevices.strava ? 'Connected' : 'Active Workouts'}
+                      </Text>
+                    </View>
+                    {connectedDevices.strava ? (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <Pressable
+                          onPress={() => handleSyncDirectDevice('strava')}
+                          style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.primary, borderRadius: 8 }}
+                        >
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Sync</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => setDeviceConnected('strava', false)}
+                          style={{ padding: 6, backgroundColor: '#FFEBEA', borderRadius: 8 }}
+                        >
+                          <MaterialCommunityIcons name="link-off" size={12} color={COLORS.alert} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => handleConnectDirectDevice('strava')}
+                        style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.secondary, borderRadius: 8 }}
+                      >
+                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Connect</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {/* Polar */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: COLORS.border }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#FFEBEE', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <MaterialCommunityIcons name="heart-pulse" size={22} color="#E11E26" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: COLORS.textPrimary }}>Polar AccessLink</Text>
+                      <Text style={{ fontSize: 10, color: COLORS.textSecondary, marginTop: 1 }}>
+                        {connectedDevices.polar ? 'Connected' : 'Training & HR'}
+                      </Text>
+                    </View>
+                    {connectedDevices.polar ? (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <Pressable
+                          onPress={() => handleSyncDirectDevice('polar')}
+                          style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.primary, borderRadius: 8 }}
+                        >
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Sync</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => setDeviceConnected('polar', false)}
+                          style={{ padding: 6, backgroundColor: '#FFEBEA', borderRadius: 8 }}
+                        >
+                          <MaterialCommunityIcons name="link-off" size={12} color={COLORS.alert} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => handleConnectDirectDevice('polar')}
+                        style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.secondary, borderRadius: 8 }}
+                      >
+                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Connect</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {/* Withings */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: COLORS.border }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#E8EAF6', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <MaterialCommunityIcons name="scale-bathroom" size={22} color="#1A237E" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: COLORS.textPrimary }}>Withings Health</Text>
+                      <Text style={{ fontSize: 10, color: COLORS.textSecondary, marginTop: 1 }}>
+                        {connectedDevices.withings ? 'Connected' : 'Weight & Vitals'}
+                      </Text>
+                    </View>
+                    {connectedDevices.withings ? (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <Pressable
+                          onPress={() => handleSyncDirectDevice('withings')}
+                          style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.primary, borderRadius: 8 }}
+                        >
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Sync</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => setDeviceConnected('withings', false)}
+                          style={{ padding: 6, backgroundColor: '#FFEBEA', borderRadius: 8 }}
+                        >
+                          <MaterialCommunityIcons name="link-off" size={12} color={COLORS.alert} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => handleConnectDirectDevice('withings')}
+                        style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.secondary, borderRadius: 8 }}
+                      >
+                        <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>Connect</Text>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {/* Samsung Health instructions */}
+                  <View style={{ backgroundColor: COLORS.background, borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                      <MaterialCommunityIcons name="watch" size={18} color="#00C4FF" style={{ marginRight: 8 }} />
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: COLORS.textPrimary }}>Samsung Health</Text>
+                    </View>
+                    <Text style={{ fontSize: 10, color: COLORS.textSecondary, lineHeight: 14 }}>
+                      Samsung Health writes telemetry natively to Google Health Connect / Apple Health. Please sync via the System Hubs tab.
+                    </Text>
+                    <Pressable
+                      onPress={() => setPickerTab('system')}
+                      style={{ marginTop: 8 }}
+                    >
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: COLORS.primary }}>← Sync via System Hubs</Text>
+                    </Pressable>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health Connect</Text>
-                  <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
-                    Health Connect · Fitbit · Samsung Health · Garmin
-                  </Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
-              </Pressable>
+              </ScrollView>
             )}
-
-            {/* Cross-platform: Google Fit Cloud API */}
-            <Pressable
-              onPress={() => handleSyncHealthData('google-fit-rest')}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
-                borderRadius: 18,
-                padding: 16,
-                marginBottom: 12,
-                borderWidth: 1.5,
-                borderColor: syncPlatform === 'google-fit-rest' ? COLORS.primary : COLORS.border,
-              })}
-            >
-              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                <MaterialCommunityIcons name="google" size={28} color="#4285F4" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Fit (Cloud API)</Text>
-                <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
-                  Fitbit App · Google Fit app · Google Account Sync
-                </Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
-            </Pressable>
-
-            {/* Google Health Cloud (Fitbit) */}
-            <Pressable
-              onPress={() => handleSyncHealthData('google-health-rest')}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: pressed ? '#F0FFF8' : COLORS.background,
-                borderRadius: 18,
-                padding: 16,
-                marginBottom: 12,
-                borderWidth: 1.5,
-                borderColor: syncPlatform === 'google-health-rest' ? COLORS.primary : COLORS.border,
-              })}
-            >
-              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#D5F1E2', alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
-                <MaterialCommunityIcons name="heart-pulse" size={28} color={COLORS.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: COLORS.textPrimary }}>Google Health (Fitbit Cloud)</Text>
-                <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 15 }}>
-                  Fitbit App · Google Health app · Cloud Sync
-                </Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
-            </Pressable>
 
             <Text style={{ fontSize: 10, color: COLORS.textSecondary, textAlign: 'center', marginTop: 14, lineHeight: 14 }}>
               SafeScale Health reads health data from your device's health platform. No data is uploaded to external servers.
             </Text>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* ── Direct Sync/Auth Progress Modal ───────────────────────────── */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isDirectSyncing}
+        onRequestClose={() => {}}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(26, 33, 41, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={COLORS.secondary} style={{ marginBottom: 20 }} />
+            <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+              {directSyncDevice ? `${directSyncDevice.toUpperCase()} Connector` : 'Wearable API Sync'}
+            </Text>
+            
+            <View style={{ width: '100%', marginTop: 8 }}>
+              <Text style={{ fontSize: 12, color: COLORS.textPrimary, textAlign: 'center', fontWeight: '600', lineHeight: 18 }}>
+                {directSyncStepText}
+              </Text>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* ── 9. Health Tracker Permission Modal ──────────────────────────── */}

@@ -418,9 +418,12 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
       setFoodAnalysisResult(null);
       setFoodLogged(false);
 
-      // Take picture
+      // Brief delay to allow React state updates to disable barcode scanning natively
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Take picture (quality 0.6 is ideal for OCR, reducing memory load on Android)
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
+        quality: 0.6,
       });
       
       if (photo && photo.uri) {
@@ -532,6 +535,10 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
     } catch (error) {
       console.error('Error during capture:', error);
       setIsScanning(false);
+      Alert.alert(
+        'Capture Failed',
+        'An error occurred while taking the photo. Please make sure the camera is fully loaded and try again.'
+      );
     }
   };
 
@@ -809,7 +816,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
                 barcodeScannerSettings={{
                   barcodeTypes: ['ean13', 'upc_a', 'upc_e', 'ean8', 'qr'],
                 }}
-                onBarcodeScanned={scanMode === 'Allergen' ? handleBarcodeScanned : undefined}
+                onBarcodeScanned={(scanMode === 'Allergen' && !isScanning && !capturedPhoto) ? handleBarcodeScanned : undefined}
               />
               {scanMode === 'Document' && (
                 <View

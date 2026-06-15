@@ -33,6 +33,13 @@ import { GoogleHealthService } from '../services/GoogleHealthService';
 
 // Lazy-load HealthKit only on iOS
 let AppleHealthKit: any = null;
+if (Platform.OS === 'ios') {
+  try {
+    AppleHealthKit = require('react-native-health').default;
+  } catch (e) {
+    console.warn('[OnboardingScreen] Failed to load react-native-health:', e);
+  }
+}
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -591,7 +598,10 @@ export default function OnboardingScreen({ onDone }: Props) {
         </Text>
       </Pressable>
 
-      <Text style={{ fontSize: 12, color: COLORS.textSub, marginTop: 18, textAlign: 'center', lineHeight: 18 }}>
+      <Text style={{ fontSize: 11, color: COLORS.textSub, marginTop: 14, textAlign: 'center', lineHeight: 16 }}>
+        Supports Apple Watch, Samsung Health, Fitbit, CMF Watch, and Nothing X integrations via system health sync.
+      </Text>
+      <Text style={{ fontSize: 11, color: COLORS.textSub, marginTop: 6, textAlign: 'center', lineHeight: 16 }}>
         You can always update your profile from the Settings tab at any time.
       </Text>
     </ScrollView>

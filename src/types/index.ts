@@ -281,6 +281,14 @@ export interface SafeScaleState {
   appWorkouts: AppWorkout[];
   lastSuccessfulSync: string | null; // Anchored timestamp for delta sync
 
+  // ----- Direct Wearable APIs State -----
+  connectedDevices: {
+    fitbit: boolean;
+    strava: boolean;
+    polar: boolean;
+    withings: boolean;
+  };
+
   // ----- Actions ------------------------------------------------------------
 
   /** Replaces the entire userAllergies array atomically. */
@@ -480,6 +488,9 @@ export interface SafeScaleState {
   ) => void;
   stopWorkout: () => void;
   deleteWorkout: (id: string) => void;
+
+  // ----- Direct Wearable APIs Actions -----
+  setDeviceConnected: (device: 'fitbit' | 'strava' | 'polar' | 'withings', connected: boolean) => void;
 }
 
 /**

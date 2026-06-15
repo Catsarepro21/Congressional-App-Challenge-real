@@ -12,6 +12,7 @@ export { FoodVisionService } from './FoodVisionService';
 export { GoogleFitService } from './GoogleFitService';
 export { FHIRService } from './FHIRService';
 export { CloudAIService } from './CloudAIService';
+export { DeviceAPIService } from './DeviceAPIService';
 
 
 
