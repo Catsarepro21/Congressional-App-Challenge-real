@@ -11,6 +11,7 @@
  */
 
 import type { FoodAnalysisResult } from '../types';
+import * as FileSystem from 'expo-file-system';
 
 // ---------------------------------------------------------------------------
 // Offline food database — common meal templates
@@ -140,18 +141,7 @@ If you cannot identify the food, set foodName to "Unknown Food" and confidence t
  * Convert a local image URI to a base64-encoded string for the Gemini API.
  */
 const uriToBase64 = async (uri: string): Promise<string> => {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      // Strip the data:image/...;base64, prefix
-      resolve(result.split(',')[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  return await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
 };
 
 const analyzeWithGemini = async (

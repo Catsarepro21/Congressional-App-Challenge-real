@@ -9,10 +9,16 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.safescalehealth",
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.background-delivery": true
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "SafeScale Health requires access to the camera to scan food barcodes and medical document records.",
-        "NSLocationWhenInUseUsageDescription": "SafeScale Health requires location access to find nearby pharmacies and clinics."
+        "NSLocationWhenInUseUsageDescription": "SafeScale Health requires location access to find nearby pharmacies and clinics.",
+        "NSHealthShareUsageDescription": "SafeScale Health requires access to read your biometric health data to compute your health stability score.",
+        "NSHealthUpdateUsageDescription": "SafeScale Health requires access to write health data for tracking purposes."
       }
     },
     "android": {

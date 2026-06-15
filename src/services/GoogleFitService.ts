@@ -168,7 +168,8 @@ async function fetchSumFromAllSources(
   accessToken: string,
   dataTypeName: string,
   startMs: number,
-  endMs: number
+  endMs: number,
+  appWorkouts?: any[]
 ): Promise<number> {
   try {
     const response = await fetch('https://www.googleapis.com/fitness/v1/users/me/dataSources', {
@@ -187,7 +188,7 @@ async function fetchSumFromAllSources(
     let sum = 0;
     const startNanos = String(startMs * 1000000);
     const endNanos = String(endMs * 1000000);
-
+ 
     for (const source of sources) {
       const streamId = source.dataStreamId;
       const url = `${FITNESS_API_BASE}/dataSources/${streamId}/datasets/${startNanos}-${endNanos}`;
@@ -203,10 +204,23 @@ async function fetchSumFromAllSources(
       }
       const data = await res.json() as DatasetResponse;
       (data.point || []).forEach((point) => {
-        (point.value || []).forEach((v) => {
-          const val = v.intVal !== undefined ? v.intVal : (v.fpVal !== undefined ? v.fpVal : 0);
-          sum += val;
-        });
+        let isDuplicate = false;
+        if (appWorkouts && appWorkouts.length > 0 && point.startTimeNanos && point.endTimeNanos) {
+          const ptStart = Math.round(parseFloat(point.startTimeNanos) / 1000000);
+          const ptEnd = Math.round(parseFloat(point.endTimeNanos) / 1000000);
+          isDuplicate = appWorkouts.some((workout) => {
+            const wStart = new Date(workout.startTime).getTime();
+            const wEnd = new Date(workout.endTime).getTime();
+            return ptStart < wEnd && ptEnd > wStart;
+          });
+        }
+
+        if (!isDuplicate) {
+          (point.value || []).forEach((v) => {
+            const val = v.intVal !== undefined ? v.intVal : (v.fpVal !== undefined ? v.fpVal : 0);
+            sum += val;
+          });
+        }
       });
     }
     return sum;
@@ -330,14 +344,11 @@ export const GoogleFitService = {
     return data.access_token;
   },
 
-  /**
-   * Fetches today's health metrics from Google Fit using a valid access token.
-   */
-  fetchFitnessData: async (accessToken: string): Promise<GoogleFitResult> => {
+  fetchFitnessData: async (accessToken: string, appWorkouts?: any[]): Promise<GoogleFitResult> => {
     const now = Date.now();
     const startMs = now - 24 * 60 * 60 * 1000; // Query last 24h to avoid local day/UTC alignment issues
     const last24hStart = now - 24 * 60 * 60 * 1000;
-
+ 
     const results: GoogleFitResult = {
       steps: 0,
       activeCalories: 0,
@@ -346,39 +357,65 @@ export const GoogleFitService = {
       sleepMinutes: 480,
       sleepConsistency: 85,
     };
-
+ 
     // 1. Steps
     try {
       let steps = 0;
       const stepsData = await fetchFitnessDataset(accessToken, DATA_TYPE_STEPS, startMs, now);
       (stepsData.point || []).forEach((point) => {
-        (point.value || []).forEach((v) => {
-          if (typeof v.intVal === 'number') steps += v.intVal;
-        });
-      });
+        let isDuplicate = false;
+        if (appWorkouts && appWorkouts.length > 0 && point.startTimeNanos && point.endTimeNanos) {
+          const ptStart = Math.round(parseFloat(point.startTimeNanos) / 1000000);
+          const ptEnd = Math.round(parseFloat(point.endTimeNanos) / 1000000);
+          isDuplicate = appWorkouts.some((workout) => {
+            const wStart = new Date(workout.startTime).getTime();
+            const wEnd = new Date(workout.endTime).getTime();
+            return ptStart < wEnd && ptEnd > wStart;
+          });
+        }
 
+        if (!isDuplicate) {
+          (point.value || []).forEach((v) => {
+            if (typeof v.intVal === 'number') steps += v.intVal;
+          });
+        }
+      });
+ 
       if (steps === 0) {
         // Fallback: search all raw/derived data sources for steps
-        steps = await fetchSumFromAllSources(accessToken, DATA_TYPE_STEPS, startMs, now);
+        steps = await fetchSumFromAllSources(accessToken, DATA_TYPE_STEPS, startMs, now, appWorkouts);
       }
       results.steps = Math.round(steps);
     } catch (e) {
       console.warn('[GoogleFit] Steps fetch failed:', e);
     }
-
+ 
     // 2. Active Calories
     try {
       let calories = 0;
       const calData = await fetchFitnessDataset(accessToken, DATA_TYPE_CALORIES, startMs, now);
       (calData.point || []).forEach((point) => {
-        (point.value || []).forEach((v) => {
-          if (typeof v.fpVal === 'number') calories += v.fpVal;
-        });
-      });
+        let isDuplicate = false;
+        if (appWorkouts && appWorkouts.length > 0 && point.startTimeNanos && point.endTimeNanos) {
+          const ptStart = Math.round(parseFloat(point.startTimeNanos) / 1000000);
+          const ptEnd = Math.round(parseFloat(point.endTimeNanos) / 1000000);
+          isDuplicate = appWorkouts.some((workout) => {
+            const wStart = new Date(workout.startTime).getTime();
+            const wEnd = new Date(workout.endTime).getTime();
+            return ptStart < wEnd && ptEnd > wStart;
+          });
+        }
 
+        if (!isDuplicate) {
+          (point.value || []).forEach((v) => {
+            if (typeof v.fpVal === 'number') calories += v.fpVal;
+          });
+        }
+      });
+ 
       if (calories === 0) {
         // Fallback: search all raw/derived data sources for calories
-        calories = await fetchSumFromAllSources(accessToken, DATA_TYPE_CALORIES, startMs, now);
+        calories = await fetchSumFromAllSources(accessToken, DATA_TYPE_CALORIES, startMs, now, appWorkouts);
       }
       results.activeCalories = Math.round(calories);
     } catch (e) {

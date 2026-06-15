@@ -17,6 +17,13 @@ import { Platform } from 'react-native';
 import type { BiometricSummary } from '../types';
 
 let AppleHealthKit: any = null;
+if (Platform.OS === 'ios') {
+  try {
+    AppleHealthKit = require('react-native-health').default;
+  } catch (e) {
+    console.warn('[HealthDataService] Failed to load react-native-health:', e);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Constants

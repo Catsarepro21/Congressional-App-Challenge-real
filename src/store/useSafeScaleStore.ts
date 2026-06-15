@@ -289,6 +289,14 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   appWorkouts: [],
   lastSuccessfulSync: null,
 
+  // ----- Direct Wearable APIs State -----
+  connectedDevices: {
+    fitbit: false,
+    strava: false,
+    polar: false,
+    withings: false,
+  },
+
   userAllergies: [],
 
   loggedItems: [],
@@ -559,6 +567,17 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       const nextTestMode = !state.isTestMode;
       return {
         isTestMode: nextTestMode,
+        connectedDevices: nextTestMode ? {
+          fitbit: true,
+          strava: true,
+          polar: false,
+          withings: false,
+        } : {
+          fitbit: false,
+          strava: false,
+          polar: false,
+          withings: false,
+        },
         userAllergies: nextTestMode ? ['Peanut', 'Almond'] : [],
         medicationSchedule: nextTestMode ? DEFAULT_MEDICATION_SCHEDULE : [],
         biometricCore: nextTestMode ? DEFAULT_BIOMETRIC_CORE : EMPTY_BIOMETRIC_CORE,
@@ -1131,6 +1150,13 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       weeklyHistory: nextHistory,
     };
   }),
+
+  setDeviceConnected: (device, connected) => set((state) => ({
+    connectedDevices: {
+      ...state.connectedDevices,
+      [device]: connected,
+    },
+  })),
     }),
     {
       name: 'safescale-storage',
@@ -1159,6 +1185,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         appWorkouts: state.appWorkouts,
         lastSuccessfulSync: state.lastSuccessfulSync,
+        connectedDevices: state.connectedDevices,
       }),
     }
   )
