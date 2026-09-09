@@ -51,6 +51,25 @@ jobs:
           rm -f package-lock.json
           npm install --legacy-peer-deps --no-audit --no-fund
 
+      - name: Patch react-native-health for React Native 0.85
+        run: |
+          set -euo pipefail
+
+          HEALTH_FILE="node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m"
+
+          test -f "$HEALTH_FILE"
+
+          if grep -q "setBridge:" "$HEALTH_FILE"; then
+            sed -i.bak '/setBridge:/d' "$HEALTH_FILE"
+          fi
+
+          if grep -q "setBridge:" "$HEALTH_FILE"; then
+            echo "The obsolete setBridge selector is still present." >&2
+            exit 1
+          fi
+
+          echo "react-native-health compatibility patch applied."
+
       - run: npm run typecheck
       - run: npm test
 
