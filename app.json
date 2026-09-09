@@ -10,8 +10,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.safescalehealth",
       "entitlements": {
-        "com.apple.developer.healthkit": true,
-        "com.apple.developer.healthkit.background-delivery": true
+        "com.apple.developer.healthkit": true
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -47,6 +46,7 @@
       }
     },
     "plugins": [
+      "./plugins/withLocalNotificationsOnly",
       [
         "expo-camera",
         {
@@ -70,7 +70,13 @@
       ],
       "expo-web-browser",
       "expo-font",
-      "expo-health-connect"
+      "react-native-health",
+      [
+        "expo-notifications",
+        {
+          "enableBackgroundRemoteNotifications": false
+        }
+      ]
     ],
     "scheme": "com.anonymous.safescalehealth"
   }

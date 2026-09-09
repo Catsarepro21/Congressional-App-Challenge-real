@@ -9,8 +9,8 @@
  *   - Tab navigation state (activeIndex) wired to BottomNavBar + screen router
  */
 
-import React, { useState, useCallback } from 'react';
-import { View, StatusBar } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, StatusBar, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -23,6 +23,8 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import { BottomNavBar } from './src/components/BottomNavBar';
 import { useSafeScaleStore } from './src/store/useSafeScaleStore';
 
+import WebAlertHost from './src/components/WebAlertHost';
+
 const BACKGROUND = '#F3F5F7';
 
 export default function App() {
@@ -33,10 +35,22 @@ export default function App() {
     setActiveTab(index);
   }, []);
 
+  // AsyncStorage must finish restoring the profile before routing or writing it.
+  const [hydrated, setHydrated] = useState(useSafeScaleStore.persist.hasHydrated());
+  useEffect(() => {
+    const unsubscribe = useSafeScaleStore.persist.onFinishHydration(() => setHydrated(true));
+    setHydrated(useSafeScaleStore.persist.hasHydrated());
+    return unsubscribe;
+  }, []);
+  if (!hydrated) {
+    return <SafeAreaProvider><View style={{ flex: 1, justifyContent: 'center', backgroundColor: BACKGROUND }}><ActivityIndicator accessibilityLabel="Loading your profile" /></View></SafeAreaProvider>;
+  }
+
   // Show onboarding on first launch
   if (!hasCompletedOnboarding) {
     return (
       <SafeAreaProvider>
+        <WebAlertHost />
         <StatusBar barStyle="dark-content" backgroundColor={BACKGROUND} />
         <OnboardingScreen onDone={() => {}} />
       </SafeAreaProvider>
@@ -65,6 +79,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+      <WebAlertHost />
       <StatusBar barStyle="dark-content" backgroundColor={BACKGROUND} />
       <View style={{ flex: 1, backgroundColor: BACKGROUND }}>
         {renderScreen()}

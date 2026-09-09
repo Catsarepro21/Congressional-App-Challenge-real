@@ -241,6 +241,19 @@ const AnimatedRing: React.FC<AnimatedRingProps> = ({ score }) => {
         />
 
         {/* Animated fill arc — uses AnimatedCircle via composition */}
+        {Platform.OS === 'web' ? (
+        <Circle
+          cx={RING_SIZE / 2}
+          cy={RING_SIZE / 2}
+          r={RING_RADIUS}
+          stroke="url(#ringGradient)"
+          strokeWidth={RING_STROKE_WIDTH}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDashoffset={RING_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, score)) / 100)}
+        />
+        ) : (
         <AnimatedCircle
           cx={RING_SIZE / 2}
           cy={RING_SIZE / 2}
@@ -252,6 +265,7 @@ const AnimatedRing: React.FC<AnimatedRingProps> = ({ score }) => {
           strokeDasharray={RING_CIRCUMFERENCE}
           strokeDashoffset={strokeDashoffset}
         />
+        )}
       </Svg>
 
       {/* Centred score overlay */}
@@ -272,7 +286,7 @@ const AnimatedRing: React.FC<AnimatedRingProps> = ({ score }) => {
             letterSpacing: -1,
           }}
         >
-          {displayScore}
+          {score > 0 ? displayScore : '--'}
         </Text>
         <Text
           style={{
@@ -284,7 +298,7 @@ const AnimatedRing: React.FC<AnimatedRingProps> = ({ score }) => {
             letterSpacing: 1.2,
           }}
         >
-          {bandLabel[band]}
+          {score > 0 ? bandLabel[band] : 'No data'}
         </Text>
         <Text
           style={{
@@ -293,7 +307,7 @@ const AnimatedRing: React.FC<AnimatedRingProps> = ({ score }) => {
             marginTop: 2,
           }}
         >
-          Stability Score
+          Experimental score
         </Text>
       </View>
     </View>
@@ -1138,12 +1152,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     // Run async sync logic
     (async () => {
       try {
-        let heartRate = Math.floor(68 + Math.random() * 12);
-        let restingHeartRate = Math.floor(58 + Math.random() * 8);
-        let sleepMinutes = Math.floor(420 + Math.random() * 90);
-        let sleepConsistency = Math.floor(82 + Math.random() * 14);
-        let steps = Math.floor(8000 + Math.random() * 4000);
-        let activeCalories = Math.floor(350 + Math.random() * 200);
+        let heartRate = isTestMode ? Math.floor(68 + Math.random() * 12) : 0;
+        let restingHeartRate = isTestMode ? Math.floor(58 + Math.random() * 8) : 0;
+        let sleepMinutes = isTestMode ? Math.floor(420 + Math.random() * 90) : 0;
+        let sleepConsistency = isTestMode ? Math.floor(82 + Math.random() * 14) : 0;
+        let steps = isTestMode ? Math.floor(8000 + Math.random() * 4000) : 0;
+        let activeCalories = isTestMode ? Math.floor(350 + Math.random() * 200) : 0;
         
         let heightCm: number | undefined;
         let weightKg: number | undefined;
@@ -1174,6 +1188,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         if (Platform.OS === 'ios' && platform === 'apple') {
           try {
             const realData = await HealthDataService.fetchHealthData();
+            if (!realData) throw new Error('No readable health data. Check Health permissions and add measurements, or use manual logging.');
             if (realData) {
               heartRate = realData.heartRate;
               restingHeartRate = realData.restingHeartRate;
@@ -1209,6 +1224,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             }
           } catch (e) {
             console.warn('[HealthKit] Failed to fetch real health data:', e);
+            throw e;
           }
         } else if (platform === 'google-fit-rest') {
           try {
@@ -1403,9 +1419,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             }
           } catch (e) {
             console.warn('[HealthConnect] Failed to fetch real health data:', e);
+            throw e;
           }
         }
 
+        if (!isTestMode && ![heartRate, restingHeartRate, sleepMinutes, steps, activeCalories].some(v => Number.isFinite(v) && v > 0)) {
+          throw new Error('No readable health samples were returned. You can continue using manual logging.');
+        }
         setSyncMessage2(`Resting Heart Rate: ${restingHeartRate} bpm ✓`);
         setSyncStep(3);
 
@@ -1419,10 +1439,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         // Step 4: Import complete, update store
         await new Promise(resolve => setTimeout(resolve, 800));
 
-        const baseHistory = biometricCore.historicalRHR.length >= 3 
-          ? biometricCore.historicalRHR 
-          : [64, 66, 65, 63, 67];
-        const updatedHistory = [...baseHistory, restingHeartRate].slice(-14);
+        const baseHistory = biometricCore.historicalRHR;
+        const updatedHistory = restingHeartRate > 0 ? [...baseHistory, restingHeartRate].slice(-14) : baseHistory;
 
         const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
           restingHeartRate,
@@ -1500,7 +1518,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
             'Google Health authentication was cancelled or could not be completed.'
           );
         } else {
-          Alert.alert('Sync Failed', 'An unexpected error occurred during health tracker synchronization.');
+          Alert.alert('Sync Failed', err instanceof Error ? err.message : 'Health tracker synchronization failed.');
         }
       }
     })();
@@ -1635,9 +1653,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
     setDirectSyncStepText(`Initiating secure handshake with ${device.toUpperCase()}...`);
 
     try {
-      await DeviceAPIService.authorizeDevice(device, (step) => {
+      const authorized = await DeviceAPIService.authorizeDevice(device, (step) => {
         setDirectSyncStepText(step);
       });
+      if (!authorized) throw new Error('Authorization was not completed.');
       setDeviceConnected(device, true);
       Alert.alert(
         'Connection Successful',
@@ -1646,7 +1665,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
       );
     } catch (e) {
       console.warn(`[DeviceAPIService] Authorization failed for ${device}:`, e);
-      Alert.alert('Connection Failed', `Could not complete the OAuth handshake with ${device}.`);
+      Alert.alert('Integration unavailable', e instanceof Error ? e.message : 'This integration is unavailable.');
     } finally {
       setIsDirectSyncing(false);
       setDirectSyncDevice(null);
@@ -1671,9 +1690,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         const steps = data.steps || biometricCore.steps;
         const activeCalories = data.activeCalories || biometricCore.activeCalories;
 
-        const baseHistory = biometricCore.historicalRHR.length >= 3 
-          ? biometricCore.historicalRHR 
-          : [64, 66, 65, 63, 67];
+        const baseHistory = biometricCore.historicalRHR;
         const updatedHistory = [...baseHistory, restingHeartRate].slice(-14);
 
         const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
@@ -1696,9 +1713,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         const heartRate = data.heartRate || biometricCore.heartRate;
         const activeCalories = biometricCore.activeCalories + (data.activeCalories || 0);
 
-        const baseHistory = biometricCore.historicalRHR.length >= 3 
-          ? biometricCore.historicalRHR 
-          : [64, 66, 65, 63, 67];
+        const baseHistory = biometricCore.historicalRHR;
         const dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
           biometricCore.restingHeartRate,
           biometricCore.sleepConsistency,

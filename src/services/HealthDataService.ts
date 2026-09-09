@@ -14,12 +14,15 @@
  */
 
 import { Platform } from 'react-native';
+import { readAppleHealth } from './NativeHealthReader';
 import type { BiometricSummary } from '../types';
 
 let AppleHealthKit: any = null;
 if (Platform.OS === 'ios') {
   try {
-    AppleHealthKit = require('react-native-health').default;
+    const healthModule = require('react-native-health');
+    AppleHealthKit = healthModule.default ?? healthModule;
+    if (typeof AppleHealthKit?.initHealthKit !== 'function') AppleHealthKit = null;
   } catch (e) {
     console.warn('[HealthDataService] Failed to load react-native-health:', e);
   }
@@ -294,7 +297,7 @@ export class HealthDataService {
    * @param sleepConsistency - Sleep consistency score in [0, 100].
    * @param historicalRHR    - Rolling array of daily resting heart rate
    *                           recordings (max 14 entries).
-   * @returns                - Integer composite score in [1, 100], or 85 if
+   * @returns                - Integer experimental score in [1, 100], or 0 if
    *                           dataset is below minimum threshold.
    */
   public static calculateHealthStabilityScore(
@@ -304,9 +307,10 @@ export class HealthDataService {
   ): number {
     // ── PROTECTIVE GUARD BLOCK ──────────────────────────────────────────────
     // Enforce minimum dataset size before executing variance calculations.
-    // Returns a neutral 85 score during initial system setup weeks.
+    // Returns 0 (unavailable) until sufficient measured data exists.
+    if (![restingHeartRate, sleepConsistency, ...historicalRHR].every(Number.isFinite) || restingHeartRate <= 0 || sleepConsistency <= 0) return 0;
     if (historicalRHR.length < MIN_HISTORY_LENGTH) {
-      return INITIAL_SETUP_SCORE;
+      return 0;
     }
     // ────────────────────────────────────────────────────────────────────────
 
@@ -525,158 +529,8 @@ export class HealthDataService {
   /**
    * Fetches real telemetry data from iOS HealthKit.
    */
-  public static fetchHealthData(): Promise<{
-    steps: number;
-    activeCalories: number;
-    heartRate: number;
-    restingHeartRate: number;
-    sleepMinutes: number;
-    sleepConsistency: number;
-  } | null> {
-    return new Promise((resolve) => {
-      if (Platform.OS !== 'ios' || !AppleHealthKit) {
-        resolve(null);
-        return;
-      }
-
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
-      const optionsToday = {
-        startDate: todayStart.toISOString(),
-        endDate: new Date().toISOString(),
-      };
-
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const options24h = {
-        startDate: oneDayAgo.toISOString(),
-        endDate: new Date().toISOString(),
-      };
-
-      const results = {
-        steps: 0,
-        activeCalories: 0,
-        heartRate: 72,
-        restingHeartRate: 65,
-        sleepMinutes: 480, // default baseline
-        sleepConsistency: 85,
-      };
-
-      let pendingQueries = 5;
-      const checkDone = () => {
-        pendingQueries--;
-        if (pendingQueries === 0) {
-          resolve(results);
-        }
-      };
-
-      // 1. Step Count
-      if (typeof AppleHealthKit.getStepCount === 'function') {
-        AppleHealthKit.getStepCount(optionsToday, (err: any, res: any) => {
-          if (!err && res && typeof res.value === 'number') {
-            results.steps = Math.round(res.value);
-          }
-          checkDone();
-        });
-      } else {
-        checkDone();
-      }
-
-      // 2. Active Calories
-      if (typeof AppleHealthKit.getActiveEnergyBurned === 'function') {
-        AppleHealthKit.getActiveEnergyBurned(optionsToday, (err: any, res: any) => {
-          if (!err && res) {
-            if (Array.isArray(res)) {
-              const total = res.reduce((sum: number, sample: any) => sum + (sample.value || 0), 0);
-              results.activeCalories = Math.round(total);
-            } else if (typeof res.value === 'number') {
-              results.activeCalories = Math.round(res.value);
-            }
-          }
-          checkDone();
-        });
-      } else {
-        checkDone();
-      }
-
-      // 3. Heart Rate
-      if (typeof AppleHealthKit.getHeartRateSamples === 'function') {
-        AppleHealthKit.getHeartRateSamples(options24h, (err: any, res: any) => {
-          if (!err && res && Array.isArray(res) && res.length > 0) {
-            const values = res.map((sample: any) => sample.value).filter((v: number) => typeof v === 'number');
-            if (values.length > 0) {
-              const average = values.reduce((sum: number, v: number) => sum + v, 0) / values.length;
-              results.heartRate = Math.round(average);
-            }
-          }
-          checkDone();
-        });
-      } else {
-        checkDone();
-      }
-
-      // 4. Resting Heart Rate
-      const fetchRestingHR = () => {
-        if (typeof AppleHealthKit.getRestingHeartRateSamples === 'function') {
-          AppleHealthKit.getRestingHeartRateSamples(options24h, (err: any, res: any) => {
-            if (!err && res && Array.isArray(res) && res.length > 0) {
-              const values = res.map((sample: any) => sample.value).filter((v: number) => typeof v === 'number');
-              if (values.length > 0) {
-                results.restingHeartRate = Math.round(values[values.length - 1]);
-                checkDone();
-                return;
-              }
-            }
-            fallbackRestingHR();
-          });
-        } else {
-          fallbackRestingHR();
-        }
-      };
-
-      const fallbackRestingHR = () => {
-        if (typeof AppleHealthKit.getHeartRateSamples === 'function') {
-          AppleHealthKit.getHeartRateSamples(options24h, (err: any, res: any) => {
-            if (!err && res && Array.isArray(res) && res.length > 0) {
-              const values = res.map((sample: any) => sample.value).filter((v: number) => typeof v === 'number');
-              if (values.length > 0) {
-                results.restingHeartRate = Math.min(...values);
-              }
-            }
-            checkDone();
-          });
-        } else {
-          checkDone();
-        }
-      };
-
-      fetchRestingHR();
-
-      // 5. Sleep Duration
-      if (typeof AppleHealthKit.getSleepSamples === 'function') {
-        AppleHealthKit.getSleepSamples(options24h, (err: any, res: any) => {
-          if (!err && res && Array.isArray(res)) {
-            let sleepMs = 0;
-            for (const sample of res) {
-              const val = String(sample.value).toUpperCase();
-              if (val === 'ASLEEP' || val === '1' || sample.value === 1) {
-                const start = new Date(sample.startDate).getTime();
-                const end = new Date(sample.endDate).getTime();
-                if (end > start) {
-                  sleepMs += (end - start);
-                }
-              }
-            }
-            if (sleepMs > 0) {
-              results.sleepMinutes = Math.round(sleepMs / 60000);
-            }
-          }
-          checkDone();
-        });
-      } else {
-        checkDone();
-      }
-    });
+  public static fetchHealthData() {
+    return Platform.OS === 'ios' ? readAppleHealth(AppleHealthKit) : Promise.resolve(null);
   }
 
   /**
@@ -745,10 +599,10 @@ export class HealthDataService {
       const results = {
         steps: 0,
         activeCalories: 0,
-        heartRate: 72,
-        restingHeartRate: 65,
-        sleepMinutes: 480,
-        sleepConsistency: 85,
+        heartRate: 0,
+        restingHeartRate: 0,
+        sleepMinutes: 0,
+        sleepConsistency: 0,
       };
 
       // 1. Steps

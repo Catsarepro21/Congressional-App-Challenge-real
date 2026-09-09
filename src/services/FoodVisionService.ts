@@ -4,14 +4,14 @@
  *
  * Supports two operating modes:
  *   - OFFLINE (default): Keyword heuristics against a curated meal database
- *   - GEMINI (opt-in): Google Gemini 1.5 Flash Vision API for high accuracy
+ *   - GEMINI (opt-in): Google Gemini 2.5 Flash Vision API for high accuracy
  *
  * Both modes return a FoodAnalysisResult with identical shape so the UI
  * doesn't need to branch.
  */
 
 import type { FoodAnalysisResult } from '../types';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // ---------------------------------------------------------------------------
 // Offline food database — common meal templates
@@ -115,7 +115,7 @@ const analyzeOffline = (imageUri: string): FoodAnalysisResult => {
 // ---------------------------------------------------------------------------
 
 const GEMINI_API_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 const FOOD_ANALYSIS_PROMPT = `You are a professional nutritionist analyzing a food photo.
 Identify the food item(s) in this image and provide a nutritional estimate.

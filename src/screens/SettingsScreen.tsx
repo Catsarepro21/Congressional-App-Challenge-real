@@ -208,10 +208,7 @@ export const SettingsScreen: React.FC = () => {
   // Manual Drug & Food Interaction Checker states
   const [selectedDrugA, setSelectedDrugA] = useState('Lisinopril');
   const [selectedDrugB, setSelectedDrugB] = useState('Spironolactone');
-  const [interactionResult, setInteractionResult] = useState<{ severity: 'None' | 'Warning' | 'High'; text: string } | null>({
-    severity: 'High',
-    text: 'Select items below and check potential clinical interactions.'
-  });
+  const [interactionResult, setInteractionResult] = useState<{ severity: 'None' | 'Warning' | 'High'; text: string } | null>(null);
 
   const runManualInteractionCheck = (drugA: string, drugB: string) => {
     const list = [drugA.toLowerCase(), drugB.toLowerCase()];
@@ -388,7 +385,7 @@ export const SettingsScreen: React.FC = () => {
         {
           name: patientName,
           dob: patientDob,
-          bloodType: patientGender === 'male' ? 'A-Positive' : 'O-Positive',
+          bloodType: profile.bloodType || 'Unknown',
         },
         data.records,
         data.medications,
@@ -1027,7 +1024,7 @@ export const SettingsScreen: React.FC = () => {
           </View>
           
           <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 16, lineHeight: 16 }}>
-            Enable advanced Google Gemini features for food photo scanning and weekly report coaching. Your key is stored securely offline on your device.
+            Enable advanced Google Gemini features for food photo scanning and weekly report coaching. Your key is saved in app storage, which is not encrypted by this app.
           </Text>
 
           {/* Gemini API Key Input */}
@@ -1062,7 +1059,7 @@ export const SettingsScreen: React.FC = () => {
                 Enable Gemini Food Vision AI
               </Text>
               <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 14 }}>
-                Uses Gemini 1.5 Flash Vision to identify food items and estimate macros from captured photos.
+                Uses Gemini 2.5 Flash Vision to identify food items and estimate macros from captured photos.
               </Text>
             </View>
             <Pressable
@@ -1128,7 +1125,7 @@ export const SettingsScreen: React.FC = () => {
                 Enable Cloud AI Document Parsing
               </Text>
               <Text style={{ fontSize: 11, color: COLORS.textSecondary, marginTop: 2, lineHeight: 14 }}>
-                Uses Gemini 1.5 Flash Vision to securely extract clinical records from scanned document photos. Strict PII removal runs on-device.
+                Uploads the complete document photo to Google Gemini for extraction. Identifying details in the photo are sent too; asking the model to omit them from its response does not redact the upload.
               </Text>
             </View>
             <Pressable
@@ -1464,7 +1461,7 @@ export const SettingsScreen: React.FC = () => {
 
           {/* Interaction result banner */}
           {(() => {
-            const res = interactionResult || { severity: 'High', text: 'Select two items to run an offline clinical cross-check.' };
+            const res = interactionResult || { severity: 'None', text: 'Select two items to run an offline clinical cross-check.' };
             const isNone = res.severity === 'None';
             const isWarning = res.severity === 'Warning';
             const isHigh = res.severity === 'High';
@@ -1477,7 +1474,7 @@ export const SettingsScreen: React.FC = () => {
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                   <MaterialCommunityIcons name={icon} size={18} color={bannerBorder} style={{ marginRight: 6 }} />
                   <Text style={{ fontSize: 12, fontWeight: '800', color: isHigh ? COLORS.alert : isWarning ? '#E65100' : COLORS.primary }}>
-                    {isHigh ? 'CRITICAL RISK DETECTED' : isWarning ? 'ADVISORY WARNING' : 'NO INTERACTIONS DETECTED'}
+                    {!interactionResult ? 'SELECT ITEMS TO CHECK' : isHigh ? 'CRITICAL RISK DETECTED' : isWarning ? 'ADVISORY WARNING' : 'NO INTERACTIONS DETECTED'}
                   </Text>
                 </View>
                 <Text style={{ fontSize: 11.5, color: COLORS.textPrimary, lineHeight: 16, fontWeight: '600' }}>
@@ -1513,7 +1510,7 @@ export const SettingsScreen: React.FC = () => {
                 </Text>
               </View>
               <Text style={{ fontSize: 12, color: COLORS.textSecondary, lineHeight: 16 }}>
-                Use an offline 2B parameter LLM to analyze chemical and nutritional safety metrics from labels. 100% private.
+                Looks up ingredients in a small offline dictionary. This feature does not run a language model or provide a complete safety assessment.
               </Text>
             </View>
             <Pressable
@@ -1557,7 +1554,7 @@ export const SettingsScreen: React.FC = () => {
                 </Text>
               </View>
               <Text style={{ fontSize: 12, color: COLORS.textSecondary, lineHeight: 16 }}>
-                Seed simulated biometric histories and daily medication slots to test layouts offline without active trackers.
+                Preview sample data temporarily. Your personal records are restored when you switch this off; demo changes are not saved.
               </Text>
             </View>
              <Pressable
