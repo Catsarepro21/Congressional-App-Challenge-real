@@ -1,8 +1,13 @@
-const { withEntitlementsPlist } = require('expo/config-plugins');
+const { withEntitlementsPlist } = require("expo/config-plugins");
 
-// This app schedules local reminders; it does not register an APNs push token.
-// APNs is not available to Personal Teams and is unnecessary for local reminders.
-module.exports = config => withEntitlementsPlist(config, mod => {
-  delete mod.modResults['aps-environment'];
-  return mod;
-});
+module.exports = function withLocalNotificationsOnly(config) {
+  return withEntitlementsPlist(config, (mod) => {
+    // Explicitly add HealthKit to the generated iOS entitlements.
+    mod.modResults["com.apple.developer.healthkit"] = true;
+
+    // The app uses local notifications and does not need APNs.
+    delete mod.modResults["aps-environment"];
+
+    return mod;
+  });
+};
