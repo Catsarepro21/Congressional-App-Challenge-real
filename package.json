@@ -7,32 +7,38 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "~56.0.11",
-    "expo-build-properties": "~56.0.18",
+    "expo": "~56.0.21",
+    "expo-build-properties": "~56.0.27",
     "expo-camera": "~56.0.8",
-    "expo-file-system": "^56.0.8",
-    "expo-font": "~56.0.6",
-    "expo-health-connect": "^0.1.1",
-    "expo-location": "~56.0.17",
-    "expo-notifications": "~56.0.17",
+    "expo-file-system": "~56.0.11",
+    "expo-font": "~56.0.7",
+    "expo-location": "~56.0.25",
+    "expo-notifications": "~56.0.25",
     "expo-sensors": "^56.0.6",
     "expo-status-bar": "~56.0.4",
-    "expo-web-browser": "~56.0.5",
+    "expo-web-browser": "~56.0.6",
     "react": "19.2.3",
+    "react-dom": "^19.2.3",
     "react-native": "0.85.3",
     "react-native-health": "^1.15.0",
     "react-native-health-connect": "^3.5.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
+    "react-native-web": "^0.21.2",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -63,16 +63,15 @@ export const NotificationService = {
       const hour = parseInt(hourStr, 10);
       const minute = parseInt(minuteStr, 10);
 
-      if (isNaN(hour) || isNaN(minute)) return null;
+      if (!/^\d{2}:\d{2}$/.test(time) || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
 
       // Cancel any pre-existing notification for this medication ID to prevent duplicates
       await NotificationService.cancelMedicationReminder(medId);
 
       const trigger: Notifications.NotificationTriggerInput = {
-        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
         hour,
         minute,
-        repeats: true,
       };
 
       const identifier = await Notifications.scheduleNotificationAsync({

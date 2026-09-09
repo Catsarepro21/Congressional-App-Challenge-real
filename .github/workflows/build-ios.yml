@@ -3,331 +3,97 @@ name: Build iOS IPA (Unsigned)
 on:
   workflow_dispatch:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: Build iOS IPA (Unsigned)
-    runs-on: macos-14
+    runs-on: macos-26
+    timeout-minutes: 60
     env:
-      IPA_PATH: ''
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      COCOAPODS_DISABLE_STATS: 'true'
+      EXPO_NO_DOTENV: '1'
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Select Xcode Version
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install Project Dependencies
-        run: npm ci
-
-      - name: Patch Expo Packages for Swift Tools version compatibility
+      - uses: actions/checkout@v4
+      - name: Select SDK 56 compatible Xcode
         run: |
-          python3 << 'PYEOF'
-          import glob, re
-
-          # Find and patch all Package.swift files to use Swift 6.0 and remove upcoming features
-          for package_swift in glob.glob('node_modules/**/Package.swift', recursive=True):
-              try:
-                  with open(package_swift, 'r', encoding='utf-8') as f:
-                      content = f.read()
-                  
-                  # Downgrade Swift tools version from 6.2.0 to 6.0.0
-                  content = re.sub(r'\.swift\("6\.2\.0"\)', '.swift("6.0.0")', content)
-                  content = re.sub(r'swift-tools-version:6\.2\.0', 'swift-tools-version:6.0.0', content)
-                  content = re.sub(r'swift-tools-version:\s*6\.2\.0', 'swift-tools-version: 6.0.0', content)
-                  content = re.sub(r'swift-tools-version:\s*6\.2', 'swift-tools-version: 6.0', content)
-                  
-                  # Remove all Swift upcoming feature flags along with their trailing commas and formatting safely
-                  content = re.sub(r'\s*\.enableUpcomingFeature\((?:"[^"]+"|\'[^\']+\')\),?\s*\n', '\n', content)
-                  
-                  # Remove trailing commas in argument lists before closing parentheses (invalid in Swift 6.0)
-                  content = re.sub(r',\s*\n\s*\)', lambda m: m.group(0).replace(',', '', 1), content)
-                  
-                  with open(package_swift, 'w', encoding='utf-8') as f:
-                      f.write(content)
-                  print(f'Patched Swift version, features & commas in: {package_swift}')
-              except Exception as e:
-                  print(f'Error patching {package_swift}: {e}')
-
-          # 1. Patch Package.swift in expo-modules-jsi (correct path is under apple/)
-          path = 'node_modules/expo-modules-jsi/apple/Package.swift'
-          try:
-              with open(path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              
-              target_flags = '"-enable-library-evolution",'
-              replacement_flags = '"-enable-library-evolution",\n          "-enable-experimental-feature", "NonescapableTypes",'
-              if target_flags in content and 'NonescapableTypes' not in content:
-                  content = content.replace(target_flags, replacement_flags)
-              with open(path, 'w', encoding='utf-8') as f:
-                  f.write(content)
-              print('Package.swift flags patched')
-          except Exception as e:
-              print(f'Error Package.swift: {e}')
-
-          # 2. Patch 'weak let' to 'weak var' in JSI Swift files
-          for p in glob.glob('node_modules/expo-modules-jsi/**/*.swift', recursive=True):
-              try:
-                  with open(p, 'r', encoding='utf-8') as f:
-                      content = f.read()
-                  if 'weak let' in content:
-                      content = content.replace('weak let', 'nonisolated(unsafe) weak var')
-                      with open(p, 'w', encoding='utf-8') as f:
-                          f.write(content)
-                      print(f'Patched: {p}')
-              except Exception as e:
-                  print(f'Error {p}: {e}')
-
-          # 3. Patch C++ Header files to add inline factories for Swift 6.0 compatibility
-          def patch_header(p_path, search_term, factory_code):
-              try:
-                  with open(p_path, 'r', encoding='utf-8') as f:
-                      content = f.read()
-                  if search_term in content and factory_code not in content:
-                      content = content.replace(search_term, factory_code + '\n' + search_term)
-                      with open(p_path, 'w', encoding='utf-8') as f:
-                          f.write(content)
-                      print(f"Patched C++ header: {p_path}")
-              except Exception as e:
-                  print(f"Error {p_path}: {e}")
-
-          patch_header(
-              'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h',
-              '} // namespace expo',
-              'inline RuntimeScheduler* _Nonnull createRuntimeScheduler(void * _Nullable scheduler, RuntimeScheduler::ScheduleFn _Nonnull fn) noexcept {\n  return new RuntimeScheduler(scheduler, fn);\n}\ninline RuntimeScheduler* _Nonnull createDefaultRuntimeScheduler() noexcept {\n  return new RuntimeScheduler();\n}'
-          )
-
-          patch_header(
-              'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/NativeState.h',
-              '} // namespace expo',
-              'inline NativeState* _Nonnull createNativeState(void * _Nonnull context, void (* _Nonnull deallocator)(void * _Nonnull)) noexcept {\n  return new NativeState(context, deallocator);\n}'
-          )
-
-          patch_header(
-              'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/HostFunctionClosure.h',
-              '} // namespace expo',
-              'inline HostFunctionClosure* _Nonnull createHostFunctionClosure(void * _Nonnull context, HostFunctionClosure::Closure* _Nonnull closure, void (* _Nonnull deallocator)(void * _Nonnull)) noexcept {\n  return new HostFunctionClosure(context, closure, deallocator);\n}'
-          )
-
-          # 4. Patch JavaScriptRuntime.swift
-          js_runtime_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift'
-          try:
-              with open(js_runtime_path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              content = content.replace('/^[a-zA-Z_$][a-zA-Z0-9_$]*$/', 'try! Regex("^[a-zA-Z_$][a-zA-Z0-9_$]*$")')
-              content = content.replace('_ arguments: consuming JavaScriptValuesBuffer,', '_ arguments: consuming JavaScriptValuesBuffer')
-              content = content.replace('expo.RuntimeScheduler()', 'expo.createDefaultRuntimeScheduler()')
-              content = content.replace('expo.RuntimeScheduler(scheduler, fn)', 'expo.createRuntimeScheduler(scheduler, fn)')
-              content = content.replace('expo.HostFunctionClosure(context, call, deallocate)', 'expo.createHostFunctionClosure(context, call, deallocate)')
-              content = content.replace('vector.push_back(consuming: propNameId)', 'vector.push_back(consume propNameId)')
-              with open(js_runtime_path, 'w', encoding='utf-8') as f:
-                  f.write(content)
-              print('JavaScriptRuntime.swift patched')
-          except Exception as e:
-              print(f'Error JavaScriptRuntime.swift: {e}')
-
-          # 5. Patch JavaScriptNativeState.swift
-          js_native_state_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptNativeState.swift'
-          try:
-              with open(js_native_state_path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              content = content.replace('expo.NativeState(ptr, deallocate)', 'expo.createNativeState(ptr, deallocate)')
-              with open(js_native_state_path, 'w', encoding='utf-8') as f:
-                  f.write(content)
-              print('JavaScriptNativeState.swift patched')
-          except Exception as e:
-              print(f'Error JavaScriptNativeState.swift: {e}')
-
-          # 6. Patch JavaScriptError.swift
-          js_error_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptError.swift'
-          try:
-              with open(js_error_path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              content = content.replace('  public var message: String {', '  var message: String {')
-              with open(js_error_path, 'w', encoding='utf-8') as f:
-                  f.write(content)
-              print('JavaScriptError.swift patched')
-          except Exception as e:
-              print(f'Error JavaScriptError.swift: {e}')
-
-          # 7. Patch Task+immediate.swift
-          task_immediate_path = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Extensions/Task+immediate.swift'
-          try:
-              with open(task_immediate_path, 'w', encoding='utf-8') as f:
-                  f.write('extension Task where Failure == any Error {\n  @discardableResult\n  public static func immediate_polyfill(\n    name: String? = nil,\n    priority: TaskPriority? = nil,\n    @_inheritActorContext @_implicitSelfCapture operation: sending @escaping @isolated(any) () async throws -> Success\n  ) -> Task<Success, any Error> {\n    return Task(priority: priority, operation: operation)\n  }\n}\n')
-              print('Task+immediate.swift patched')
-          except Exception as e:
-              print(f'Error Task+immediate.swift: {e}')
-
-          print("=== Expo JSI patches finished ===")
-          PYEOF
-
-      - name: Show active Xcode and Swift versions
-        run: |
-          xcode-select -p
+          set -euo pipefail
+          if [[ -d /Applications/Xcode_26.4.app/Contents/Developer ]]; then
+            XCODE_DEVELOPER=/Applications/Xcode_26.4.app/Contents/Developer
+          elif [[ -d /Applications/Xcode_26.4.1.app/Contents/Developer ]]; then
+            XCODE_DEVELOPER=/Applications/Xcode_26.4.1.app/Contents/Developer
+          else
+            echo 'Xcode 26.4 or 26.4.1 is required by Expo SDK 56.' >&2
+            ls -1 /Applications/Xcode*.app 2>/dev/null || true
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_DEVELOPER"
           xcodebuild -version
           swift --version
-
-      - name: Expo Prebuild
-        run: npx expo prebuild --platform ios --clean
-
-      - name: Configure Node path for Xcode scripts
+          pod --version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Generate iOS project without altering dependency sources
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Inspect generated native configuration
         run: |
-          NODE_PATH=$(command -v node)
-          echo "NODE_BINARY=$NODE_PATH" >> $GITHUB_ENV
-          echo "export NODE_BINARY=$NODE_PATH" > ios/.xcode.env.local
-          sudo mkdir -p /usr/local/bin
-          sudo ln -sf "$NODE_PATH" /usr/local/bin/node
-
-      - name: Patch Podfile for CI (disable code signing in all pod targets)
-        run: |
-          python3 << 'PYEOF'
-          import re
-
-          with open('ios/Podfile', 'r') as f:
-              content = f.read()
-
-          injection = """
-            # CI: disable code signing and script sandboxing for all targets
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['CODE_SIGNING_ALLOWED']          = 'NO'
-                config.build_settings['CODE_SIGNING_REQUIRED']         = 'NO'
-                config.build_settings['CODE_SIGN_IDENTITY']            = ''
-                config.build_settings['EXPANDED_CODE_SIGN_IDENTITY']   = ''
-                config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                config.build_settings['SWIFT_VERSION']                 = '6.0'
-              end
-            end
-          """
-
-          if 'post_install do |installer|' in content:
-              patched = re.sub(
-                  r'(post_install do \|installer\|)',
-                  r'\1' + injection,
-                  content,
-                  count=1
-              )
-          else:
-              patched = content + "\npost_install do |installer|\n" + injection + "\nend\n"
-
-          with open('ios/Podfile', 'w') as f:
-              f.write(patched)
-
-          print("Podfile patched successfully")
-          PYEOF
-
-      - name: Patch ExpoModulesJSI build script (signing flags as xcodebuild build settings)
-        run: |
-          SCRIPT="node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh"
-
-          python3 << 'PYEOF'
-          import re
-          script_path = 'node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh'
-          with open(script_path, 'r') as f:
-              content = f.read()
-
-          print("=== BEFORE patch: xcodebuild-related lines ===")
-          for i, line in enumerate(content.splitlines(), 1):
-              if any(k in line for k in ['xcodebuild', 'SKIP_INSTALL', 'BUILD_LIBRARY', 'quiet', 'CODE_SIGNING']):
-                  print(f"{i}: {line}")
-
-          # Fix 1: Remove -quiet so we can see the real error in CI logs
-          content = re.sub(r'[ \t]*-quiet[ \t]*\\?\r?\n', '', content)
-
-          # Fix 2: Add signing flags and SWIFT_VERSION as xcodebuild BUILD SETTINGS
-          signing_flags = (
-              'CODE_SIGNING_ALLOWED=NO \\\n'
-              '    CODE_SIGNING_REQUIRED=NO \\\n'
-              '    CODE_SIGN_IDENTITY="" \\\n'
-              '    EXPANDED_CODE_SIGN_IDENTITY="" \\\n'
-              '    SWIFT_VERSION=6.0 \\\n'
-          )
-
-          # Find xcodebuild command and inject flags right after it starts
-          content = re.sub(
-              r'(xcodebuild[^\n]*\\\n)',
-              r'\1    ' + signing_flags,
-              content
-          )
-
-          with open(script_path, 'w') as f:
-              f.write(content)
-
-          print("\n=== AFTER patch: xcodebuild-related lines ===")
-          with open(script_path, 'r') as f:
-              patched = f.read()
-          for i, line in enumerate(patched.splitlines(), 1):
-              if any(k in line for k in ['xcodebuild', 'SKIP_INSTALL', 'BUILD_LIBRARY', 'CODE_SIGNING', 'SWIFT_COMPILATION']):
-                  print(f"{i}: {line}")
-
-          assert 'CODE_SIGNING_ALLOWED=NO' in patched, "PATCH FAILED: signing flags not in script"
-          print("\nVerification PASSED")
-          PYEOF
-
-      - name: Install CocoaPods
+          set -euo pipefail
+          test -f ios/SafeScaleHealth.xcworkspace/contents.xcworkspacedata
+          test -f ios/SafeScaleHealth/SafeScaleHealth.entitlements
+          /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.healthkit' ios/SafeScaleHealth/SafeScaleHealth.entitlements
+          if /usr/libexec/PlistBuddy -c 'Print :aps-environment' ios/SafeScaleHealth/SafeScaleHealth.entitlements; then
+            echo 'Unexpected APNs entitlement: local reminders do not require Push Notifications.' >&2
+            exit 1
+          fi
+      - name: Install pods
         working-directory: ios
-        run: pod install --repo-update
-
-      - name: Build Unsigned iOS App with Xcode
-        env:
-          NODE_BINARY: ${{ env.NODE_BINARY }}
         run: |
-          set -o pipefail
+          printf 'export NODE_BINARY="%s"\n' "$(command -v node)" > .xcode.env.local
+          pod install --repo-update
+          test -f SafeScaleHealth.xcworkspace/contents.xcworkspacedata
+      - name: Compile unsigned device app
+        shell: bash
+        run: |
+          set -euo pipefail
           xcodebuild \
             -workspace ios/SafeScaleHealth.xcworkspace \
             -scheme SafeScaleHealth \
-            -sdk iphoneos \
             -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE="" \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            NODE_BINARY="$NODE_BINARY" \
-            clean build 2>&1 | tee xcodebuild.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "====== BUILD ERRORS ======"
-            grep -E "error:|Error:|BUILD FAILED|PhaseScriptExecution" xcodebuild.log | head -80
-            exit $EXIT_CODE
-          fi
-
-      - name: Package App into iOS IPA
+            build 2>&1 | tee xcodebuild.log
+      - name: Package unsigned IPA (requires signing before installation)
+        shell: bash
         run: |
           set -euo pipefail
-          APP_PATH=$(find build/Build/Products -type d -path "*/Release-iphoneos/*.app" -print -quit)
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found under */Release-iphoneos/*.app."
-            find build/Build/Products -type d -name "*.app" -print
-            exit 1
-          fi
-          APP_NAME=$(basename "$APP_PATH" .app)
-          IPA_NAME="${APP_NAME}.ipa"
-          rm -rf ./Payload
-          mkdir -p Payload
-          ditto "$APP_PATH" "Payload/${APP_NAME}.app"
-          ditto -c -k --sequesterRsrc --keepParent Payload "$IPA_NAME"
-          printf '%s\n' "IPA_PATH=$IPA_NAME" >> "$GITHUB_ENV"
-
-      - name: Upload iOS IPA Artifact
-        if: env.IPA_PATH != ''
-        uses: actions/upload-artifact@v4
+          APP_PATH=build/Build/Products/Release-iphoneos/SafeScaleHealth.app
+          test -d "$APP_PATH"
+          mkdir -p package/Payload
+          ditto "$APP_PATH" package/Payload/SafeScaleHealth.app
+          cd package
+          zip -qry SafeScaleHealth-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
         with:
           name: SafeScaleHealth-Unsigned-IPA
-          path: ${{ env.IPA_PATH }}
-
-      - name: Upload Build Logs on Failure
-        if: failure()
+          path: package/SafeScaleHealth-unsigned.ipa
+          if-no-files-found: error
+      - name: Keep build diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: ios-build-logs
           path: xcodebuild.log
+          if-no-files-found: ignore

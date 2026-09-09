@@ -3,8 +3,17 @@
     "version": ">= 10.0.0"
   },
   "build": {
+    "simulator": {
+      "ios": {
+        "simulator": true,
+        "image": "sdk-56"
+      }
+    },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "image": "sdk-56"
+      }
     }
   }
 }

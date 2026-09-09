@@ -35,7 +35,9 @@ import { GoogleHealthService } from '../services/GoogleHealthService';
 let AppleHealthKit: any = null;
 if (Platform.OS === 'ios') {
   try {
-    AppleHealthKit = require('react-native-health').default;
+    const healthModule = require('react-native-health');
+    AppleHealthKit = healthModule.default ?? healthModule;
+    if (typeof AppleHealthKit?.initHealthKit !== 'function') AppleHealthKit = null;
   } catch (e) {
     console.warn('[OnboardingScreen] Failed to load react-native-health:', e);
   }
@@ -438,7 +440,7 @@ export default function OnboardingScreen({ onDone }: Props) {
     const profile: UserProfile = {
       name: name.trim() || 'User',
       dob: dob.trim() || '2000-01-01',
-      bloodType: bloodType || 'O-Positive',
+      bloodType: bloodType || 'Unknown',
       height: isNaN(heightVal) ? 170 : Math.round(heightVal * 2.54 * 10) / 10,
       weight: isNaN(weightVal) ? 70 : Math.round(weightVal * 0.45359237 * 10) / 10,
       organDonor: false,

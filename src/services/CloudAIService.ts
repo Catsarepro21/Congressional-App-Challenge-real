@@ -1,16 +1,16 @@
 /**
  * @file src/services/CloudAIService.ts
- * @description Cloud-backed Visual AI services using Google Gemini 1.5 Flash Vision.
+ * @description Cloud-backed Visual AI services using Google Gemini 2.5 Flash Vision.
  *
  * Provides:
  *   - analyzeIngredientsOCR: extracts product name, brand, and clean ingredients list.
  *   - analyzeDocumentOCR: reads medical records (prescriptions, labs, vaccines) with strict PII removal.
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const GEMINI_API_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 // Prompt to extract food ingredients
 const INGREDIENT_OCR_PROMPT = `You are a professional food label scanner.
@@ -51,7 +51,7 @@ const uriToBase64 = async (uri: string): Promise<string> => {
 };
 
 /**
- * Executes a Gemini 1.5 Flash Vision content generation request.
+ * Executes a Gemini 2.5 Flash Vision content generation request.
  */
 const executeGeminiRequest = async (
   imageUri: string,

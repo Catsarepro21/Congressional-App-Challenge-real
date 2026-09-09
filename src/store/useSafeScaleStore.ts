@@ -121,7 +121,7 @@ const generateMilestones = (dobString: string): VaccineMilestone[] => {
 const DEFAULT_USER_PROFILE: UserProfile = {
   name: 'Jane Doe',
   dob: '1995-08-24',
-  bloodType: 'O-Positive',
+  bloodType: 'Unknown',
   height: 168,
   weight: 62,
   organDonor: false,
@@ -266,6 +266,8 @@ const updateAdherenceInHistory = (
 // ---------------------------------------------------------------------------
 // Store factory
 // ---------------------------------------------------------------------------
+
+let demoSnapshot: SafeScaleState | null = null;
 
 export const useSafeScaleStore = create<SafeScaleState>()(
   persist(
@@ -564,7 +566,13 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   /** Toggles Test/Simulation Mode on/off. Seeding or clearing data. */
   toggleTestMode: (): void => {
     set((state) => {
-      const nextTestMode = !state.isTestMode;
+      if (state.isTestMode && demoSnapshot) {
+        const restored = demoSnapshot;
+        demoSnapshot = null;
+        return { ...restored, isTestMode: false };
+      }
+      demoSnapshot = { ...state };
+      const nextTestMode = true;
       return {
         isTestMode: nextTestMode,
         connectedDevices: nextTestMode ? {
@@ -1161,7 +1169,10 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     {
       name: 'safescale-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
+      partialize: (state) => {
+        // Demo edits never replace the real profile on disk, including after a restart.
+        if (state.isTestMode && demoSnapshot) state = demoSnapshot;
+        return ({
         userAllergies: state.userAllergies,
         medicationSchedule: state.medicationSchedule,
         biometricCore: state.biometricCore,
@@ -1186,7 +1197,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         appWorkouts: state.appWorkouts,
         lastSuccessfulSync: state.lastSuccessfulSync,
         connectedDevices: state.connectedDevices,
-      }),
+      });
+      },
     }
   )
 );
