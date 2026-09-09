@@ -12,84 +12,111 @@ jobs:
   build:
     runs-on: macos-26
     timeout-minutes: 60
+
     env:
-      CI: '1'
-      EXPO_NO_TELEMETRY: '1'
-      COCOAPODS_DISABLE_STATS: 'true'
-      EXPO_NO_DOTENV: '1'
+      CI: "1"
+      EXPO_NO_TELEMETRY: "1"
+      COCOAPODS_DISABLE_STATS: "true"
+      EXPO_NO_DOTENV: "1"
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Select SDK 56 compatible Xcode
         run: |
           set -euo pipefail
+
           if [[ -d /Applications/Xcode_26.4.app/Contents/Developer ]]; then
             XCODE_DEVELOPER=/Applications/Xcode_26.4.app/Contents/Developer
           elif [[ -d /Applications/Xcode_26.4.1.app/Contents/Developer ]]; then
             XCODE_DEVELOPER=/Applications/Xcode_26.4.1.app/Contents/Developer
           else
-            echo 'Xcode 26.4 or 26.4.1 is required by Expo SDK 56.' >&2
+            echo "Xcode 26.4 or 26.4.1 is required by Expo SDK 56." >&2
             ls -1 /Applications/Xcode*.app 2>/dev/null || true
             exit 1
           fi
+
           sudo xcode-select -s "$XCODE_DEVELOPER"
           xcodebuild -version
           swift --version
           pod --version
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - name: Generate iOS project without altering dependency sources
+
+      - name: Generate iOS project
         run: npx expo prebuild --platform ios --clean --no-install
+
       - name: Inspect generated native configuration
         run: |
           set -euo pipefail
+
           test -f ios/SafeScaleHealth.xcworkspace/contents.xcworkspacedata
-          test -f ios/SafeScaleHealth/SafeScaleHealth.entitlements
-          /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.healthkit' ios/SafeScaleHealth/SafeScaleHealth.entitlements
-          if /usr/libexec/PlistBuddy -c 'Print :aps-environment' ios/SafeScaleHealth/SafeScaleHealth.entitlements; then
-            echo 'Unexpected APNs entitlement: local reminders do not require Push Notifications.' >&2
+
+          ENTITLEMENTS=ios/SafeScaleHealth/SafeScaleHealth.entitlements
+          test -f "$ENTITLEMENTS"
+
+          echo "Generated entitlements:"
+          plutil -p "$ENTITLEMENTS"
+
+          if ! plutil -p "$ENTITLEMENTS" | grep -q '"com.apple.developer.healthkit" =>'; then
+            echo "HealthKit entitlement is missing." >&2
             exit 1
           fi
+
+          if plutil -p "$ENTITLEMENTS" | grep -q '"aps-environment" =>'; then
+            echo "Unexpected APNs entitlement." >&2
+            exit 1
+          fi
+
       - name: Install pods
         working-directory: ios
         run: |
           printf 'export NODE_BINARY="%s"\n' "$(command -v node)" > .xcode.env.local
           pod install --repo-update
           test -f SafeScaleHealth.xcworkspace/contents.xcworkspacedata
+
       - name: Compile unsigned device app
-        shell: bash
         run: |
           set -euo pipefail
+
           xcodebuild \
             -workspace ios/SafeScaleHealth.xcworkspace \
             -scheme SafeScaleHealth \
             -configuration Release \
             -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
+            -destination "generic/platform=iOS" \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee xcodebuild.log
-      - name: Package unsigned IPA (requires signing before installation)
-        shell: bash
+
+      - name: Package unsigned IPA
         run: |
           set -euo pipefail
+
           APP_PATH=build/Build/Products/Release-iphoneos/SafeScaleHealth.app
           test -d "$APP_PATH"
+
           mkdir -p package/Payload
           ditto "$APP_PATH" package/Payload/SafeScaleHealth.app
+
           cd package
           zip -qry SafeScaleHealth-unsigned.ipa Payload
+
       - uses: actions/upload-artifact@v4
         with:
           name: SafeScaleHealth-Unsigned-IPA
           path: package/SafeScaleHealth-unsigned.ipa
           if-no-files-found: error
+
       - name: Keep build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
