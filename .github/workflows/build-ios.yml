@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select SDK 56 compatible Xcode
+      - name: Select Xcode
         run: |
           set -euo pipefail
 
@@ -31,14 +31,13 @@ jobs:
           elif [[ -d /Applications/Xcode_26.4.1.app/Contents/Developer ]]; then
             XCODE_DEVELOPER=/Applications/Xcode_26.4.1.app/Contents/Developer
           else
-            echo "Xcode 26.4 or 26.4.1 is required by Expo SDK 56." >&2
+            echo "Required Xcode version not found."
             ls -1 /Applications/Xcode*.app 2>/dev/null || true
             exit 1
           fi
 
           sudo xcode-select -s "$XCODE_DEVELOPER"
           xcodebuild -version
-          swift --version
           pod --version
 
       - uses: actions/setup-node@v4
@@ -53,21 +52,21 @@ jobs:
       - name: Generate iOS project
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Verify generated iOS project
+      - name: Verify generated project
         run: |
           set -euo pipefail
-          test -f ios/SafeScaleHealth.xcworkspace/contents.xcworkspacedata
-          echo "Generated iOS project:"
-          find ios -maxdepth 4 -type f \( -name "*.entitlements" -o -name "project.pbxproj" \) -print
+          test -f ios/SafeScaleHealth.xcodeproj/project.pbxproj
+          echo "Expo generated the iOS project successfully."
 
       - name: Install pods
         working-directory: ios
         run: |
+          set -euo pipefail
           printf 'export NODE_BINARY="%s"\n' "$(command -v node)" > .xcode.env.local
           pod install --repo-update
           test -f SafeScaleHealth.xcworkspace/contents.xcworkspacedata
 
-      - name: Compile unsigned device app
+      - name: Compile unsigned app
         run: |
           set -euo pipefail
 
@@ -102,7 +101,7 @@ jobs:
           path: package/SafeScaleHealth-unsigned.ipa
           if-no-files-found: error
 
-      - name: Keep build diagnostics
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
