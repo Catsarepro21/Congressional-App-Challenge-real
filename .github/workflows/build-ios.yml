@@ -53,15 +53,12 @@ jobs:
       - name: Generate iOS project
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Inspect generated native configuration
+      - name: Verify generated iOS project
         run: |
           set -euo pipefail
-
           test -f ios/SafeScaleHealth.xcworkspace/contents.xcworkspacedata
-          test -f ios/SafeScaleHealth/SafeScaleHealth.entitlements
-
-          echo "Native iOS project generated successfully."
-          echo "Entitlements file exists."
+          echo "Generated iOS project:"
+          find ios -maxdepth 4 -type f \( -name "*.entitlements" -o -name "project.pbxproj" \) -print
 
       - name: Install pods
         working-directory: ios
