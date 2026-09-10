@@ -7,8 +7,10 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-    "scheme": "com.anonymous.safescalehealth",
-
+    "scheme": [
+      "com.anonymous.safescalehealth",
+      "com.googleusercontent.apps.178801571593-jjv6fmn8te3q9rjt4am5p3slk4m7d4vr"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.safescalehealth",
@@ -23,7 +25,6 @@
         "NSHealthUpdateUsageDescription": "SafeScale Health requires access to write health data for tracking purposes."
       }
     },
-
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#D5F1E2",
@@ -41,17 +42,14 @@
         "android.permission.health.READ_RESTING_HEART_RATE"
       ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "extra": {
       "eas": {
         "projectId": "8a68a6c3-4e6e-4e6b-8f25-ccac89630b20"
       }
     },
-
     "plugins": [
       "./plugins/withLocalNotificationsOnly",
       [

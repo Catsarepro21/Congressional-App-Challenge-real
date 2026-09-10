@@ -36,7 +36,12 @@ let AppleHealthKit: any = null;
 if (Platform.OS === 'ios') {
   try {
     const healthModule = require('react-native-health');
-    AppleHealthKit = healthModule.default ?? healthModule;
+    const packageExport = healthModule.default ?? healthModule.HealthKit ?? healthModule;
+    const native = require('react-native').NativeModules?.AppleHealthKit;
+    // Preserve lazy native methods instead of copying their enumerable properties.
+    AppleHealthKit = typeof native?.initHealthKit === 'function'
+      ? new Proxy({} as any, {get(_target, key) { const target = native; return key === 'Constants' ? packageExport.Constants : typeof target[key] === 'function' ? target[key].bind(target) : target[key]; }})
+      : packageExport;
     if (typeof AppleHealthKit?.initHealthKit !== 'function') AppleHealthKit = null;
   } catch (e) {
     console.warn('[OnboardingScreen] Failed to load react-native-health:', e);
@@ -138,7 +143,7 @@ export default function OnboardingScreen({ onDone }: Props) {
     if (Platform.OS !== 'ios' || !AppleHealthKit) {
       Alert.alert(
         'Apple Health Not Available',
-        'Apple Health is only available on iOS. Please fill in your details manually.',
+        Platform.OS !== 'ios' ? 'Apple Health requires the iPhone app.' : 'The Apple Health native module did not load in this build. Reinstall the updated IPA or use manual setup.',
       );
       return;
     }
@@ -204,7 +209,7 @@ export default function OnboardingScreen({ onDone }: Props) {
           // Latest Height
           const now = new Date();
           const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-          const heightOpts = { startDate: oneYearAgo.toISOString(), endDate: now.toISOString(), limit: 1 };
+          const heightOpts = { startDate: oneYearAgo.toISOString(), endDate: now.toISOString(), limit: 1, unit: 'cm', ascending: false };
           AppleHealthKit.getHeightSamples(heightOpts, (_e3: any, heights: any[]) => {
             if (heights && heights.length > 0) {
               // HealthKit returns height in meters by default (value field)
@@ -394,7 +399,7 @@ export default function OnboardingScreen({ onDone }: Props) {
       console.warn('[GoogleHealth] Onboarding import failed:', e);
       Alert.alert(
         'Import Failed',
-        'Could not connect to Google Health. Please try manual onboarding.',
+        e instanceof Error ? e.message : 'Could not connect to Google Health.',
       );
     }
   };

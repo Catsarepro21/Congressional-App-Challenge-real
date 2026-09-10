@@ -21,7 +21,12 @@ let AppleHealthKit: any = null;
 if (Platform.OS === 'ios') {
   try {
     const healthModule = require('react-native-health');
-    AppleHealthKit = healthModule.default ?? healthModule;
+    const packageExport = healthModule.default ?? healthModule.HealthKit ?? healthModule;
+    const native = require('react-native').NativeModules?.AppleHealthKit;
+    // Preserve lazy native methods instead of copying their enumerable properties.
+    AppleHealthKit = typeof native?.initHealthKit === 'function'
+      ? new Proxy({} as any, {get(_target, key) { const target = native; return key === 'Constants' ? packageExport.Constants : typeof target[key] === 'function' ? target[key].bind(target) : target[key]; }})
+      : packageExport;
     if (typeof AppleHealthKit?.initHealthKit !== 'function') AppleHealthKit = null;
   } catch (e) {
     console.warn('[HealthDataService] Failed to load react-native-health:', e);
