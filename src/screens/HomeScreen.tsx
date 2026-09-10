@@ -1,10 +1,10 @@
-import React, { useRef, useState } from "react";
-import { View, Text, Platform, useWindowDimensions } from "react-native";
+import React, { useState } from "react";
+import { View, Text, useWindowDimensions } from "react-native";
 import { useSafeScaleStore } from "../store/useSafeScaleStore";
-import { HealthDataService } from "../services/HealthDataService";
+import HealthConnections from "../components/care/HealthConnections";
 import { localDate } from "../utils/daily";
 import Medications from "../components/care/Medications";
-import { Button, Card, Heading, Icon, Page, C, s } from "../components/care/UI";
+import { Button, Card, Heading, Icon, Page, Sheet, C, s } from "../components/care/UI";
 
 export default function HomeScreen({
   onNavigate,
@@ -18,62 +18,11 @@ export default function HomeScreen({
   const lastSync = useSafeScaleStore((state) => state.lastSyncedAt);
   const demo = useSafeScaleStore((state) => state.isTestMode);
   const allergies = useSafeScaleStore((state) => state.userAllergies);
-  const [syncing, setSyncing] = useState(false);
-  const [message, setMessage] = useState("");
-  const syncLock = useRef(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
   const { width } = useWindowDimensions();
   const taken = meds.filter((med) => med.status === "Completed").length;
   const today = localDate();
   const checkedIn = logs.some((log) => log.timestamp.slice(0, 10) === today);
-  async function sync() {
-    if (syncLock.current) return;
-    if (demo)
-      return setMessage(
-        "Sample mode is active. Exit in Settings to sync your own data.",
-      );
-    if (Platform.OS === "web")
-      return setMessage(
-        "Health syncing is available in the native iPhone and Android app. You can use the journal and records here.",
-      );
-    syncLock.current = true;
-    setSyncing(true);
-    setMessage("");
-    try {
-      const allowed =
-        Platform.OS === "ios"
-          ? await HealthDataService.requestHealthPermissions()
-          : await HealthDataService.requestHealthConnectPermissions();
-      if (!allowed) {
-        setMessage(
-          "Health access was not enabled. You can try again when ready.",
-        );
-        return;
-      }
-      const data =
-        Platform.OS === "ios"
-          ? await HealthDataService.fetchHealthData()
-          : await HealthDataService.fetchHealthConnectData();
-      if (!data) {
-        setMessage(
-          "No readable samples were returned. Check your health app permissions and available data.",
-        );
-        return;
-      }
-      useSafeScaleStore.getState().updateBiometrics(data);
-      useSafeScaleStore.setState({
-        lastSyncedAt: new Date().toISOString(),
-        hasHealthPermission: true,
-      });
-      setMessage("Available health readings updated.");
-    } catch {
-      setMessage(
-        "Sync could not finish. Your saved readings have been kept. Try again.",
-      );
-    } finally {
-      syncLock.current = false;
-      setSyncing(false);
-    }
-  }
   return (
     <Page
       title="A little care, every day."
@@ -213,17 +162,14 @@ export default function HomeScreen({
               </View>
             ))}
             <Button
-              label={syncing ? "Syncing…" : "Sync health readings"}
-              disabled={syncing}
+              label="Sync health readings"
               secondary
               icon="sync"
-              onPress={sync}
+              onPress={() => setConnectionsOpen(true)}
             />
-            {message ? (
-              <Text accessibilityLiveRegion="polite" style={s.body}>
-                {message}
-              </Text>
-            ) : null}
+            {connectionsOpen ? <Sheet title="Health connections" onClose={() => setConnectionsOpen(false)}>
+              <HealthConnections />
+            </Sheet> : null}
           </Card>
           <Card>
             <Heading

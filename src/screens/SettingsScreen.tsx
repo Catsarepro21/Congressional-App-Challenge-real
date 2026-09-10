@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, Alert } from "react-native";
 import { useSafeScaleStore } from "../store/useSafeScaleStore";
 import { validDate, localDate } from "../utils/daily";
+import HealthConnections from "../components/care/HealthConnections";
 import {
   Button,
   Card,
@@ -52,6 +53,7 @@ export default function SettingsScreen() {
       title="Make it yours."
       subtitle="Your profile, allergies, and people to contact."
     >
+      <Card><HealthConnections /><Button label="Review onboarding" secondary onPress={() => useSafeScaleStore.getState().resetOnboarding()} /></Card>
       <Card>
         <Heading
           title="Personal details"

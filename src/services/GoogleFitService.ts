@@ -219,6 +219,7 @@ async function fetchSumFromAllSources(
     }
     return sum;
   } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHENTICATED") throw e;
     console.warn(`[GoogleFit] fetchSumFromAllSources failed for ${dataTypeName}:`, e);
     return 0;
   }
@@ -374,6 +375,7 @@ export const GoogleFitService = {
       }
       results.steps = Math.round(steps);
     } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHENTICATED") throw e;
       console.warn('[GoogleFit] Steps fetch failed:', e);
     }
  
@@ -406,6 +408,7 @@ export const GoogleFitService = {
       }
       results.activeCalories = Math.round(calories);
     } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHENTICATED") throw e;
       console.warn('[GoogleFit] Calories fetch failed:', e);
     }
 
@@ -423,6 +426,7 @@ export const GoogleFitService = {
         results.restingHeartRate = Math.round(Math.min(...bpms));
       }
     } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHENTICATED") throw e;
       console.warn('[GoogleFit] Heart rate fetch failed:', e);
     }
 
@@ -437,6 +441,7 @@ export const GoogleFitService = {
           'Content-Type': 'application/json',
         },
       });
+      if (res.status === 401) throw new Error("UNAUTHENTICATED");
       if (res.ok) {
         const data = await res.json() as { session?: Array<{ startTimeMillis: string; endTimeMillis: string }> };
         let totalSleepMin = 0;
@@ -453,6 +458,7 @@ export const GoogleFitService = {
         }
       }
     } catch (e) {
+      if (e instanceof Error && e.message === "UNAUTHENTICATED") throw e;
       console.warn('[GoogleFit] Sleep sessions fetch failed:', e);
     }
 

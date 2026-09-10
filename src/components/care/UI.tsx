@@ -89,6 +89,8 @@ export function Page({
     <ScrollView
       style={{ flex: 1, backgroundColor: C.bg }}
       keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+      keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
       contentContainerStyle={{
         paddingTop: inset.top + 24,
         paddingBottom: 32,
@@ -168,7 +170,7 @@ export function Sheet({
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "height" : undefined}
         style={s.overlay}
       >
         <View accessibilityViewIsModal style={s.sheet}>
@@ -179,6 +181,9 @@ export function Sheet({
             <Button label="Close" secondary onPress={onClose} />
           </View>
           <ScrollView
+            style={{ flex: 1, minHeight: 0 }}
+            automaticallyAdjustKeyboardInsets={false}
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ gap: 17, paddingBottom: 16 }}
           >
@@ -299,6 +304,8 @@ export const s = StyleSheet.create({
     padding: 20,
   },
   sheet: {
+    flex: 1,
+    minHeight: 0,
     backgroundColor: C.bg,
     padding: 22,
     borderRadius: 24,
