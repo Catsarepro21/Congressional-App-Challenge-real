@@ -15,6 +15,7 @@
 
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
+import { GOOGLE_IOS_CLIENT_ID, createGooglePKCE, googleRedirectUri, validateGoogleCallback } from './GoogleOAuth';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -58,14 +59,7 @@ export interface GoogleFitResult {
  * Generates a random code verifier and code challenge for PKCE OAuth flow.
  * This is required for installed app OAuth flows (no client secret).
  */
-function generateCodeVerifier(): string {
-  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-  let verifier = '';
-  for (let i = 0; i < 128; i++) {
-    verifier += charset.charAt(Math.floor(Math.random() * charset.length));
-  }
-  return verifier;
-}
+
 
 /**
  * Exchanges an authorization code for an access token.
@@ -246,7 +240,7 @@ export const GoogleFitService = {
    * Hardcoded OAuth 2.0 Client IDs assigned dynamically by target environment.
    */
   CLIENT_ID: Platform.select({
-    ios: '386274527686-ou82vu9atibl8ckmlsj37cp7oo9o708b.apps.googleusercontent.com',
+    ios: GOOGLE_IOS_CLIENT_ID,
     android: '386274527686-ug0ea412sbbg40ska0i4ds7b4qau8ori.apps.googleusercontent.com',
     default: '386274527686-ug0ea412sbbg40ska0i4ds7b4qau8ori.apps.googleusercontent.com'
   }),
@@ -271,12 +265,9 @@ export const GoogleFitService = {
     }
 
     // Android native app client types demand your raw package name with a single trailing slash
-    const finalRedirectUri = Platform.OS === 'android'
-      ? 'com.anonymous.safescalehealth:/'
-      : 'com.anonymous.safescalehealth://oauth2';
-
-    const codeVerifier = generateCodeVerifier();
-    const state = Math.random().toString(36).slice(2);
+    if (Platform.OS !== 'ios') throw new Error('Google browser sign-in is configured for iOS only in this build.');
+    const finalRedirectUri = googleRedirectUri(clientId);
+    const {verifier: codeVerifier, challenge, state} = await createGooglePKCE();
 
     const params = new URLSearchParams({
       response_type: 'code',
@@ -284,8 +275,8 @@ export const GoogleFitService = {
       redirect_uri: finalRedirectUri,
       scope: SCOPES,
       state,
-      code_challenge: codeVerifier, 
-      code_challenge_method: 'plain',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
       access_type: 'offline',
       prompt: 'consent',
     });
@@ -298,11 +289,7 @@ export const GoogleFitService = {
       return null;
     }
 
-    const returnedUrl = new URL(result.url);
-    const code = returnedUrl.searchParams.get('code');
-    if (!code) {
-      throw new Error('No authorization code in redirect URL');
-    }
+    const code = validateGoogleCallback(result.url, finalRedirectUri, state);
 
     const tokens = await exchangeCodeForToken(
       code,
@@ -352,10 +339,10 @@ export const GoogleFitService = {
     const results: GoogleFitResult = {
       steps: 0,
       activeCalories: 0,
-      heartRate: 72,
-      restingHeartRate: 65,
-      sleepMinutes: 480,
-      sleepConsistency: 85,
+      heartRate: 0,
+      restingHeartRate: 0,
+      sleepMinutes: 0,
+      sleepConsistency: 0,
     };
  
     // 1. Steps

@@ -84,3 +84,33 @@ test('demo mode preserves real records in memory and storage', async () => {
   assert.deepEqual(store.getState().userAllergies,['Sesame']);
   assert.equal(store.getState().emergencyContacts[0].id,'real');
 });
+
+
+test('HealthKit uses non-enumerable native methods when package export only has constants', async () => {
+  const native = {};
+  Object.defineProperty(native, 'initHealthKit', {value(_p, cb) { cb(null); }});
+  const health = load('src/services/HealthDataService.ts', {
+    'react-native': {Platform: {OS: 'ios'}, NativeModules: {AppleHealthKit: native}},
+    './NativeHealthReader': reader,
+    'react-native-health': {Constants: {Permissions: {Steps: 'Steps'}}},
+  }).HealthDataService;
+  assert.equal(await health.requestHealthPermissions(), true);
+});
+
+test('Google PKCE uses SHA256 and rejects a mismatched OAuth state', async () => {
+  const crypto = require('node:crypto');
+  const code = ts.transpileModule(fs.readFileSync('src/services/GoogleOAuth.ts', 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText;
+  const exports = {};
+  vm.runInNewContext(code, {exports, URL, require() { return {
+    getRandomBytesAsync: async n => crypto.randomBytes(n),
+    randomUUID: () => crypto.randomUUID(),
+    CryptoDigestAlgorithm: {SHA256: 'sha256'}, CryptoEncoding: {BASE64: 'base64'},
+    digestStringAsync: async (a, v) => crypto.createHash(a).update(v).digest('base64'),
+  }; }});
+  const pkce = await exports.createGooglePKCE();
+  assert.equal(pkce.challenge, crypto.createHash('sha256').update(pkce.verifier).digest('base64url'));
+  const redirect = exports.googleRedirectUri(exports.GOOGLE_IOS_CLIENT_ID);
+  assert.equal(exports.validateGoogleCallback(redirect + '?code=abc&state=' + pkce.state, redirect, pkce.state), 'abc');
+  assert.throws(() => exports.validateGoogleCallback(redirect + '?code=abc&state=wrong', redirect, pkce.state));
+  assert.throws(() => exports.validateGoogleCallback('other:/oauthredirect?code=abc&state=' + pkce.state, redirect, pkce.state));
+});
