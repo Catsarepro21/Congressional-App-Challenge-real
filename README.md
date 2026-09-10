@@ -1,4 +1,30 @@
-# SafeScale Health: repair notes and free installation
+# SafeScale Health
+
+## September 10, 2026: focused daily-care redesign
+
+The main experience now has five tabs: Today, Journal, Records, Medical ID, and Settings. The responsive layout uses shared, accessible components and replaces the oversized home/settings screens.
+
+- **Today:** daily medication schedule, mark taken/undo, stock and refills, latest native health readings with sync time, and links to the journal and profile.
+- **Journal:** mood/stress check-ins, free-text visit questions, symptom observations, search and filtering, and individual entry deletion.
+- **Records:** manual records with calendar-date validation, search/category filters, and a reviewable visit summary that downloads as text on web or opens native sharing. The export explicitly excludes API keys, OAuth credentials, raw FHIR and document images; it is not a full backup.
+- **Medical ID:** saved identity, allergies, medications, and contacts. Calls require confirmation and are disabled for fictional samples. This does not configure the OS lock-screen Medical ID.
+- **Settings:** optional profile fields, allergy and contact management, and isolated sample mode. Onboarding needs no account or body measurements.
+
+Medication status is scoped to the local calendar date and refreshed after hydration, foregrounding, and while open. Undo restores only stock actually deducted. Legacy completion flags have no date, so they reset to pending on first use; existing inventory is retained. Previously stored records and profiles are kept. Legacy meal entries no longer modify measured activity telemetry.
+
+The experimental scanner, fitness and analytics screens are no longer routed from the main experience. Their source and persisted data remain in the repository for future focused work. Unvalidated stability scores, triage, vaccine suggestions and unsupported wearable connection buttons are not part of the new main flow. The redesign does not perform cloud AI requests.
+
+### Verification
+
+- TypeScript check and 17 regression tests, including local dates, dose completion/undo, legacy rollover, persistence, export exclusions, native-reader regressions and sample isolation.
+- Expo web and iOS JavaScript exports.
+- Local Chromium layout and interaction checks with fictional entries. Native HealthKit/Health Connect, iOS compilation/signing, actual notification delivery and phone calls still require device testing.
+
+App data remains in local unencrypted app/browser storage. Health sync retains the existing native adapters, including their remaining data-provenance limitations. A native JavaScript export is not an Xcode build or proof of device integration.
+
+---
+
+# Earlier repair notes and free installation
 
 Updated September 9, 2026.
 

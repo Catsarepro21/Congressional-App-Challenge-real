@@ -32,6 +32,7 @@ export interface MedicationItem {
   icon: string;
   /** Current stock of medication remaining. */
   stock?: number;
+  stockDebited?: boolean;
   /** Threshold below which a low stock alert should trigger. */
   refillThreshold?: number;
   /** Toggle flag for low stock reminder notifications. */
@@ -239,6 +240,8 @@ export interface SafeScaleState {
 
   /** Ordered list of medications in today's administration schedule. */
   medicationSchedule: MedicationItem[];
+  medicationDay: string | null;
+  ensureCurrentDay: () => void;
 
   /** Live biometric summary, updated by HealthDataService.syncTelemetry(). */
   biometricCore: BiometricSummary;
@@ -501,6 +504,7 @@ export interface LoggedItem {
   readonly type: 'Water' | 'Meal';
   readonly name: string;
   readonly value: string; // e.g. "500 ml", "650 kcal"
+  readonly date?: string; // Local YYYY-MM-DD; absent for legacy entries
   readonly timestamp: string; // HH:MM
 }
 

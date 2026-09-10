@@ -20,6 +20,7 @@
  *    values so the UI renders correctly before any live telemetry sync.
  */
 
+import { localDate, validDate, currentMedications, changeDose } from '../utils/daily';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -66,6 +67,7 @@ const calculateAgeInYears = (dobString: string): number => {
 };
 
 const generateMilestones = (dobString: string): VaccineMilestone[] => {
+  if (!validDate(dobString)) return [];
   const age = calculateAgeInYears(dobString);
   const birth = new Date(dobString);
   
@@ -119,11 +121,11 @@ const generateMilestones = (dobString: string): VaccineMilestone[] => {
  * Default user profile seed.
  */
 const DEFAULT_USER_PROFILE: UserProfile = {
-  name: 'Jane Doe',
-  dob: '1995-08-24',
+  name: '',
+  dob: '',
   bloodType: 'Unknown',
-  height: 168,
-  weight: 62,
+  height: 0,
+  weight: 0,
   organDonor: false,
   unitPreference: 'metric',
   useGeminiFoodVision: true,
@@ -235,7 +237,7 @@ const updateAdherenceInHistory = (
   history: WeeklyHistoryEntry[],
   meds: MedicationItem[]
 ): WeeklyHistoryEntry[] => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDate();
   const completed = meds.filter(m => m.status === 'Completed').length;
   const total = meds.length;
   const adherence = total > 0 ? Math.round((completed / total) * 100) : 100;
@@ -304,6 +306,15 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   loggedItems: [],
 
   medicationSchedule: [],
+  medicationDay: null,
+  ensureCurrentDay: () => {
+    const state = useSafeScaleStore.getState();
+    const today = localDate();
+    if (state.medicationDay !== today) set({
+      medicationSchedule: currentMedications(state.medicationSchedule, state.medicationDay, today),
+      medicationDay: today,
+    });
+  },
 
   hydrationGoal: 2000,
 
@@ -397,22 +408,12 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     status: MedicationItem['status'],
   ): void => {
     set((state) => {
-      const nextSchedule = state.medicationSchedule.map((med) => {
-        if (med.id === id) {
-          let nextStock = med.stock !== undefined ? med.stock : 30;
-          if (status === 'Completed' && med.status !== 'Completed') {
-            nextStock = Math.max(0, nextStock - 1);
-            const threshold = med.refillThreshold !== undefined ? med.refillThreshold : 5;
-            if (nextStock <= threshold && med.refillAlertsEnabled) {
-              NotificationService.scheduleLowStockAlert(med.name, nextStock);
-            }
-          }
-          return { ...med, status, stock: nextStock };
-        }
-        return med;
-      });
+      const today = localDate();
+      const nextSchedule = currentMedications(state.medicationSchedule, state.medicationDay, today)
+        .map(med => med.id === id ? changeDose(med, status) : med);
       return {
         medicationSchedule: nextSchedule,
+        medicationDay: today,
         weeklyHistory: updateAdherenceInHistory(state.weeklyHistory, nextSchedule),
       };
     });
@@ -432,7 +433,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   updateBiometrics: (biometrics: Partial<BiometricSummary>): void => {
     set((state) => {
       const updatedBiometricCore = { ...state.biometricCore, ...biometrics };
-      const today = new Date().toISOString().split('T')[0];
+      const today = localDate();
       
       const meds = state.medicationSchedule || [];
       const completed = meds.filter(m => m.status === 'Completed').length;
@@ -590,13 +591,15 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         medicationSchedule: nextTestMode ? DEFAULT_MEDICATION_SCHEDULE : [],
         biometricCore: nextTestMode ? DEFAULT_BIOMETRIC_CORE : EMPTY_BIOMETRIC_CORE,
         weeklyHistory: nextTestMode ? generateSeedWeeklyHistory() : [],
-        lastSyncedAt: nextTestMode ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
+        lastSyncedAt: nextTestMode ? new Date().toISOString() : null,
+        medicationDay: localDate(),
+        profile: { ...DEFAULT_USER_PROFILE, name: 'Sample Profile' },
         emergencyContacts: nextTestMode ? [
           { id: 'e1', name: 'Dr. Sarah Jenkins (Allergist)', phone: '555-0199' },
           { id: 'e2', name: 'Emergency Contact (Mom)', phone: '555-0144' }
         ] : [],
         symptomLogs: nextTestMode ? [
-          { id: 's1', type: 'Mild Hives', severity: 3, timestamp: '14:20', date: new Date().toISOString().split('T')[0] }
+          { id: 's1', type: 'Mild Hives', severity: 3, timestamp: '14:20', date: localDate() }
         ] : [],
         vaccineMilestones: nextTestMode ? generateMilestones(DEFAULT_USER_PROFILE.dob) : [],
         moodLogs: nextTestMode ? [
@@ -606,14 +609,14 @@ export const useSafeScaleStore = create<SafeScaleState>()(
           { id: 'm4', timestamp: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString().split('T')[0], rating: 8, stressLevel: 'Low', feelings: ['Calm', 'Happy'], notes: 'Relaxing evening.' },
           { id: 'm5', timestamp: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString().split('T')[0], rating: 9, stressLevel: 'Low', feelings: ['Focused', 'Energetic'], notes: 'Ran 5k and felt very energized.' },
           { id: 'm6', timestamp: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString().split('T')[0], rating: 5, stressLevel: 'High', feelings: ['Stressed', 'Fatigued'], notes: 'Work pressure was intense.' },
-          { id: 'm7', timestamp: new Date().toISOString().split('T')[0], rating: 8, stressLevel: 'Low', feelings: ['Calm', 'Focused'], notes: 'Balanced day.' }
+          { id: 'm7', timestamp: localDate(), rating: 8, stressLevel: 'Low', feelings: ['Calm', 'Focused'], notes: 'Balanced day.' }
         ] : [],
         vitalsLogs: nextTestMode ? [
           { id: 'vt1', timestamp: new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString().split('T')[0], systolicBP: 122, diastolicBP: 81, bloodGlucose: 99, glucoseContext: 'Fasting', spo2: 98, temperature: 98.5 },
           { id: 'vt2', timestamp: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString().split('T')[0], systolicBP: 142, diastolicBP: 91, bloodGlucose: 145, glucoseContext: 'Post-Meal', spo2: 97, temperature: 99.1 },
           { id: 'vt3', timestamp: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString().split('T')[0], systolicBP: 125, diastolicBP: 82, bloodGlucose: 105, glucoseContext: 'General', spo2: 99, temperature: 98.7 },
           { id: 'vt4', timestamp: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString().split('T')[0], systolicBP: 132, diastolicBP: 85, bloodGlucose: 110, glucoseContext: 'Fasting', spo2: 98, temperature: 98.4 },
-          { id: 'vt5', timestamp: new Date().toISOString().split('T')[0], systolicBP: 120, diastolicBP: 80, bloodGlucose: 95, glucoseContext: 'Fasting', spo2: 98, temperature: 98.6 }
+          { id: 'vt5', timestamp: localDate(), systolicBP: 120, diastolicBP: 80, bloodGlucose: 95, glucoseContext: 'Fasting', spo2: 98, temperature: 98.6 }
         ] : [],
       };
     });
@@ -621,12 +624,13 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
   /** Adds a new medication entry. */
   addMedication: (medication: Omit<MedicationItem, 'id' | 'status'>): void => {
+    useSafeScaleStore.getState().ensureCurrentDay();
     set((state) => {
       const newItem: MedicationItem = {
         ...medication,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         status: 'Pending',
-        stock: medication.stock !== undefined ? medication.stock : 30,
+        stock: medication.stock,
         refillThreshold: medication.refillThreshold !== undefined ? medication.refillThreshold : 5,
         refillAlertsEnabled: medication.refillAlertsEnabled !== undefined ? medication.refillAlertsEnabled : true,
         inactiveIngredients: medication.inactiveIngredients || [],
@@ -634,7 +638,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       const nextSchedule = [...state.medicationSchedule, newItem];
 
       // Schedule local notification reminder asynchronously
-      NotificationService.scheduleMedicationReminder(
+      if (!state.isTestMode) void NotificationService.scheduleMedicationReminder(
         newItem.id,
         newItem.name,
         newItem.dosage,
@@ -651,7 +655,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   /** Removes a medication entry. */
   removeMedication: (id: string): void => {
     // Cancel local notification reminder
-    NotificationService.cancelMedicationReminder(id);
+    if (!useSafeScaleStore.getState().isTestMode) void NotificationService.cancelMedicationReminder(id);
 
     set((state) => {
       const nextSchedule = state.medicationSchedule.filter((m) => m.id !== id);
@@ -670,7 +674,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set((state) => {
       const newReport: CrowdsourcedReport = {
         ...report,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       return {
@@ -688,63 +692,19 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const newItem: LoggedItem = {
         ...item,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         timestamp,
+        date: localDate(),
       };
 
       const updatedLoggedItems = [newItem, ...state.loggedItems];
 
-      // If logging a Meal, add calories directly to activeCalories telemetry!
-      let updatedBiometrics = state.biometricCore;
-      if (item.type === 'Meal') {
-        const calMatch = item.value.match(/\d+/);
-        if (calMatch) {
-          const calValue = parseInt(calMatch[0], 10);
-          const newCalories = state.biometricCore.activeCalories + calValue;
-          updatedBiometrics = {
-            ...state.biometricCore,
-            activeCalories: newCalories,
-          };
-          
-          const history = state.biometricCore.historicalRHR;
-          updatedBiometrics.dailyStabilityScore = HealthDataService.calculateHealthStabilityScore(
-            state.biometricCore.restingHeartRate,
-            state.biometricCore.sleepConsistency,
-            history
-          );
-        }
-      }
-
-      return {
-        loggedItems: updatedLoggedItems,
-        biometricCore: updatedBiometrics,
-      };
+      return { loggedItems: updatedLoggedItems };
     });
   },
 
   deleteLoggedItem: (id: string): void => {
-    set((state) => {
-      const target = state.loggedItems.find((i) => i.id === id);
-      const updatedLoggedItems = state.loggedItems.filter((i) => i.id !== id);
-
-      // Decrement calories if it was a Meal
-      let updatedBiometrics = state.biometricCore;
-      if (target && target.type === 'Meal') {
-        const calMatch = target.value.match(/\d+/);
-        if (calMatch) {
-          const calValue = parseInt(calMatch[0], 10);
-          updatedBiometrics = {
-            ...state.biometricCore,
-            activeCalories: Math.max(0, state.biometricCore.activeCalories - calValue),
-          };
-        }
-      }
-
-      return {
-        loggedItems: updatedLoggedItems,
-        biometricCore: updatedBiometrics,
-      };
-    });
+    set(state => ({ loggedItems: state.loggedItems.filter(item => item.id !== id) }));
   },
 
   clearLoggedItems: (): void => {
@@ -763,7 +723,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set((state) => {
       const newRecord: MedicalRecord = {
         ...record,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       };
       return {
         medicalRecords: [newRecord, ...state.medicalRecords],
@@ -802,7 +762,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set((state) => {
       const newContact: EmergencyContact = {
         ...contact,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       };
       return {
         emergencyContacts: [...state.emergencyContacts, newContact],
@@ -819,11 +779,11 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   addSymptomLog: (log: Omit<SymptomLog, 'id' | 'timestamp' | 'date'>): void => {
     set((state) => {
       const now = new Date();
-      const dateStr = now.toISOString().split('T')[0];
+      const dateStr = localDate(now);
       const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const newLog: SymptomLog = {
         ...log,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         date: dateStr,
         timestamp: timeStr,
       };
@@ -869,7 +829,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set((state) => {
       const newRecord: MedicalRecord = {
         ...record,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       };
       return {
         medicalRecords: [newRecord, ...state.medicalRecords],
@@ -888,7 +848,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       NotificationService.cancelVaccineReminder(id);
 
       const newRecord: MedicalRecord = {
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         type: 'Immunization',
         title: milestone.name,
         value: `Administered (Verified: ${milestone.recommendedAge} target)`,
@@ -932,8 +892,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set((state) => {
       const newEntry: MoodEntry = {
         ...entry,
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString().split('T')[0],
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        timestamp: localDate(),
       };
       return { moodLogs: [newEntry, ...state.moodLogs] };
     });
@@ -943,8 +903,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set((state) => {
       const newEntry: VitalLogEntry = {
         ...entry,
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString().split('T')[0],
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        timestamp: localDate(),
       };
       return { vitalsLogs: [newEntry, ...state.vitalsLogs] };
     });
@@ -1006,7 +966,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         status: 'Pending',
       }));
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = localDate();
       const importedVitals: VitalLogEntry[] = vitals.map((v, index) => ({
         ...v,
         id: `fhir_vit_${Date.now()}_${index}`,
@@ -1020,7 +980,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
       // Schedule reminders for new imported meds
       importedMeds.forEach((med) => {
-        NotificationService.scheduleMedicationReminder(
+        if (!state.isTestMode) void NotificationService.scheduleMedicationReminder(
           med.id,
           med.name,
           med.dosage,
@@ -1061,7 +1021,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     
     const endTime = new Date().toISOString();
     const newWorkout = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type: state.trackingType,
       startTime: state.trackingStartTime,
       endTime,
@@ -1077,7 +1037,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       activeCalories: state.biometricCore.activeCalories + newWorkout.calories,
     };
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDate();
     const meds = state.medicationSchedule || [];
     const completed = meds.filter(m => m.status === 'Completed').length;
     const total = meds.length;
@@ -1127,7 +1087,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     if (!workout) return {};
 
     const nextWorkouts = state.appWorkouts.filter(w => w.id !== id);
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDate();
     const isTodayWorkout = workout.startTime.startsWith(today);
 
     let updatedBiometricCore = state.biometricCore;
@@ -1175,6 +1135,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         return ({
         userAllergies: state.userAllergies,
         medicationSchedule: state.medicationSchedule,
+        medicationDay: state.medicationDay,
         biometricCore: state.biometricCore,
         isLocalAIOptedIn: state.isLocalAIOptedIn,
         hasHealthPermission: state.hasHealthPermission,
