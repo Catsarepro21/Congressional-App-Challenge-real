@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   build:
+    permissions:
+      contents: write
     runs-on: macos-26
     timeout-minutes: 60
 
@@ -118,11 +120,25 @@ jobs:
           cd package
           zip -qry SafeScaleHealth-unsigned.ipa Payload
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SafeScaleHealth-Unsigned-IPA
-          path: package/SafeScaleHealth-unsigned.ipa
-          if-no-files-found: error
+      - name: Publish direct IPA download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          IPA_PATH=package/SafeScaleHealth-unsigned.ipa
+          test -s "$IPA_PATH"
+          RELEASE_TAG="ios-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          gh release create "$RELEASE_TAG" "$IPA_PATH" \
+            --target "$GITHUB_SHA" \
+            --title "iOS unsigned build ${GITHUB_RUN_NUMBER} (attempt ${GITHUB_RUN_ATTEMPT})" \
+            --notes "Unsigned iOS build. Download SafeScaleHealth-unsigned.ipa directly from Assets. Signing is still required before installation." \
+            --prerelease \
+            --latest=false
+
+          DOWNLOAD_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/SafeScaleHealth-unsigned.ipa"
+          printf '### iOS download\n\n[Download SafeScaleHealth-unsigned.ipa](%s)\n\nUnsigned build; signing is required before installation.\n' "$DOWNLOAD_URL" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload build log
         if: always()
