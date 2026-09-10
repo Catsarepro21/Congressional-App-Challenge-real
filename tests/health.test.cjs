@@ -9,10 +9,41 @@ function load(file, mocks = {}) {
   vm.runInNewContext(code, { exports, require: name => {
     if (Object.hasOwn(mocks, name)) return mocks[name];
     throw new Error(`Unexpected import: ${name}`);
-  }, setTimeout, clearTimeout, console });
+  }, setTimeout, clearTimeout, console, Error });
   return exports;
 }
 const reader = load('src/services/NativeHealthReader.ts');
+function coordinator(os, native = {}, google = {}) {
+  return load('src/services/HealthSyncService.ts', {
+    'react-native': { Platform: { OS: os }, NativeModules: {} },
+    './HealthDataService': { HealthDataService: native },
+    './GoogleFitService': { GoogleFitService: google },
+    './GoogleHealthService': { GoogleHealthService: google },
+    './NativeHealthReader': reader,
+  });
+}
+test('sync preserves saved readings on an empty response and rejects unsupported platforms', async () => {
+  const sync = coordinator('ios', { requestHealthPermissions: async () => true, fetchHealthData: async () => ({steps:0}) });
+  const result = await sync.syncHealthSource('apple');
+  assert.equal(result.readings, null);
+  assert.equal(result.connection.lastSyncedAt, undefined);
+  await assert.rejects(coordinator('web').syncHealthSource('apple'), /native/);
+  await assert.rejects(sync.bounded(new Promise(() => {}), 5), /too long/);
+});
+test('Google cancellation is harmless and expired credentials refresh once', async () => {
+  assert.equal(await coordinator('ios', {}, {authorize: async () => null}).syncHealthSource('google-health'), null);
+  const calls = [];
+  const google = {
+    fetchFitnessData: async token => { calls.push(token); if (token === 'expired') throw new Error('UNAUTHENTICATED'); return {steps:123}; },
+    refreshAccessToken: async token => { assert.equal(token, 'refresh'); return 'fresh'; },
+  };
+  const result = await coordinator('ios', {}, google).syncHealthSource('google-fit', {accessToken:'expired',refreshToken:'refresh',connectedAt:'original'});
+  assert.deepEqual(calls, ['expired','fresh']);
+  assert.equal(result.connection.accessToken,'fresh');
+  assert.equal(result.connection.connectedAt,'original');
+  assert.equal(result.readings.steps,123);
+  assert.equal(result.readings.heartRate,0);
+});
 test('missing native method and thrown native error resolve safely', async () => {
   assert.equal(await reader.queryHealth({}, 'read', {}), null);
   assert.equal(await reader.queryHealth({ read() { throw Error('missing entitlement'); } }, 'read', {}), null);

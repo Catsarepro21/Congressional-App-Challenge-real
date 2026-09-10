@@ -535,7 +535,16 @@ export interface EmergencyContact {
 /**
  * Represents the user's personal identity and physical baseline metrics.
  */
+export type HealthSource = 'apple' | 'health-connect' | 'google-health' | 'google-fit';
+export interface HealthConnection {
+  accessToken?: string;
+  refreshToken?: string;
+  connectedAt: string;
+  lastSyncedAt?: string;
+}
 export interface UserProfile {
+  healthConnections?: Partial<Record<HealthSource, HealthConnection>>;
+  lastHealthSource?: HealthSource;
   name: string;
   dob: string;
   bloodType: string;
@@ -628,4 +637,3 @@ export interface SymptomLog {
   type: string;
   severity: number;
 }
-
