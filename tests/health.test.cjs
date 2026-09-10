@@ -69,6 +69,7 @@ test('demo mode preserves real records in memory and storage', async () => {
   let saved;
   const storage = { getItem: async () => null, setItem: async (_k,v) => { saved = JSON.parse(v); }, removeItem: async () => {} };
   const store = load('src/store/useSafeScaleStore.ts', {
+    '../utils/daily':load('src/utils/daily.ts'),
     zustand: require('zustand'), 'zustand/middleware':require('zustand/middleware'),
     '@react-native-async-storage/async-storage':storage,
     '../services/HealthDataService':{HealthDataService:{}},
