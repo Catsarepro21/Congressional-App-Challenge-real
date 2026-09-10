@@ -167,9 +167,19 @@ export default function OnboardingScreen({ onDone }: Props) {
     AppleHealthKit.initHealthKit(permissions, (err: any) => {
       if (err) {
         setImportingHealth(false);
+        // HealthKit initialization errors include signing and device failures,
+        // not just denied access. Preserve the native message for diagnosis.
+        let detail = typeof err === 'string' ? err : err?.message;
+        if (!detail) {
+          try {
+            detail = JSON.stringify(err);
+          } catch {
+            detail = String(err);
+          }
+        }
         Alert.alert(
-          'Permission Required',
-          'Please allow SafeScale Health to access Apple Health to import your profile data.',
+          'Apple Health Connection Failed',
+          `Apple Health could not complete its authorization request. This does not necessarily mean you denied permission.\n\nError details:\n${detail || 'No error details were returned by iOS.'}\n\nPlease share this error text or a screenshot so we can identify the cause.`,
         );
         return;
       }
