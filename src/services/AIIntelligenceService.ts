@@ -57,23 +57,32 @@ import type {
  */
 export function getDeviceCapabilities(): AIDeviceCapabilities {
   if (Platform.OS === 'ios') {
-    // In a full native build, this would call:
-    //   NativeModules.SafeScaleIntelligence.getHardwareCapabilities()
-    // which checks ProcessInfo.processInfo.isiOSAppOnMac, device model via
-    // utsname, and the availability of the Foundation Models framework.
-    //
     // Core ML and the Neural Engine are standard SDK capabilities that work
     // with a free Apple Developer account (Personal Team signing). No paid
     // entitlement is required.
     //
-    // For now we return a capabilities stub that the native module will
-    // eventually replace at runtime.
+    // Use Platform.Version to detect the iOS version at runtime. All devices
+    // capable of running iOS 18.1+ with Apple Intelligence have A17 Pro or
+    // A18+ chips (iPhone 15 Pro, all iPhone 16+, M-series iPads/Macs).
+    // We cannot determine the exact model from JS without a native module,
+    // but iOS 18+ is a strong signal. The inference path already falls back
+    // gracefully if the on-device bridge is unavailable.
+    const iosVersion = typeof Platform.Version === 'string'
+      ? parseFloat(Platform.Version)
+      : Number(Platform.Version);
+
+    if (Number.isFinite(iosVersion) && iosVersion >= 18) {
+      return {
+        isOnDeviceSupported: true,
+        runtime: 'apple-foundation',
+      };
+    }
+
     return {
       isOnDeviceSupported: false,
       unsupportedReason:
         'On-device Apple Intelligence requires iPhone 15 Pro, any iPhone 16 or newer, ' +
-        'or an M-series iPad/Mac with iOS 18.1+. ' +
-        'Install the native build to enable automatic detection.',
+        'or an M-series iPad/Mac with iOS 18.1+.',
       runtime: 'apple-foundation',
     };
   }
