@@ -490,9 +490,19 @@ export class HealthDataService {
    * Requests iOS HealthKit permissions.
    */
   public static requestHealthPermissions(): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (Platform.OS !== 'ios' || !AppleHealthKit) {
-        resolve(false);
+    return new Promise((resolve, reject) => {
+      if (Platform.OS !== 'ios') {
+        reject(new Error('Apple Health is only available on iOS.'));
+        return;
+      }
+
+      if (!AppleHealthKit) {
+        reject(new Error(
+          'Apple Health could not be initialized. ' +
+          'Make sure the HealthKit entitlement is enabled in your Xcode project ' +
+          '(Signing & Capabilities → + Capability → HealthKit) and that you are ' +
+          'running a native build, not Expo Go.',
+        ));
         return;
       }
 
@@ -509,7 +519,11 @@ export class HealthDataService {
       }
 
       if (readPermissions.length === 0) {
-        resolve(false);
+        reject(new Error(
+          'No HealthKit permission constants were found. ' +
+          'The react-native-health native module may not be linked correctly. ' +
+          'Try rebuilding with `npx expo prebuild --clean` and re-running.',
+        ));
         return;
       }
 
@@ -522,8 +536,14 @@ export class HealthDataService {
 
       AppleHealthKit.initHealthKit(permissions, (error: any) => {
         if (error) {
+          const msg = typeof error === 'string' ? error
+            : error?.message || 'Unknown HealthKit error';
           console.warn('[HealthKit] Permission request failed:', error);
-          resolve(false);
+          reject(new Error(
+            `HealthKit initialization failed: ${msg}. ` +
+            'Verify that the HealthKit entitlement is enabled in Signing & Capabilities ' +
+            'and that Health access is allowed in Settings → Privacy & Security → Health.',
+          ));
         } else {
           resolve(true);
         }
