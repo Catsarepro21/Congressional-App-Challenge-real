@@ -155,3 +155,71 @@ test("visit export includes notes but excludes credentials and raw documents", a
   assert.match(report, /Saved detail/);
   assert.doesNotMatch(report, /SECRET_KEY|SECRET_TOKEN|PRIVATE_IMAGE/);
 });
+
+test("AI preference defaults to opt-out, can be changed, and persists", async () => {
+  const { store, saved } = makeStore();
+  // Default is opt-out (maximum privacy)
+  assert.equal(store.getState().aiPreference, "opt-out");
+  // Change to cloud
+  store.getState().setAIPreference("cloud");
+  assert.equal(store.getState().aiPreference, "cloud");
+  // Change to on-device
+  store.getState().setAIPreference("on-device");
+  assert.equal(store.getState().aiPreference, "on-device");
+  // Wait for persistence
+  await new Promise((r) => setTimeout(r, 50));
+  const disk = saved();
+  assert.ok(disk, "store should have persisted");
+  assert.equal(disk.state.aiPreference, "on-device");
+});
+
+test("completeOnboarding stores the chosen AI preference", () => {
+  const { store } = makeStore();
+  const profile = {
+    name: "Test",
+    dob: "2000-01-15",
+    bloodType: "A+",
+    height: 170,
+    weight: 65,
+  };
+  store.getState().completeOnboarding(profile, ["Peanut"], "cloud");
+  assert.equal(store.getState().hasCompletedOnboarding, true);
+  assert.equal(store.getState().aiPreference, "cloud");
+  // Without explicit AI pref, it should keep the current value
+  store.getState().resetOnboarding();
+  store.getState().setAIPreference("on-device");
+  store.getState().completeOnboarding(profile, ["Peanut"]);
+  assert.equal(store.getState().aiPreference, "on-device");
+});
+
+test("opt-out AI preference executes only deterministic heuristics with zero network", () => {
+  const ai = load("src/services/AIIntelligenceService.ts", {
+    "react-native": { Platform: { OS: "web" } },
+    "./LocalAIService": load("src/services/LocalAIService.ts", {}),
+    "./CloudAIService": {
+      CloudAIService: {
+        analyzeIngredientsOCR: async () => {
+          throw new Error("Cloud should not be called in opt-out mode");
+        },
+      },
+    },
+    "../types": {},
+  });
+  // getDeviceCapabilities should report unsupported on web
+  const caps = ai.getDeviceCapabilities();
+  assert.equal(caps.isOnDeviceSupported, false);
+  assert.ok(caps.unsupportedReason);
+  // analyzeIngredients in opt-out mode should return deterministic results
+  const result = ai.AIIntelligenceService.analyzeIngredients(
+    "opt-out",
+    ["Peanut", "Sugar"],
+    ["Peanut"],
+    "Test Product",
+  );
+  // It returns synchronously (LocalAIService is sync wrapped in async)
+  Promise.resolve(result).then((r) => {
+    assert.ok(r.insights.length > 0);
+    assert.ok(r.insights.some((i) => i.category === "Allergen"));
+    assert.ok(r.summary.includes("allergen"));
+  });
+});

@@ -43,6 +43,7 @@ import type {
   VaccineMilestone,
   MoodEntry,
   VitalLogEntry,
+  AIIntelligenceProvider,
 } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { NotificationService } from '../services/NotificationService';
@@ -349,6 +350,12 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   flaggedIngredients: [],
 
   isLocalAIOptedIn: false,
+
+  aiPreference: 'opt-out' as AIIntelligenceProvider,
+
+  setAIPreference: (pref: AIIntelligenceProvider): void => {
+    set({ aiPreference: pref });
+  },
 
   localAIAnalysisResult: null,
 
@@ -918,12 +925,13 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set({ vitalsLogs: [] });
   },
 
-  completeOnboarding: (profile: UserProfile, allergies: string[]): void => {
+  completeOnboarding: (profile: UserProfile, allergies: string[], aiPref?: AIIntelligenceProvider): void => {
     set((state) => ({
       hasCompletedOnboarding: true,
       profile,
       userAllergies: allergies,
       vaccineMilestones: generateMilestones(profile.dob),
+      ...(aiPref ? { aiPreference: aiPref } : {}),
     }));
   },
 
@@ -1138,6 +1146,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         medicationDay: state.medicationDay,
         biometricCore: state.biometricCore,
         isLocalAIOptedIn: state.isLocalAIOptedIn,
+        aiPreference: state.aiPreference,
         hasHealthPermission: state.hasHealthPermission,
         weeklyHistory: state.weeklyHistory,
         lastSyncedAt: state.lastSyncedAt,

@@ -7,6 +7,36 @@
  */
 
 // ---------------------------------------------------------------------------
+// AI Intelligence Provider Domain
+// ---------------------------------------------------------------------------
+
+/**
+ * Specifies which AI / intelligence backend the app routes requests through.
+ *
+ * - 'on-device':  Apple Foundation Models (iOS 18.1+, A17 Pro / M-series) or
+ *                 Android AICore / Gemini Nano (Android 14+, Pixel 8+ / Galaxy S24+).
+ *                 100 % offline, zero data leaves the device.
+ * - 'cloud':      Cloud API (currently Gemini 2.5 Flash). Requires network.
+ * - 'opt-out':    Deterministic heuristic rules only (AllergenEngine, static dict).
+ *                 No neural model of any kind is invoked.
+ */
+export type AIIntelligenceProvider = 'on-device' | 'cloud' | 'opt-out';
+
+/**
+ * Runtime hardware capability report returned by the native bridge.
+ */
+export interface AIDeviceCapabilities {
+  /** Whether the current device supports on-device foundation models */
+  readonly isOnDeviceSupported: boolean;
+  /** Human-readable reason when unsupported (e.g. "Requires A17 Pro or newer") */
+  readonly unsupportedReason?: string;
+  /** The specific on-device runtime available */
+  readonly runtime?: 'apple-foundation' | 'android-aicore' | 'mediapipe-genai';
+  /** Device chip identifier for diagnostics */
+  readonly chipId?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Medication Domain
 // ---------------------------------------------------------------------------
 
@@ -463,11 +493,17 @@ export interface SafeScaleState {
   /** Delete a symptom log entry by id */
   deleteSymptomLog: (id: string) => void;
 
+  // ----- AI & Foundation Models State & Actions -----
+  /** Active AI / Intelligence provider preference */
+  aiPreference: AIIntelligenceProvider;
+  /** Update AI provider preference */
+  setAIPreference: (pref: AIIntelligenceProvider) => void;
+
   // ----- Onboarding State & Actions -----
   /** Whether the user has completed the first-launch onboarding flow */
   hasCompletedOnboarding: boolean;
   /** Marks onboarding as complete and saves user-entered profile data */
-  completeOnboarding: (profile: UserProfile, allergies: string[]) => void;
+  completeOnboarding: (profile: UserProfile, allergies: string[], aiPreference?: AIIntelligenceProvider) => void;
   /** Resets onboarding status back to incomplete */
   resetOnboarding: () => void;
 
