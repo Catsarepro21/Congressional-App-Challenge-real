@@ -94,32 +94,34 @@ export default function AIProviderSelector({
               <Text
                 style={[
                   shared.label,
-                  { flex: 1 },
+                  { flexShrink: 1 },
                   disabled && { color: C.muted },
                 ]}
+                numberOfLines={2}
               >
                 {AIIntelligenceService.providerLabel(opt.key)}
               </Text>
-              {badge ? (
-                <View
+            </View>
+            {badge ? (
+              <View
+                style={[
+                  styles.badge,
+                  { alignSelf: 'flex-start' },
+                  selected && { backgroundColor: C.green },
+                  disabled && { backgroundColor: C.line },
+                ]}
+              >
+                <Text
                   style={[
-                    styles.badge,
-                    selected && { backgroundColor: C.green },
-                    disabled && { backgroundColor: C.line },
+                    styles.badgeText,
+                    selected && { color: C.white },
+                    disabled && { color: C.muted },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.badgeText,
-                      selected && { color: C.white },
-                      disabled && { color: C.muted },
-                    ]}
-                  >
-                    {badge}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+                  {badge}
+                </Text>
+              </View>
+            ) : null}
 
             <Text style={[shared.body, disabled && { color: C.muted }]}>
               {AIIntelligenceService.providerDescription(opt.key)}

@@ -7,7 +7,7 @@
  *
  *   Tier 1 — On-Device Foundation Models
  *     iOS:     Apple Foundation Models via Core ML / Apple Neural Engine
- *              (iPhone 15 Pro+, M-series iPads/Macs, iOS 18.1+).
+ *              (iPhone 15 Pro+, all iPhone 16+, M-series iPads/Macs, iOS 18.1+).
  *              Available on free Apple Developer accounts — Core ML and the
  *              Neural Engine are standard SDK capabilities with no paid
  *              entitlement requirement.
@@ -71,7 +71,8 @@ export function getDeviceCapabilities(): AIDeviceCapabilities {
     return {
       isOnDeviceSupported: false,
       unsupportedReason:
-        'On-device Apple Intelligence requires iPhone 15 Pro or newer with iOS 26+. ' +
+        'On-device Apple Intelligence requires iPhone 15 Pro, any iPhone 16 or newer, ' +
+        'or an M-series iPad/Mac with iOS 18.1+. ' +
         'Install the native build to enable automatic detection.',
       runtime: 'apple-foundation',
     };
@@ -106,7 +107,7 @@ export function getDeviceCapabilities(): AIDeviceCapabilities {
  * Placeholder for the native Apple Foundation Model bridge.
  *
  * In a production native build this calls into Swift via expo-modules-core:
- *   - Uses the FoundationModels framework (iOS 26+) or Core ML with a
+ *   - Uses the FoundationModels framework (iOS 26+) or Core ML (iOS 18.1+) with a
  *     quantized model for ingredient/document analysis.
  *   - Executes entirely on the Apple Neural Engine (ANE).
  *   - Zero network calls, zero telemetry.
