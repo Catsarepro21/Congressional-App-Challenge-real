@@ -14,8 +14,10 @@ import { View, StatusBar, ActivityIndicator, AppState } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import HomeScreen from "./src/screens/HomeScreen";
+import ActivityScreen from "./src/screens/ActivityScreen";
 import JournalScreen from "./src/screens/JournalScreen";
 import RecordsScreen from "./src/screens/RecordsScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
 import EmergencyScreen from "./src/screens/EmergencyScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
@@ -96,14 +98,17 @@ export default function App() {
     switch (activeTab) {
       case 0:
         return <HomeScreen onNavigate={handleTabPress} />;
+      case 1:
+        return <ActivityScreen />;
+      case 2:
       case 6:
         return <JournalScreen />;
+      case 3:
       case 7:
         return <RecordsScreen />;
       case 4:
-        return <EmergencyScreen />;
       case 5:
-        return <SettingsScreen />;
+        return <ProfileScreen />;
       default:
         return <HomeScreen onNavigate={handleTabPress} />;
     }

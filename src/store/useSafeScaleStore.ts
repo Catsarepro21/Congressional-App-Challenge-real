@@ -44,11 +44,20 @@ import type {
   MoodEntry,
   VitalLogEntry,
   AIIntelligenceProvider,
+  WorkoutSession,
+  WorkoutType,
+  ActivityRingsData,
+  RecoveryReadinessScore,
 } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { NotificationService } from '../services/NotificationService';
 import { syncHealthSource, readableData } from '../services/HealthSyncService';
 import type { HealthSource } from '../types';
+import { getSuggestedOwnerName } from '../utils/deviceName';
+import {
+  estimateCaloriesBurned,
+  computeRecoveryScore,
+} from '../services/WorkoutService';
 
 // ---------------------------------------------------------------------------
 // Vaccine Milestones Generator
@@ -135,6 +144,16 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   geminiApiKey: '',
   useGeminiWeeklyReport: true,
   useCloudAIDocuments: true,
+  deviceNameSuggestedName: '',
+};
+
+const DEFAULT_ACTIVITY_RINGS: ActivityRingsData = {
+  moveCalories: 0,
+  moveTargetCalories: 600,
+  exerciseMinutes: 0,
+  exerciseTargetMinutes: 30,
+  standHours: 0,
+  standTargetHours: 12,
 };
 
 /**
@@ -319,6 +338,9 @@ export const useSafeScaleStore = create<SafeScaleState>()(
           current.updateBiometrics(result.readings);
           useSafeScaleStore.setState({ lastSyncedAt: result.connection.lastSyncedAt ?? null });
         }
+        if (result.activityRings) {
+          current.setActivityRings(result.activityRings);
+        }
       })
       .catch(() => { /* silent */ })
       .finally(() => set({ isAutoSyncing: false }));
@@ -335,6 +357,10 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   trackingDistance: 0,
   trackingCalories: 0,
   appWorkouts: [],
+  workouts: [],
+  activeWorkout: null,
+  activityRings: DEFAULT_ACTIVITY_RINGS,
+  recoveryScore: undefined,
   lastSuccessfulSync: null,
 
   // ----- Direct Wearable APIs State -----
@@ -354,10 +380,25 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   ensureCurrentDay: () => {
     const state = useSafeScaleStore.getState();
     const today = localDate();
-    if (state.medicationDay !== today) set({
-      medicationSchedule: currentMedications(state.medicationSchedule, state.medicationDay, today),
-      medicationDay: today,
-    });
+    const updates: Partial<SafeScaleState> = {};
+    if (state.medicationDay !== today) {
+      updates.medicationSchedule = currentMedications(state.medicationSchedule, state.medicationDay, today);
+      updates.medicationDay = today;
+    }
+    // Auto-detect owner name from device if not yet set
+    if (!state.profile.name || state.profile.name === 'Jane Doe') {
+      const suggested = getSuggestedOwnerName();
+      if (suggested) {
+        updates.profile = {
+          ...state.profile,
+          name: state.profile.name && state.profile.name !== 'Jane Doe' ? state.profile.name : suggested,
+          deviceNameSuggestedName: suggested,
+        };
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      set(updates);
+    }
   },
 
   hydrationGoal: 2000,
@@ -522,8 +563,13 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       return {
         biometricCore: updatedBiometricCore,
         weeklyHistory: newHistory.slice(-7),
+        activityRings: {
+          ...state.activityRings,
+          ...(updatedBiometricCore.activeCalories !== undefined ? { moveCalories: updatedBiometricCore.activeCalories } : {}),
+        },
       };
     });
+    useSafeScaleStore.getState().recalculateRecoveryScore();
   },
 
   // ── Scanner Actions ────────────────────────────────────────────────────────
@@ -668,8 +714,48 @@ export const useSafeScaleStore = create<SafeScaleState>()(
           { id: 'vt4', timestamp: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString().split('T')[0], systolicBP: 132, diastolicBP: 85, bloodGlucose: 110, glucoseContext: 'Fasting', spo2: 98, temperature: 98.4 },
           { id: 'vt5', timestamp: localDate(), systolicBP: 120, diastolicBP: 80, bloodGlucose: 95, glucoseContext: 'Fasting', spo2: 98, temperature: 98.6 }
         ] : [],
+        workouts: nextTestMode ? [
+          {
+            id: 'sample-w1',
+            type: 'Running',
+            name: 'Morning River Run',
+            startedAt: new Date(Date.now() - 3600 * 1000).toISOString(),
+            endedAt: new Date(Date.now() - 1200 * 1000).toISOString(),
+            durationSeconds: 2400,
+            caloriesBurned: 395,
+            distanceMeters: 5120,
+            avgHeartRate: 152,
+            maxHeartRate: 171,
+            source: 'apple-health',
+          },
+          {
+            id: 'sample-w2',
+            type: 'Strength',
+            name: 'Upper Body Hypertrophy',
+            startedAt: new Date(Date.now() - 28 * 3600 * 1000).toISOString(),
+            endedAt: new Date(Date.now() - 25 * 3600 * 1000).toISOString(),
+            durationSeconds: 3000,
+            caloriesBurned: 280,
+            source: 'app',
+            strengthSets: [
+              { exercise: 'Bench Press', reps: 10, weightKg: 75, completed: true },
+              { exercise: 'Incline DB Press', reps: 12, weightKg: 26, completed: true },
+              { exercise: 'Lat Pulldown', reps: 12, weightKg: 65, completed: true },
+            ],
+          },
+        ] : [],
+        activityRings: nextTestMode ? {
+          moveCalories: 420,
+          moveTargetCalories: 600,
+          exerciseMinutes: 40,
+          exerciseTargetMinutes: 30,
+          standHours: 9,
+          standTargetHours: 12,
+          lastSyncedAt: new Date().toISOString(),
+        } : DEFAULT_ACTIVITY_RINGS,
       };
     });
+    useSafeScaleStore.getState().recalculateRecoveryScore();
   },
 
   /** Adds a new medication entry. */
@@ -1050,7 +1136,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     });
   },
 
-  startWorkout: (type) => set({
+  startWorkout: (type: 'Run' | 'Walk' | 'Cycle') => set({
     isTrackingActive: true,
     trackingType: type,
     trackingStartTime: new Date().toISOString(),
@@ -1060,7 +1146,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     trackingCalories: 0,
   }),
 
-  updateWorkoutProgress: (coords, steps, distance, calories) => set((state) => ({
+  updateWorkoutProgress: (coords: any, steps: number, distance: number, calories: number) => set((state) => ({
     trackingPath: [...state.trackingPath, coords],
     trackingSteps: state.trackingSteps + steps,
     trackingDistance: state.trackingDistance + distance,
@@ -1133,42 +1219,157 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     };
   }),
 
-  deleteWorkout: (id) => set((state) => {
-    const workout = state.appWorkouts.find(w => w.id === id);
-    if (!workout) return {};
-
-    const nextWorkouts = state.appWorkouts.filter(w => w.id !== id);
-    const today = localDate();
-    const isTodayWorkout = workout.startTime.startsWith(today);
-
-    let updatedBiometricCore = state.biometricCore;
-    let nextHistory = state.weeklyHistory;
-
-    if (isTodayWorkout) {
-      updatedBiometricCore = {
-        ...state.biometricCore,
-        steps: Math.max(0, state.biometricCore.steps - workout.steps),
-        activeCalories: Math.max(0, state.biometricCore.activeCalories - workout.calories),
+  // ----- Complete Workout Hub Actions -----
+  addWorkout: (workout: WorkoutSession) => {
+    set((state) => {
+      const nextWorkouts = [workout, ...state.workouts];
+      const moveCals = (state.activityRings?.moveCalories || 0) + (workout.caloriesBurned || 0);
+      const exMins = (state.activityRings?.exerciseMinutes || 0) + Math.round((workout.durationSeconds || 0) / 60);
+      return {
+        workouts: nextWorkouts,
+        activityRings: {
+          ...state.activityRings,
+          moveCalories: moveCals,
+          exerciseMinutes: exMins,
+          lastSyncedAt: new Date().toISOString(),
+        },
+        biometricCore: {
+          ...state.biometricCore,
+          activeCalories: (state.biometricCore.activeCalories || 0) + (workout.caloriesBurned || 0),
+        },
       };
+    });
 
-      nextHistory = state.weeklyHistory.map((entry) => {
-        if (entry.date === today) {
-          return {
-            ...entry,
-            steps: updatedBiometricCore.steps,
-            activeCalories: updatedBiometricCore.activeCalories,
-          };
-        }
-        return entry;
-      });
-    }
+    HealthDataService.saveWorkoutToHealthKit(workout).catch(() => {});
+    useSafeScaleStore.getState().recalculateRecoveryScore();
+  },
 
+  startLiveWorkout: (type: WorkoutType, name?: string) => {
+    const session: WorkoutSession = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      type,
+      name: name || `${type} Session`,
+      startedAt: new Date().toISOString(),
+      durationSeconds: 0,
+      caloriesBurned: 0,
+      distanceMeters: 0,
+      source: 'app',
+      routeCoordinates: [],
+      strengthSets: [],
+    };
+    set({
+      activeWorkout: session,
+      isTrackingActive: true,
+      trackingType: type === 'Running' ? 'Run' : type === 'Walking' ? 'Walk' : type === 'Cycling' ? 'Cycle' : null,
+      trackingStartTime: session.startedAt,
+      trackingPath: [],
+      trackingSteps: 0,
+      trackingDistance: 0,
+      trackingCalories: 0,
+    });
+  },
+
+  updateLiveWorkout: (update: Partial<WorkoutSession>) => set((state) => {
+    if (!state.activeWorkout) return {};
     return {
-      appWorkouts: nextWorkouts,
-      biometricCore: updatedBiometricCore,
-      weeklyHistory: nextHistory,
+      activeWorkout: {
+        ...state.activeWorkout,
+        ...update,
+      },
     };
   }),
+
+  finishLiveWorkout: () => {
+    const state = useSafeScaleStore.getState();
+    const active = state.activeWorkout;
+    if (!active) return null;
+
+    const endedAt = new Date().toISOString();
+    const durationSeconds = active.durationSeconds || Math.max(1, Math.round((Date.parse(endedAt) - Date.parse(active.startedAt)) / 1000));
+    
+    let caloriesBurned = active.caloriesBurned;
+    if (!caloriesBurned || caloriesBurned <= 0) {
+      const weight = state.profile.weight || 70;
+      caloriesBurned = estimateCaloriesBurned(active.type, durationSeconds, weight);
+    }
+
+    const finishedWorkout: WorkoutSession = {
+      ...active,
+      endedAt,
+      durationSeconds,
+      caloriesBurned,
+    };
+
+    set((s) => ({
+      workouts: [finishedWorkout, ...s.workouts],
+      activeWorkout: null,
+      isTrackingActive: false,
+      trackingType: null,
+      trackingStartTime: null,
+      trackingPath: [],
+      trackingSteps: 0,
+      trackingDistance: 0,
+      trackingCalories: 0,
+      activityRings: {
+        ...s.activityRings,
+        moveCalories: (s.activityRings?.moveCalories || 0) + caloriesBurned,
+        exerciseMinutes: (s.activityRings?.exerciseMinutes || 0) + Math.round(durationSeconds / 60),
+        lastSyncedAt: new Date().toISOString(),
+      },
+      biometricCore: {
+        ...s.biometricCore,
+        activeCalories: (s.biometricCore.activeCalories || 0) + caloriesBurned,
+      },
+    }));
+
+    HealthDataService.saveWorkoutToHealthKit(finishedWorkout).catch(() => {});
+    useSafeScaleStore.getState().recalculateRecoveryScore();
+
+    return finishedWorkout;
+  },
+
+  cancelLiveWorkout: () => set({
+    activeWorkout: null,
+    isTrackingActive: false,
+    trackingType: null,
+    trackingStartTime: null,
+    trackingPath: [],
+    trackingSteps: 0,
+    trackingDistance: 0,
+    trackingCalories: 0,
+  }),
+
+  deleteWorkout: (id: string) => set((state) => ({
+    workouts: state.workouts.filter((w) => w.id !== id),
+    appWorkouts: state.appWorkouts.filter((w) => w.id !== id),
+  })),
+
+  setActivityRings: (rings: Partial<ActivityRingsData>) => set((state) => ({
+    activityRings: {
+      ...state.activityRings,
+      ...rings,
+    },
+  })),
+
+  recalculateRecoveryScore: () => {
+    const state = useSafeScaleStore.getState();
+    const bio = state.biometricCore;
+    const baseRHR = bio.historicalRHR && bio.historicalRHR.length > 0
+      ? Math.round(bio.historicalRHR.reduce((a, b) => a + b, 0) / bio.historicalRHR.length)
+      : (bio.restingHeartRate || 65);
+
+    const yesterday = state.weeklyHistory.length >= 2 ? state.weeklyHistory[state.weeklyHistory.length - 2] : null;
+    const yesterdayStrain = yesterday?.activeCalories || 0;
+
+    const recovery = computeRecoveryScore({
+      sleepMinutes: bio.sleepMinutes || 0,
+      currentRHR: bio.restingHeartRate || bio.heartRate || 0,
+      baselineRHR: baseRHR,
+      yesterdayStrainCalories: yesterdayStrain,
+    });
+
+    set({ recoveryScore: recovery });
+  },
 
   setDeviceConnected: (device, connected) => set((state) => ({
     connectedDevices: {
@@ -1208,6 +1409,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         vitalsLogs: state.vitalsLogs,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         appWorkouts: state.appWorkouts,
+        workouts: state.workouts,
+        activityRings: state.activityRings,
         lastSuccessfulSync: state.lastSuccessfulSync,
         connectedDevices: state.connectedDevices,
       });

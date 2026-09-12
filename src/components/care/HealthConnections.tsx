@@ -58,6 +58,9 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
         current.updateBiometrics(result.readings);
         useSafeScaleStore.setState({ lastSyncedAt: result.connection.lastSyncedAt });
       }
+      if (result.activityRings) {
+        current.setActivityRings(result.activityRings);
+      }
       let statusMsg = result.readings
         ? `${HEALTH_SOURCE_NAMES[source]} readings updated!`
         : `${HEALTH_SOURCE_NAMES[source]} connected!`;

@@ -33,6 +33,11 @@ function makeStore() {
   };
   const store = load("src/store/useSafeScaleStore.ts", {
     "../utils/daily": daily,
+    "../utils/deviceName": { getSuggestedOwnerName: () => "Rehan", parseOwnerNameFromDeviceName: () => "Rehan" },
+    "../services/WorkoutService": {
+      estimateCaloriesBurned: () => 300,
+      computeRecoveryScore: () => ({ score: 85, status: 'Optimal', sleepFactor: 100, rhrFactor: 90, strainFactor: 100, recommendation: 'Optimal' }),
+    },
     zustand: require("zustand"),
     "zustand/middleware": require("zustand/middleware"),
     "@react-native-async-storage/async-storage": storage,
@@ -259,6 +264,11 @@ test("auto-sync throttles by 15 minutes and respects autoSyncEnabled flag", asyn
   };
   const store = load("src/store/useSafeScaleStore.ts", {
     "../utils/daily": daily,
+    "../utils/deviceName": { getSuggestedOwnerName: () => "Rehan", parseOwnerNameFromDeviceName: () => "Rehan" },
+    "../services/WorkoutService": {
+      estimateCaloriesBurned: () => 300,
+      computeRecoveryScore: () => ({ score: 85, status: 'Optimal', sleepFactor: 100, rhrFactor: 90, strainFactor: 100, recommendation: 'Optimal' }),
+    },
     zustand: require("zustand"),
     "zustand/middleware": require("zustand/middleware"),
     "@react-native-async-storage/async-storage": storage,

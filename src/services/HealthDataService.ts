@@ -15,7 +15,7 @@
 
 import { Platform } from 'react-native';
 import { readAppleHealth } from './NativeHealthReader';
-import type { BiometricSummary } from '../types';
+import type { BiometricSummary, WorkoutSession } from '../types';
 
 export function getAppleHealthKit(): any {
   if (Platform.OS !== 'ios') return null;
@@ -533,6 +533,10 @@ export class HealthDataService {
         if (P.BiologicalSex) readPermissions.push(P.BiologicalSex);
         if (P.Height) readPermissions.push(P.Height);
         if (P.Weight) readPermissions.push(P.Weight);
+
+        if (P.AppleExerciseTime) readPermissions.push(P.AppleExerciseTime);
+        if (P.AppleStandTime) readPermissions.push(P.AppleStandTime);
+        if (P.Workout) readPermissions.push(P.Workout);
       }
 
       if (readPermissions.length === 0) {
@@ -543,10 +547,13 @@ export class HealthDataService {
         return;
       }
 
+      const writePermissions: string[] = [];
+      if (P?.Workout) writePermissions.push(P.Workout);
+
       const permissions = {
         permissions: {
           read: readPermissions,
-          write: [],
+          write: writePermissions,
         },
       };
 
@@ -611,6 +618,57 @@ export class HealthDataService {
 
   public static getAppleHealthKit(): any {
     return getAppleHealthKit();
+  }
+
+  /**
+   * Saves a completed workout session to Apple Health.
+   */
+  public static saveWorkoutToHealthKit(workout: WorkoutSession): Promise<boolean> {
+    if (Platform.OS !== 'ios') return Promise.resolve(false);
+    const hk = getAppleHealthKit();
+    if (!hk || typeof hk.saveWorkout !== 'function') return Promise.resolve(false);
+
+    const typeMap: Record<string, string> = {
+      Running: 'Running',
+      Walking: 'Walking',
+      Cycling: 'Cycling',
+      Strength: 'TraditionalStrengthTraining',
+      HIIT: 'HighIntensityIntervalTraining',
+      Yoga: 'Yoga',
+      Other: 'Other',
+    };
+
+    const startDate = workout.startedAt || new Date().toISOString();
+    const endDate = workout.endedAt || new Date(Date.now() + workout.durationSeconds * 1000).toISOString();
+
+    const options: any = {
+      type: typeMap[workout.type] || 'Other',
+      startDate,
+      endDate,
+      energyBurned: workout.caloriesBurned || 0,
+      energyBurnedUnit: 'calorie',
+    };
+
+    if (workout.distanceMeters && workout.distanceMeters > 0) {
+      options.distance = Math.round(workout.distanceMeters);
+      options.distanceUnit = 'meter';
+    }
+
+    return new Promise((resolve) => {
+      try {
+        hk.saveWorkout(options, (err: any) => {
+          if (err) {
+            console.warn('[HealthDataService] Failed to save workout to HealthKit:', err);
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        });
+      } catch (err) {
+        console.warn('[HealthDataService] Exception saving workout to HealthKit:', err);
+        resolve(false);
+      }
+    });
   }
 
   /**
