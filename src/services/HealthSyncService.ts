@@ -20,6 +20,7 @@ export interface HealthSyncResult {
   connection: HealthConnection;
   readings: Partial<BiometricSummary> | null;
   profile?: ProfileSuggestion;
+  activityRings?: any;
 }
 
 export async function bounded<T>(operation: Promise<T>, milliseconds = 45000): Promise<T> {
@@ -33,10 +34,11 @@ export async function bounded<T>(operation: Promise<T>, milliseconds = 45000): P
 
 /** Old adapters use zero for unavailable values; don't replace saved data with an empty response. */
 export function readableData(data: Partial<BiometricSummary> | null): Partial<BiometricSummary> | null {
-  if (!data || ![data.steps, data.heartRate, data.restingHeartRate, data.sleepMinutes].some(value => Number.isFinite(value) && Number(value) > 0)) return null;
+  if (!data || ![data.steps, data.heartRate, data.restingHeartRate, data.sleepMinutes, data.activeCalories].some(value => Number.isFinite(value) && Number(value) > 0)) return null;
   // Replace this reading snapshot when switching providers; never sum cloud/native sources.
   return {
     steps: Number.isFinite(data.steps) ? Math.max(0, data.steps!) : 0,
+    activeCalories: Number.isFinite(data.activeCalories) ? Math.max(0, data.activeCalories!) : 0,
     heartRate: Number.isFinite(data.heartRate) ? Math.max(0, data.heartRate!) : 0,
     restingHeartRate: Number.isFinite(data.restingHeartRate) ? Math.max(0, data.restingHeartRate!) : 0,
     sleepMinutes: Number.isFinite(data.sleepMinutes) ? Math.max(0, data.sleepMinutes!) : 0,
@@ -89,7 +91,18 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
         profile = { dob: date, bloodType: blood, height, weight };
       }
     }
-    return { readings, profile, connection: { ...previous, connectedAt: previous?.connectedAt || new Date().toISOString(), ...(readings ? { lastSyncedAt: new Date().toISOString() } : {}), ...(wearable ? { wearable } : {}) } };
+    const activityRings = (rawData as any)?.activityRings;
+    return {
+      readings,
+      profile,
+      activityRings,
+      connection: {
+        ...previous,
+        connectedAt: previous?.connectedAt || new Date().toISOString(),
+        ...(readings ? { lastSyncedAt: new Date().toISOString() } : {}),
+        ...(wearable ? { wearable } : {}),
+      },
+    };
   }
 
   if (Platform.OS !== 'ios') throw new Error('Google account sign-in is currently configured for the native iPhone app. On Android, use Health Connect.');

@@ -76,12 +76,14 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
   const today = { startDate: start.toISOString(), endDate: now.toISOString() };
   const dayStart = now.getTime() - 86400000;
   const recent = { startDate: new Date(dayStart).toISOString(), endDate: now.toISOString(), ascending: false };
-  const [steps, energy, hr, rhr, sleep] = await Promise.all([
+  const [steps, energy, hr, rhr, sleep, exercise, stand] = await Promise.all([
     queryHealth(bridge, 'getStepCount', today),
     queryHealth(bridge, 'getActiveEnergyBurned', { ...today, unit: 'kilocalorie' }),
     queryHealth(bridge, 'getHeartRateSamples', { ...recent, unit: 'bpm' }),
     queryHealth(bridge, 'getRestingHeartRateSamples', { ...recent, unit: 'bpm' }),
     queryHealth(bridge, 'getSleepSamples', recent),
+    queryHealth(bridge, 'getAppleExerciseTime', { ...today, unit: 'minute' }),
+    queryHealth(bridge, 'getAppleStandTime', { ...today, unit: 'minute' }),
   ]);
   const values = (samples: any) => Array.isArray(samples) ? samples.filter(s => Number.isFinite(s.value) && s.value >= 0) : [];
   const hrValues = values(hr).filter(s => s.value > 0);
@@ -96,15 +98,28 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
     Array.isArray(sleep) ? sleep : [],
   );
 
+  const activeCalories = Math.round(values(energy).reduce((sum,s) => sum + s.value, 0));
+  const exerciseMins = Number.isFinite(exercise?.value) && exercise.value >= 0 ? Math.round(exercise.value) : 0;
+  const standH = Number.isFinite(stand?.value) && stand.value >= 0 ? Math.min(24, Math.round(stand.value / 60) || Math.round(stand.value)) : 0;
+
   // Zero means unavailable in the current dashboard schema; never substitute normal vitals.
   return {
     steps: Number.isFinite(steps?.value) && steps.value >= 0 ? Math.round(steps.value) : 0,
-    activeCalories: Math.round(values(energy).reduce((sum,s) => sum + s.value, 0)),
+    activeCalories,
     heartRate: hrValues.length ? Math.round(hrValues.reduce((sum,s) => sum + s.value, 0) / hrValues.length) : 0,
     restingHeartRate: rhrValues.length ? Math.round(rhrValues[0].value) : 0,
     sleepMinutes,
     // A single night cannot establish sleep consistency.
     sleepConsistency: 0,
     wearable,
+    activityRings: {
+      moveCalories: activeCalories,
+      moveTargetCalories: 600,
+      exerciseMinutes: exerciseMins,
+      exerciseTargetMinutes: 30,
+      standHours: standH,
+      standTargetHours: 12,
+      lastSyncedAt: now.toISOString(),
+    },
   };
 }

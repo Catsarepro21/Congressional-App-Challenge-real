@@ -87,7 +87,13 @@ export default function HomeScreen({
             label={checkedIn ? "View your check-in" : "How are you feeling?"}
             secondary
             icon="notebook-outline"
-            onPress={() => onNavigate(6)}
+            onPress={() => onNavigate(2)}
+          />
+          <Button
+            label="Fitness & Rings"
+            secondary
+            icon="heart-pulse"
+            onPress={() => onNavigate(1)}
           />
           <Button
             label="Medical ID"

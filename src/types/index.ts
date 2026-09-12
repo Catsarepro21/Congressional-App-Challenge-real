@@ -526,19 +526,27 @@ export interface SafeScaleState {
     completedVaccines: string[]
   ) => void;
 
-  // ----- GPS Workout Actions -----
-  startWorkout: (type: 'Run' | 'Walk' | 'Cycle') => void;
-  updateWorkoutProgress: (
-    coords: { latitude: number; longitude: number; timestamp: number },
-    steps: number,
-    distance: number,
-    calories: number
-  ) => void;
-  stopWorkout: () => void;
+  // ----- Workouts & Activity Hub State & Actions -----
+  workouts: WorkoutSession[];
+  activeWorkout: WorkoutSession | null;
+  activityRings: ActivityRingsData;
+  recoveryScore?: RecoveryReadinessScore;
+  addWorkout: (workout: WorkoutSession) => void;
+  startLiveWorkout: (type: WorkoutType, name?: string) => void;
+  updateLiveWorkout: (update: Partial<WorkoutSession>) => void;
+  finishLiveWorkout: () => WorkoutSession | null;
+  cancelLiveWorkout: () => void;
   deleteWorkout: (id: string) => void;
+  setActivityRings: (rings: Partial<ActivityRingsData>) => void;
+  recalculateRecoveryScore: () => void;
 
   // ----- Direct Wearable APIs Actions -----
   setDeviceConnected: (device: 'fitbit' | 'strava' | 'polar' | 'withings', connected: boolean) => void;
+
+  // ----- Legacy GPS Tracker Compatibility Actions -----
+  startWorkout: (type: 'Run' | 'Walk' | 'Cycle') => void;
+  updateWorkoutProgress: (coords: any, steps: number, distance: number, calories: number) => void;
+  stopWorkout: () => void;
 }
 
 /**
@@ -629,6 +637,8 @@ export interface UserProfile {
   googleOAuthClientId?: string;
   googleAccessToken?: string;
   googleRefreshToken?: string;
+  /** Auto-detected suggested user name from device hostname (e.g. "Rehan's iPhone" -> "Rehan") */
+  deviceNameSuggestedName?: string;
 }
 
 export interface FoodAnalysisResult {
@@ -707,4 +717,77 @@ export interface SymptomLog {
   readonly timestamp: string;
   type: string;
   severity: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WORKOUT & ACTIVITY DOMAIN
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type WorkoutType =
+  | 'Running'
+  | 'Walking'
+  | 'Cycling'
+  | 'Strength'
+  | 'HIIT'
+  | 'Yoga'
+  | 'Other';
+
+export interface StrengthSet {
+  exercise: string;
+  reps: number;
+  weightKg: number;
+  completed: boolean;
+}
+
+export interface WorkoutCoordinate {
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+  altitude?: number;
+  speed?: number;
+}
+
+export interface HeartRateZoneBreakdown {
+  zone1RecoverySeconds: number; // <60% max HR
+  zone2AerobicSeconds: number;  // 60-70% max HR
+  zone3TempoSeconds: number;    // 70-80% max HR
+  zone4ThresholdSeconds: number;// 80-90% max HR
+  zone5PeakSeconds: number;     // >90% max HR
+}
+
+export interface WorkoutSession {
+  readonly id: string;
+  type: WorkoutType;
+  name: string;
+  startedAt: string; // ISO 8601
+  endedAt?: string;  // ISO 8601
+  durationSeconds: number;
+  caloriesBurned: number;
+  distanceMeters?: number;
+  avgHeartRate?: number;
+  maxHeartRate?: number;
+  heartRateZones?: HeartRateZoneBreakdown;
+  routeCoordinates?: WorkoutCoordinate[];
+  strengthSets?: StrengthSet[];
+  source: 'app' | 'apple-health' | 'google-fit';
+  notes?: string;
+}
+
+export interface ActivityRingsData {
+  moveCalories: number;
+  moveTargetCalories: number;
+  exerciseMinutes: number;
+  exerciseTargetMinutes: number;
+  standHours: number;
+  standTargetHours: number;
+  lastSyncedAt?: string;
+}
+
+export interface RecoveryReadinessScore {
+  score: number; // 0 to 100
+  status: 'Optimal' | 'Good' | 'Fair' | 'Rest Needed';
+  sleepFactor: number; // 0 to 100
+  rhrFactor: number;   // 0 to 100
+  strainFactor: number;// 0 to 100
+  recommendation: string;
 }
