@@ -527,6 +527,12 @@ export class HealthDataService {
         if (P.SleepAnalysis) readPermissions.push(P.SleepAnalysis);
         if (P.ActiveEnergyBurned) readPermissions.push(P.ActiveEnergyBurned);
         if (P.RestingHeartRate) readPermissions.push(P.RestingHeartRate);
+
+        if (P.DateOfBirth) readPermissions.push(P.DateOfBirth);
+        if (P.BloodType) readPermissions.push(P.BloodType);
+        if (P.BiologicalSex) readPermissions.push(P.BiologicalSex);
+        if (P.Height) readPermissions.push(P.Height);
+        if (P.Weight) readPermissions.push(P.Weight);
       }
 
       if (readPermissions.length === 0) {
@@ -601,6 +607,10 @@ export class HealthDataService {
   public static fetchHealthData() {
     const hk = getAppleHealthKit();
     return Platform.OS === 'ios' && hk ? readAppleHealth(hk) : Promise.resolve(null);
+  }
+
+  public static getAppleHealthKit(): any {
+    return getAppleHealthKit();
   }
 
   /**

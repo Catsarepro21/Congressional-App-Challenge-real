@@ -9,7 +9,13 @@ export const HEALTH_SOURCE_NAMES: Record<HealthSource, string> = {
   apple: 'Apple Health', 'health-connect': 'Health Connect',
   'google-health': 'Google Health', 'google-fit': 'Google Fit',
 };
-export type ProfileSuggestion = { name?: string; dob?: string };
+export type ProfileSuggestion = {
+  name?: string;
+  dob?: string;
+  bloodType?: string;
+  height?: number;
+  weight?: number;
+};
 export interface HealthSyncResult {
   connection: HealthConnection;
   readings: Partial<BiometricSummary> | null;
@@ -66,9 +72,22 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
     const readings = readableData(rawData);
     let profile: ProfileSuggestion | undefined;
     if (source === 'apple' && includeProfile) {
-      const result = await queryHealth(NativeModules?.AppleHealthKit, 'getDateOfBirth', {}, 5000);
-      const date = typeof result?.value === 'string' ? result.value.slice(0, 10) : undefined;
-      profile = { dob: date };
+      const bridge = typeof (HealthDataService as any).getAppleHealthKit === 'function'
+        ? (HealthDataService as any).getAppleHealthKit()
+        : NativeModules?.AppleHealthKit;
+      const [dobRes, bloodRes, heightRes, weightRes] = await Promise.all([
+        queryHealth(bridge, 'getDateOfBirth', {}, 5000),
+        queryHealth(bridge, 'getBloodType', {}, 5000),
+        queryHealth(bridge, 'getLatestHeight', { unit: 'cm' }, 5000),
+        queryHealth(bridge, 'getLatestWeight', { unit: 'kg' }, 5000),
+      ]);
+      const date = typeof dobRes?.value === 'string' ? dobRes.value.slice(0, 10) : undefined;
+      const blood = typeof bloodRes?.value === 'string' && bloodRes.value !== 'unknown' ? bloodRes.value : undefined;
+      const height = typeof heightRes?.value === 'number' && heightRes.value > 0 ? Math.round(heightRes.value) : undefined;
+      const weight = typeof weightRes?.value === 'number' && weightRes.value > 0 ? Math.round(weightRes.value * 10) / 10 : undefined;
+      if (date || blood || height || weight) {
+        profile = { dob: date, bloodType: blood, height, weight };
+      }
     }
     return { readings, profile, connection: { ...previous, connectedAt: previous?.connectedAt || new Date().toISOString(), ...(readings ? { lastSyncedAt: new Date().toISOString() } : {}), ...(wearable ? { wearable } : {}) } };
   }

@@ -21,19 +21,49 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
     lock.current = true; setBusy(source); onBusyChange?.(true); setMessage('');
     try {
       const p = useSafeScaleStore.getState().profile;
-      const result = await syncHealthSource(source, reconnect ? undefined : p.healthConnections?.[source], p.googleOAuthClientId, !!onProfile);
+      const result = await syncHealthSource(source, reconnect ? undefined : p.healthConnections?.[source], p.googleOAuthClientId, true);
       if (!mounted.current || useSafeScaleStore.getState().isTestMode) return;
       if (!result) { setMessage('Sign-in cancelled. Your saved information has been kept.'); return; }
       const current = useSafeScaleStore.getState();
-      current.updateProfile({ healthConnections: { ...current.profile.healthConnections, [source]: result.connection }, ...(result.readings ? { lastHealthSource: source } : {}) });
+      const profileUpdates: any = {
+        healthConnections: { ...current.profile.healthConnections, [source]: result.connection },
+        ...(result.readings ? { lastHealthSource: source } : {}),
+      };
+      const importedFields: string[] = [];
+      if (result.profile) {
+        if (result.profile.dob && (!current.profile.dob || current.profile.dob === '')) {
+          profileUpdates.dob = result.profile.dob;
+          importedFields.push('Date of Birth');
+        }
+        if (result.profile.bloodType && (!current.profile.bloodType || current.profile.bloodType === 'Unknown')) {
+          profileUpdates.bloodType = result.profile.bloodType;
+          importedFields.push('Blood Type');
+        }
+        if (result.profile.height && !current.profile.height) {
+          profileUpdates.height = result.profile.height;
+          importedFields.push('Height');
+        }
+        if (result.profile.weight && !current.profile.weight) {
+          profileUpdates.weight = result.profile.weight;
+          importedFields.push('Weight');
+        }
+        if (result.profile.name && (!current.profile.name || current.profile.name === '')) {
+          profileUpdates.name = result.profile.name;
+          importedFields.push('Name');
+        }
+        onProfile?.(result.profile);
+      }
+      current.updateProfile(profileUpdates);
       if (result.readings) {
         current.updateBiometrics(result.readings);
         useSafeScaleStore.setState({ lastSyncedAt: result.connection.lastSyncedAt });
       }
-      if (result.profile) onProfile?.(result.profile);
-      const statusMsg = result.readings
+      let statusMsg = result.readings
         ? `${HEALTH_SOURCE_NAMES[source]} readings updated!`
-        : `${HEALTH_SOURCE_NAMES[source]} connected! Note: If iOS did not show a permission popup, open iPhone Settings → Privacy & Security → Health → SafeScale Health to verify categories are turned ON.`;
+        : `${HEALTH_SOURCE_NAMES[source]} connected!`;
+      if (importedFields.length > 0) {
+        statusMsg += `\n\nImported: ${importedFields.join(', ')}.`;
+      }
       setMessage(statusMsg);
       Alert.alert(`${HEALTH_SOURCE_NAMES[source]} Status`, statusMsg);
     } catch (error) {
