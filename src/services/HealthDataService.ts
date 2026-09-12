@@ -17,19 +17,31 @@ import { Platform } from 'react-native';
 import { readAppleHealth } from './NativeHealthReader';
 import type { BiometricSummary } from '../types';
 
-let AppleHealthKit: any = null;
-if (Platform.OS === 'ios') {
+export function getAppleHealthKit(): any {
+  if (Platform.OS !== 'ios') return null;
   try {
     const healthModule = require('react-native-health');
     const packageExport = healthModule.default ?? healthModule.HealthKit ?? healthModule;
     const native = require('react-native').NativeModules?.AppleHealthKit;
-    // Preserve lazy native methods instead of copying their enumerable properties.
-    AppleHealthKit = typeof native?.initHealthKit === 'function'
-      ? new Proxy({} as any, {get(_target, key) { const target = native; return key === 'Constants' ? packageExport.Constants : typeof target[key] === 'function' ? target[key].bind(target) : target[key]; }})
-      : packageExport;
-    if (typeof AppleHealthKit?.initHealthKit !== 'function') AppleHealthKit = null;
+    if (typeof native?.initHealthKit === 'function') {
+      return new Proxy({} as any, {
+        get(_target, key) {
+          const target = native;
+          return key === 'Constants'
+            ? packageExport.Constants
+            : typeof target[key] === 'function'
+            ? target[key].bind(target)
+            : target[key];
+        },
+      });
+    }
+    if (typeof packageExport?.initHealthKit === 'function') {
+      return packageExport;
+    }
+    return null;
   } catch (e) {
     console.warn('[HealthDataService] Failed to load react-native-health:', e);
+    return null;
   }
 }
 
@@ -496,17 +508,16 @@ export class HealthDataService {
         return;
       }
 
-      if (!AppleHealthKit) {
+      const hk = getAppleHealthKit();
+      if (!hk) {
         reject(new Error(
-          'Apple Health could not be initialized. ' +
-          'Make sure the HealthKit entitlement is enabled in your Xcode project ' +
-          '(Signing & Capabilities → + Capability → HealthKit) and that you are ' +
-          'running a native build, not Expo Go.',
+          'Apple Health native bridge (AppleHealthKit) could not be found. ' +
+          'Verify that the app was signed with the matching bundle ID and HealthKit entitlement.',
         ));
         return;
       }
 
-      const P = AppleHealthKit.Constants?.Permissions;
+      const P = hk.Constants?.Permissions;
       const readPermissions: string[] = [];
       if (P) {
         if (P.Steps) readPermissions.push(P.Steps);
@@ -521,8 +532,7 @@ export class HealthDataService {
       if (readPermissions.length === 0) {
         reject(new Error(
           'No HealthKit permission constants were found. ' +
-          'The react-native-health native module may not be linked correctly. ' +
-          'Try rebuilding with `npx expo prebuild --clean` and re-running.',
+          'The react-native-health native module may not be linked correctly.',
         ));
         return;
       }
@@ -534,15 +544,14 @@ export class HealthDataService {
         },
       };
 
-      AppleHealthKit.initHealthKit(permissions, (error: any) => {
+      hk.initHealthKit(permissions, (error: any) => {
         if (error) {
           const msg = typeof error === 'string' ? error
             : error?.message || 'Unknown HealthKit error';
           console.warn('[HealthKit] Permission request failed:', error);
           reject(new Error(
             `HealthKit initialization failed: ${msg}. ` +
-            'Verify that the HealthKit entitlement is enabled in Signing & Capabilities ' +
-            'and that Health access is allowed in Settings → Privacy & Security → Health.',
+            'Verify that Health access is enabled in iPhone Settings → Privacy & Security → Health → SafeScale Health.',
           ));
         } else {
           resolve(true);
@@ -552,10 +561,46 @@ export class HealthDataService {
   }
 
   /**
+   * Diagnostic check for iOS HealthKit availability and linker state.
+   */
+  public static getHealthKitDiagnostics(): {
+    available: boolean;
+    hasNativeBridge: boolean;
+    hasPackageExport: boolean;
+    permissionKeysCount: number;
+    reason?: string;
+  } {
+    if (Platform.OS !== 'ios') {
+      return { available: false, hasNativeBridge: false, hasPackageExport: false, permissionKeysCount: 0, reason: `Platform is ${Platform.OS}, not iOS.` };
+    }
+    const native = require('react-native').NativeModules?.AppleHealthKit;
+    let pkg: any = null;
+    try {
+      const mod = require('react-native-health');
+      pkg = mod.default ?? mod.HealthKit ?? mod;
+    } catch {
+      return { available: false, hasNativeBridge: false, hasPackageExport: false, permissionKeysCount: 0, reason: 'Failed to import react-native-health module.' };
+    }
+    const hk = getAppleHealthKit();
+    const hasNative = typeof native?.initHealthKit === 'function';
+    const hasPkgInit = typeof pkg?.initHealthKit === 'function';
+    const permissions = pkg?.Constants?.Permissions;
+    const permCount = permissions ? Object.keys(permissions).length : 0;
+    return {
+      available: !!hk,
+      hasNativeBridge: hasNative,
+      hasPackageExport: hasPkgInit,
+      permissionKeysCount: permCount,
+      reason: !hk ? 'Native AppleHealthKit bridge is missing from React Native runtime' : undefined,
+    };
+  }
+
+  /**
    * Fetches real telemetry data from iOS HealthKit.
    */
   public static fetchHealthData() {
-    return Platform.OS === 'ios' ? readAppleHealth(AppleHealthKit) : Promise.resolve(null);
+    const hk = getAppleHealthKit();
+    return Platform.OS === 'ios' && hk ? readAppleHealth(hk) : Promise.resolve(null);
   }
 
   /**

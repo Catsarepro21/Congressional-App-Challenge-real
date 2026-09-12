@@ -13,7 +13,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.safescalehealth",
+      "bundleIdentifier": "com.anonymous.SafeScale-health",
       "entitlements": {
         "com.apple.developer.healthkit": true
       },
