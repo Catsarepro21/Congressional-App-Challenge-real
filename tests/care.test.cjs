@@ -37,6 +37,10 @@ function makeStore() {
     "zustand/middleware": require("zustand/middleware"),
     "@react-native-async-storage/async-storage": storage,
     "../services/HealthDataService": { HealthDataService: {} },
+    "../services/HealthSyncService": {
+      syncHealthSource: async () => null,
+      readableData: (d) => d,
+    },
     "../services/NotificationService": {
       NotificationService: {
         scheduleMedicationReminder: async () => null,
@@ -223,3 +227,159 @@ test("opt-out AI preference executes only deterministic heuristics with zero net
     assert.ok(r.summary.includes("allergen"));
   });
 });
+
+test("detectWearable detects watch from samples and ignores phone-only samples", () => {
+  const reader = load("src/services/NativeHealthReader.ts");
+  // Phone-only samples
+  const phoneSamples = [
+    { sourceName: "John's iPhone", device: "iPhone 15 Pro", value: 5000, startDate: "2026-09-12T10:00:00Z" }
+  ];
+  const noWearable = reader.detectWearable(phoneSamples);
+  assert.equal(noWearable, undefined);
+
+  // Watch samples
+  const watchSamples = [
+    { sourceName: "Apple Watch", device: "Apple Watch Series 9", value: 72, startDate: "2026-09-12T10:05:00Z" }
+  ];
+  const detected = reader.detectWearable(phoneSamples, watchSamples);
+  assert.ok(detected);
+  assert.equal(detected.detected, true);
+  assert.equal(detected.source, "apple");
+  assert.equal(detected.name, "Apple Watch");
+  assert.equal(detected.model, "Apple Watch Series 9");
+});
+
+test("auto-sync throttles by 15 minutes and respects autoSyncEnabled flag", async () => {
+  let syncCalled = 0;
+  let saved;
+  const storage = {
+    getItem: async () => null,
+    setItem: async (_k, v) => { saved = JSON.parse(v); },
+    removeItem: async () => {},
+  };
+  const store = load("src/store/useSafeScaleStore.ts", {
+    "../utils/daily": daily,
+    zustand: require("zustand"),
+    "zustand/middleware": require("zustand/middleware"),
+    "@react-native-async-storage/async-storage": storage,
+    "../services/HealthDataService": { HealthDataService: {} },
+    "../services/HealthSyncService": {
+      syncHealthSource: async () => {
+        syncCalled++;
+        return {
+          readings: { steps: 2000 },
+          connection: { connectedAt: "2026-09-12T10:00:00Z", lastSyncedAt: new Date().toISOString() },
+        };
+      },
+      readableData: (d) => d,
+    },
+    "../services/NotificationService": {
+      NotificationService: {
+        scheduleMedicationReminder: async () => null,
+        cancelMedicationReminder: async () => {},
+      },
+    },
+  }).useSafeScaleStore;
+
+  // Set up connected health source
+  store.getState().updateProfile({
+    lastHealthSource: "apple",
+    healthConnections: {
+      apple: { connectedAt: "2026-09-12T00:00:00Z" }
+    },
+  });
+
+  // 1. autoSyncEnabled is true by default -> should call sync
+  store.getState().triggerAutoSync();
+  assert.equal(syncCalled, 1);
+
+  // Wait for async resolution
+  await new Promise((r) => setTimeout(r, 10));
+
+  // 2. Throttle test: calling immediately again within 15 min should NOT sync
+  store.getState().triggerAutoSync();
+  assert.equal(syncCalled, 1);
+
+  // 3. When autoSyncEnabled is false -> should NOT sync even if throttled timestamp is cleared
+  store.getState().setAutoSyncEnabled(false);
+  store.getState().updateProfile({
+    healthConnections: {
+      apple: { connectedAt: "2026-09-12T00:00:00Z", lastSyncedAt: undefined }
+    },
+  });
+  store.getState().triggerAutoSync();
+  assert.equal(syncCalled, 1); // still 1
+});
+
+test("food nutrition AI routes correctly based on user aiPreference", async () => {
+  let cloudCalled = false;
+  const fv = load("src/services/FoodVisionService.ts", {
+    "expo-file-system/legacy": {
+      readAsStringAsync: async () => "dummyBase64",
+      EncodingType: { Base64: "base64" },
+    },
+    "../types": {},
+  });
+
+  // Opt-out mode: uses offline keyword database, no cloud
+  const optOutResult = await fv.FoodVisionService.analyzeImage("file:///burger.jpg", "opt-out");
+  assert.ok(optOutResult);
+  assert.equal(optOutResult.foodName, "Burger");
+  assert.equal(optOutResult.calories, 540);
+  assert.equal(optOutResult.protein, 28);
+  assert.equal(optOutResult.carbs, 45);
+  assert.equal(optOutResult.fat, 26);
+
+  // On-device mode: falls back to offline database
+  const onDeviceResult = await fv.FoodVisionService.analyzeImage("file:///salmon.jpg", "on-device");
+  assert.ok(onDeviceResult);
+  assert.equal(onDeviceResult.foodName, "Salmon");
+  assert.equal(onDeviceResult.calories, 350);
+  assert.equal(onDeviceResult.protein, 40);
+
+  // Unknown food: provides safe fallback
+  const unknownResult = await fv.FoodVisionService.analyzeImage("file:///random_xyz.jpg", "opt-out");
+  assert.ok(unknownResult);
+  assert.equal(unknownResult.foodName, "Mixed Meal");
+  assert.equal(unknownResult.confidence, "low");
+});
+
+test("logged food entries store macros, calories, portions, and allergen warnings", () => {
+  const { store } = makeStore();
+  store.getState().addLoggedItem({
+    type: "Meal",
+    name: "Grilled Chicken Salad",
+    value: "390 kcal",
+    calories: 390,
+    macros: {
+      carbs: 18,
+      protein: 34,
+      fat: 14,
+      fiber: 4,
+      sugar: 2,
+      sodium: 520,
+    },
+    portion: "1 large bowl (~350g)",
+    photoUri: "file:///chicken_salad.jpg",
+    allergenWarnings: ["Dairy"],
+  });
+
+  const items = store.getState().loggedItems;
+  assert.equal(items.length, 1);
+  const logged = items[0];
+  assert.equal(logged.type, "Meal");
+  assert.equal(logged.name, "Grilled Chicken Salad");
+  assert.equal(logged.calories, 390);
+  assert.deepEqual(logged.macros, {
+    carbs: 18,
+    protein: 34,
+    fat: 14,
+    fiber: 4,
+    sugar: 2,
+    sodium: 520,
+  });
+  assert.equal(logged.portion, "1 large bowl (~350g)");
+  assert.equal(logged.photoUri, "file:///chicken_salad.jpg");
+  assert.deepEqual(logged.allergenWarnings, ["Dairy"]);
+});
+

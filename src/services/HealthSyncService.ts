@@ -61,15 +61,18 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
     if (Platform.OS !== expected) throw new Error(`${HEALTH_SOURCE_NAMES[source]} requires the native ${expected === 'ios' ? 'iPhone' : 'Android'} app.`);
     const allowed = await bounded(source === 'apple' ? HealthDataService.requestHealthPermissions() : HealthDataService.requestHealthConnectPermissions());
     if (!allowed) throw new Error('Health access was not enabled. Check permissions and try again, or continue manually.');
-    const readings = readableData(await bounded(source === 'apple' ? HealthDataService.fetchHealthData() : HealthDataService.fetchHealthConnectData()));
+    const rawData = await bounded(source === 'apple' ? HealthDataService.fetchHealthData() : HealthDataService.fetchHealthConnectData());
+    const wearable = (rawData as any)?.wearable ?? previous?.wearable;
+    const readings = readableData(rawData);
     let profile: ProfileSuggestion | undefined;
     if (source === 'apple' && includeProfile) {
       const result = await queryHealth(NativeModules?.AppleHealthKit, 'getDateOfBirth', {}, 5000);
       const date = typeof result?.value === 'string' ? result.value.slice(0, 10) : undefined;
       profile = { dob: date };
     }
-    return { readings, profile, connection: { ...previous, connectedAt: previous?.connectedAt || new Date().toISOString(), ...(readings ? { lastSyncedAt: new Date().toISOString() } : {}) } };
+    return { readings, profile, connection: { ...previous, connectedAt: previous?.connectedAt || new Date().toISOString(), ...(readings ? { lastSyncedAt: new Date().toISOString() } : {}), ...(wearable ? { wearable } : {}) } };
   }
+
   if (Platform.OS !== 'ios') throw new Error('Google account sign-in is currently configured for the native iPhone app. On Android, use Health Connect.');
   const service = source === 'google-fit' ? GoogleFitService : GoogleHealthService;
   let tokens = previous?.accessToken ? { accessToken: previous.accessToken, refreshToken: previous.refreshToken } : await service.authorize(customClientId);

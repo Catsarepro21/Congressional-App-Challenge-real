@@ -2,15 +2,16 @@
  * @file src/services/FoodVisionService.ts
  * @description AI-powered food photo analysis service.
  *
- * Supports two operating modes:
- *   - OFFLINE (default): Keyword heuristics against a curated meal database
- *   - GEMINI (opt-in): Google Gemini 2.5 Flash Vision API for high accuracy
+ * Routes through the same AI provider the user selected during onboarding:
+ *   - 'on-device': Stub that falls back to offline heuristics (same as AIIntelligenceService)
+ *   - 'cloud':     Google Gemini 2.5 Flash Vision API for high accuracy
+ *   - 'opt-out':   Keyword heuristics against a curated meal database
  *
- * Both modes return a FoodAnalysisResult with identical shape so the UI
+ * All modes return a FoodAnalysisResult with identical shape so the UI
  * doesn't need to branch.
  */
 
-import type { FoodAnalysisResult } from '../types';
+import type { AIIntelligenceProvider, FoodAnalysisResult } from '../types';
 import * as FileSystem from 'expo-file-system/legacy';
 
 // ---------------------------------------------------------------------------
@@ -94,18 +95,17 @@ const analyzeOffline = (imageUri: string): FoodAnalysisResult => {
     }
   }
 
-  // Return a generic estimate with a random common meal
-  const randomMeal = MEAL_DB[Math.floor(Math.random() * Math.min(8, MEAL_DB.length))];
+  // Return a generic fallback estimate
   return {
-    foodName: randomMeal.name,
-    portionEstimate: randomMeal.portion,
-    calories: randomMeal.calories,
-    carbs: randomMeal.carbs,
-    protein: randomMeal.protein,
-    fat: randomMeal.fat,
-    fiber: randomMeal.fiber,
-    sugar: randomMeal.sugar,
-    sodium: randomMeal.sodium,
+    foodName: UNKNOWN_MEAL.name,
+    portionEstimate: UNKNOWN_MEAL.portion,
+    calories: UNKNOWN_MEAL.calories,
+    carbs: UNKNOWN_MEAL.carbs,
+    protein: UNKNOWN_MEAL.protein,
+    fat: UNKNOWN_MEAL.fat,
+    fiber: UNKNOWN_MEAL.fiber,
+    sugar: UNKNOWN_MEAL.sugar,
+    sodium: UNKNOWN_MEAL.sodium,
     confidence: 'low',
   };
 };
@@ -131,10 +131,12 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
   "fiber": <number in grams>,
   "sugar": <number in grams>,
   "sodium": <number in mg>,
-  "confidence": "high" | "medium" | "low"
+  "confidence": "high" | "medium" | "low",
+  "ingredients": ["ingredient1", "ingredient2", ...]
 }
 
 Base estimates on standard serving sizes. If multiple foods are visible, estimate the total.
+The "ingredients" array should list all identifiable ingredients for allergen cross-checking.
 If you cannot identify the food, set foodName to "Unknown Food" and confidence to "low".`;
 
 /**
@@ -213,16 +215,21 @@ export const FoodVisionService = {
   /**
    * Analyze a food photo and return nutritional estimates.
    *
+   * Routes through the same AI provider the user selected during onboarding:
+   *   - 'on-device': Stub that falls back to offline heuristics
+   *   - 'cloud':     Gemini 2.5 Flash Vision API
+   *   - 'opt-out':   Offline keyword heuristic database
+   *
    * @param imageUri - Local file URI from expo-camera or expo-image-picker
-   * @param useGemini - If true and apiKey is valid, uses Gemini Vision API
-   * @param apiKey - Gemini API key (only used when useGemini is true)
+   * @param provider - The user's AI preference from the store
+   * @param apiKey   - Gemini API key (only used when provider is 'cloud')
    */
   analyzeImage: async (
     imageUri: string,
-    useGemini: boolean,
+    provider: AIIntelligenceProvider,
     apiKey: string = '',
   ): Promise<FoodAnalysisResult> => {
-    if (useGemini && apiKey.trim().length > 0) {
+    if (provider === 'cloud' && apiKey.trim().length > 0) {
       try {
         return await analyzeWithGemini(imageUri, apiKey.trim());
       } catch (err) {
@@ -230,6 +237,11 @@ export const FoodVisionService = {
         // Fall through to offline analysis
       }
     }
+
+    // 'on-device' stub: currently falls back to offline heuristics.
+    // When the native Apple Foundation Model / Android AICore module is built,
+    // this branch will call the on-device model before falling back.
+    // 'opt-out' always uses offline.
     return analyzeOffline(imageUri);
   },
 };

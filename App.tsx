@@ -49,7 +49,10 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!hydrated) return;
-    const refresh = () => useSafeScaleStore.getState().ensureCurrentDay();
+    const refresh = () => {
+      useSafeScaleStore.getState().ensureCurrentDay();
+      useSafeScaleStore.getState().triggerAutoSync();
+    };
     refresh();
     const listener = AppState.addEventListener("change", (state) => {
       if (state === "active") refresh();
@@ -60,6 +63,7 @@ export default function App() {
       clearInterval(timer);
     };
   }, [hydrated]);
+
   if (!hydrated) {
     return (
       <SafeAreaProvider>

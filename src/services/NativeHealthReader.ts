@@ -1,3 +1,5 @@
+import type { HealthWearableInfo } from '../types';
+
 /** Native callback queries are bounded so a missing bridge cannot hang Sync. */
 export async function queryHealth(bridge: any, method: string, options: object, timeoutMs = 10000): Promise<any> {
   if (typeof bridge?.[method] !== 'function') return null;
@@ -30,6 +32,44 @@ export function sleepMinutesFromSamples(samples: any[], start: number, end: numb
   return Math.round(total / 60000);
 }
 
+/**
+ * Detect a wearable (Apple Watch) from HealthKit sample metadata.
+ * HealthKit samples carry `sourceName` and `device` properties when
+ * sourced from a paired device. iPhones lack PPG sensors, so continuous
+ * heart rate and resting heart rate data exclusively originate from an
+ * Apple Watch or paired heart-rate monitor.
+ */
+export function detectWearable(...sampleArrays: any[][]): HealthWearableInfo | undefined {
+  const watchKeywords = ['watch', 'apple watch'];
+  let latestDate = '';
+  let deviceName = '';
+  let deviceModel = '';
+  for (const samples of sampleArrays) {
+    if (!Array.isArray(samples)) continue;
+    for (const s of samples) {
+      const source = String(s.sourceName || '').toLowerCase();
+      const device = String(s.device || '').toLowerCase();
+      const combined = `${source} ${device}`;
+      if (watchKeywords.some(kw => combined.includes(kw))) {
+        const sampleDate = s.endDate || s.startDate || '';
+        if (!latestDate || sampleDate > latestDate) latestDate = sampleDate;
+        if (!deviceName) deviceName = s.sourceName || 'Apple Watch';
+        if (!deviceModel && s.device) deviceModel = String(s.device);
+      }
+    }
+  }
+  if (deviceName) {
+    return {
+      detected: true,
+      name: deviceName,
+      model: deviceModel || undefined,
+      source: 'apple' as const,
+      lastSampleAt: latestDate || undefined,
+    };
+  }
+  return undefined;
+}
+
 export async function readAppleHealth(bridge: any, now = new Date()) {
   if (typeof bridge?.initHealthKit !== 'function') return null;
   const start = new Date(now); start.setHours(0, 0, 0, 0);
@@ -48,6 +88,14 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
   const rhrValues = values(rhr).filter(s => s.value > 0).sort((a,b) => Date.parse(b.startDate) - Date.parse(a.startDate));
   const sleepMinutes = sleepMinutesFromSamples(Array.isArray(sleep) ? sleep : [], dayStart, now.getTime());
   if (!(Number.isFinite(steps?.value) && steps.value > 0) && !values(energy).length && !hrValues.length && !rhrValues.length && !sleepMinutes) return null;
+
+  // Detect wearable from sample source metadata
+  const wearable = detectWearable(
+    Array.isArray(hr) ? hr : [],
+    Array.isArray(rhr) ? rhr : [],
+    Array.isArray(sleep) ? sleep : [],
+  );
+
   // Zero means unavailable in the current dashboard schema; never substitute normal vitals.
   return {
     steps: Number.isFinite(steps?.value) && steps.value >= 0 ? Math.round(steps.value) : 0,
@@ -57,5 +105,6 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
     sleepMinutes,
     // A single night cannot establish sleep consistency.
     sleepConsistency: 0,
+    wearable,
   };
 }

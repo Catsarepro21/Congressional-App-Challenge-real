@@ -2,9 +2,11 @@ import React, { useState } from "react";
 import { View, Text, useWindowDimensions } from "react-native";
 import { useSafeScaleStore } from "../store/useSafeScaleStore";
 import HealthConnections from "../components/care/HealthConnections";
+import FoodNutritionModal from "../components/care/FoodNutritionModal";
 import { localDate } from "../utils/daily";
 import Medications from "../components/care/Medications";
 import { Button, Card, Heading, Icon, Page, Sheet, C, s } from "../components/care/UI";
+import * as ImagePicker from 'expo-image-picker';
 
 export default function HomeScreen({
   onNavigate,
@@ -19,6 +21,9 @@ export default function HomeScreen({
   const demo = useSafeScaleStore((state) => state.isTestMode);
   const allergies = useSafeScaleStore((state) => state.userAllergies);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [foodPhotoUri, setFoodPhotoUri] = useState<string | null>(null);
+  const [foodModalOpen, setFoodModalOpen] = useState(false);
+  const isAutoSyncing = useSafeScaleStore((state) => state.isAutoSyncing);
   const { width } = useWindowDimensions();
   const taken = meds.filter((med) => med.status === "Completed").length;
   const today = localDate();
@@ -90,6 +95,33 @@ export default function HomeScreen({
             icon="card-account-details-outline"
             onPress={() => onNavigate(4)}
           />
+          <Button
+            label="Snap meal photo"
+            secondary
+            icon="camera"
+            onPress={async () => {
+              try {
+                const result = await ImagePicker.launchCameraAsync({
+                  mediaTypes: ['images'],
+                  quality: 0.7,
+                });
+                if (!result.canceled && result.assets?.[0]?.uri) {
+                  setFoodPhotoUri(result.assets[0].uri);
+                  setFoodModalOpen(true);
+                }
+              } catch {
+                // Camera not available — try photo library
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ['images'],
+                  quality: 0.7,
+                });
+                if (!result.canceled && result.assets?.[0]?.uri) {
+                  setFoodPhotoUri(result.assets[0].uri);
+                  setFoodModalOpen(true);
+                }
+              }
+            }}
+          />
         </View>
       </View>
       <View style={{ flexDirection: width >= 850 ? "row" : "column", gap: 20 }}>
@@ -121,9 +153,18 @@ export default function HomeScreen({
               <Heading title="Latest readings" />
             </View>
             <Text style={s.body}>
-              {lastSync
-                ? `Last synced ${new Date(lastSync).toLocaleString()}`
-                : "No health sync yet. Connect when you are ready."}
+              {(() => {
+                const parts: string[] = [];
+                if (lastSync) parts.push(`Last synced ${new Date(lastSync).toLocaleString()}`);
+                else parts.push('No health sync yet. Connect when you are ready.');
+                // Show watch badge
+                const conn = profile.healthConnections;
+                const src = profile.lastHealthSource;
+                const wearable = src && conn?.[src]?.wearable;
+                if (wearable?.detected) parts.push(`⌚ ${wearable.name}`);
+                if (isAutoSyncing) parts.push('Syncing…');
+                return parts.join(' · ');
+              })()}
             </Text>
             {[
               [
@@ -188,6 +229,11 @@ export default function HomeScreen({
           </Card>
         </View>
       </View>
+      <FoodNutritionModal
+        visible={foodModalOpen}
+        onClose={() => { setFoodModalOpen(false); setFoodPhotoUri(null); }}
+        photoUri={foodPhotoUri ?? undefined}
+      />
     </Page>
   );
 }
