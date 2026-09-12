@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, Alert, Image } from "react-native";
 import { useSafeScaleStore } from "../store/useSafeScaleStore";
 import FoodNutritionModal from "../components/care/FoodNutritionModal";
-import * as ImagePicker from "expo-image-picker";
+import { promptMealPhoto } from "../utils/mealPhotoPicker";
 import {
   Button,
   Card,
@@ -92,26 +92,11 @@ export default function JournalScreen() {
     ]);
   }
 
-  async function snapMealPhoto() {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-      });
-      if (!result.canceled && result.assets?.[0]?.uri) {
-        setFoodPhotoUri(result.assets[0].uri);
-        setFoodModalOpen(true);
-      }
-    } catch {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.7,
-      });
-      if (!result.canceled && result.assets?.[0]?.uri) {
-        setFoodPhotoUri(result.assets[0].uri);
-        setFoodModalOpen(true);
-      }
-    }
+  function snapMealPhoto() {
+    promptMealPhoto((uri) => {
+      setFoodPhotoUri(uri);
+      setFoodModalOpen(true);
+    });
   }
 
   return (

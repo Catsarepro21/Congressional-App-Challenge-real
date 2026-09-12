@@ -6,7 +6,7 @@ import FoodNutritionModal from "../components/care/FoodNutritionModal";
 import { localDate } from "../utils/daily";
 import Medications from "../components/care/Medications";
 import { Button, Card, Heading, Icon, Page, Sheet, C, s } from "../components/care/UI";
-import * as ImagePicker from 'expo-image-picker';
+import { promptMealPhoto } from "../utils/mealPhotoPicker";
 
 export default function HomeScreen({
   onNavigate,
@@ -99,27 +99,11 @@ export default function HomeScreen({
             label="Snap meal photo"
             secondary
             icon="camera"
-            onPress={async () => {
-              try {
-                const result = await ImagePicker.launchCameraAsync({
-                  mediaTypes: ['images'],
-                  quality: 0.7,
-                });
-                if (!result.canceled && result.assets?.[0]?.uri) {
-                  setFoodPhotoUri(result.assets[0].uri);
-                  setFoodModalOpen(true);
-                }
-              } catch {
-                // Camera not available — try photo library
-                const result = await ImagePicker.launchImageLibraryAsync({
-                  mediaTypes: ['images'],
-                  quality: 0.7,
-                });
-                if (!result.canceled && result.assets?.[0]?.uri) {
-                  setFoodPhotoUri(result.assets[0].uri);
-                  setFoodModalOpen(true);
-                }
-              }
+            onPress={() => {
+              promptMealPhoto((uri) => {
+                setFoodPhotoUri(uri);
+                setFoodModalOpen(true);
+              });
             }}
           />
         </View>
