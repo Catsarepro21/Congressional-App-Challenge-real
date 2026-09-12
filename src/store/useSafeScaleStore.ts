@@ -47,6 +47,8 @@ import type {
 } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { NotificationService } from '../services/NotificationService';
+import { syncHealthSource, readableData } from '../services/HealthSyncService';
+import type { HealthSource } from '../types';
 
 // ---------------------------------------------------------------------------
 // Vaccine Milestones Generator
@@ -280,6 +282,47 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   isTestMode: false,
 
   lastSyncedAt: null,
+
+  isAutoSyncing: false,
+
+  setAutoSyncEnabled: (enabled: boolean): void => {
+    set((state) => ({
+      profile: {
+        ...state.profile,
+        autoSyncEnabled: enabled,
+      },
+    }));
+  },
+
+  triggerAutoSync: (): void => {
+    const state = useSafeScaleStore.getState();
+    if (state.isAutoSyncing || state.isTestMode) return;
+    if (state.profile.autoSyncEnabled === false) return;
+    const connections = state.profile.healthConnections;
+    const lastSource = state.profile.lastHealthSource;
+    if (!connections || !lastSource || !connections[lastSource]) return;
+    // Throttle: skip if synced less than 15 minutes ago
+    const lastSync = connections[lastSource]?.lastSyncedAt;
+    if (lastSync) {
+      const elapsed = Date.now() - new Date(lastSync).getTime();
+      if (elapsed < 15 * 60 * 1000) return;
+    }
+    set({ isAutoSyncing: true });
+    syncHealthSource(lastSource as HealthSource, connections[lastSource])
+      .then(result => {
+        if (!result) return;
+        const current = useSafeScaleStore.getState();
+        current.updateProfile({
+          healthConnections: { ...current.profile.healthConnections, [lastSource]: result.connection },
+        });
+        if (result.readings) {
+          current.updateBiometrics(result.readings);
+          useSafeScaleStore.setState({ lastSyncedAt: result.connection.lastSyncedAt ?? null });
+        }
+      })
+      .catch(() => { /* silent */ })
+      .finally(() => set({ isAutoSyncing: false }));
+  },
 
   weeklyHistory: [],
 

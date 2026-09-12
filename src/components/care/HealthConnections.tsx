@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Platform, Text, View } from 'react-native';
+import { Alert, Platform, Text, View, Switch } from 'react-native';
 import { useSafeScaleStore } from '../../store/useSafeScaleStore';
 import { HEALTH_SOURCE_NAMES, syncHealthSource, type ProfileSuggestion } from '../../services/HealthSyncService';
 import type { HealthSource } from '../../types';
 import { Button, Heading, s, C } from './UI';
 
 export default function HealthConnections({ onProfile, onBusyChange }: { onProfile?: (profile: ProfileSuggestion) => void; onBusyChange?: (busy: boolean) => void }) {
-  const connections = useSafeScaleStore(state => state.profile.healthConnections);
+  const profile = useSafeScaleStore(state => state.profile);
+  const connections = profile.healthConnections;
+  const setAutoSyncEnabled = useSafeScaleStore(state => state.setAutoSyncEnabled);
   const demo = useSafeScaleStore(state => state.isTestMode);
   const [busy, setBusy] = useState<HealthSource | null>(null);
   const [message, setMessage] = useState('');
@@ -17,8 +19,8 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
     if (lock.current || demo) return;
     lock.current = true; setBusy(source); onBusyChange?.(true); setMessage('');
     try {
-      const profile = useSafeScaleStore.getState().profile;
-      const result = await syncHealthSource(source, reconnect ? undefined : profile.healthConnections?.[source], profile.googleOAuthClientId, !!onProfile);
+      const p = useSafeScaleStore.getState().profile;
+      const result = await syncHealthSource(source, reconnect ? undefined : p.healthConnections?.[source], p.googleOAuthClientId, !!onProfile);
       if (!mounted.current || useSafeScaleStore.getState().isTestMode) return;
       if (!result) { setMessage('Sign-in cancelled. Your saved information has been kept.'); return; }
       const current = useSafeScaleStore.getState();
@@ -50,12 +52,31 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
       return <View key={source} style={{ gap: 9, borderTopWidth: 1, borderColor: C.line, paddingTop: 14 }}>
         <Text style={s.label}>{HEALTH_SOURCE_NAMES[source]}{source === 'google-fit' ? ' · Legacy API' : ''}</Text>
         <Text style={s.body}>{!supported ? source === 'health-connect' ? 'Available in the Android app.' : 'Available in the iPhone app.' : connection?.lastSyncedAt ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}` : connection ? 'Connected · No readings imported yet' : source === 'google-fit' ? 'For accounts and projects that still have Google Fit API access.' : source === 'google-health' ? 'Sign in to import data available to your Google Health account.' : 'You choose which health information SafeScale can read.'}</Text>
+        {connection?.wearable?.detected ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignSelf: 'flex-start' }}>
+            <Text style={{ fontSize: 13 }}>⌚</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#1B5E20' }}>
+              {connection.wearable.name} detected · Contributing health metrics
+            </Text>
+          </View>
+        ) : null}
         <View style={s.wrap}>
           <Button label={busy === source ? `Connecting ${HEALTH_SOURCE_NAMES[source]}…` : `${connection ? 'Sync' : 'Connect'} ${HEALTH_SOURCE_NAMES[source]}`} disabled={!!busy || demo || !supported} secondary onPress={() => connect(source)} />
           {connection && supported ? <><Button label={`Disconnect ${HEALTH_SOURCE_NAMES[source]}`} disabled={!!busy || demo} secondary onPress={() => disconnect(source)} />{source.startsWith('google-') ? <Button label={`Reconnect ${HEALTH_SOURCE_NAMES[source]}`} disabled={!!busy || demo} secondary onPress={() => connect(source, true)} /> : null}</> : null}
         </View>
       </View>;
     })}
+    <View style={{ borderTopWidth: 1, borderColor: C.line, paddingTop: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      <View style={{ flex: 1, paddingRight: 16 }}>
+        <Text style={s.label}>Automatic health sync</Text>
+        <Text style={s.body}>Sync metrics automatically in the background when the app is active (every 15 min).</Text>
+      </View>
+      <Switch
+        value={profile.autoSyncEnabled !== false}
+        onValueChange={(val) => setAutoSyncEnabled(val)}
+        trackColor={{ false: C.line, true: C.green }}
+      />
+    </View>
     {message ? <Text accessibilityLiveRegion="polite" style={s.body}>{message}</Text> : null}
   </View>;
 }

@@ -104,6 +104,7 @@ test('demo mode preserves real records in memory and storage', async () => {
     zustand: require('zustand'), 'zustand/middleware':require('zustand/middleware'),
     '@react-native-async-storage/async-storage':storage,
     '../services/HealthDataService':{HealthDataService:{}},
+    '../services/HealthSyncService':{syncHealthSource: async () => null, readableData: d => d},
     '../services/NotificationService':{NotificationService:{}},
   }).useSafeScaleStore;
   await store.persist.rehydrate();

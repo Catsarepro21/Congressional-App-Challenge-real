@@ -43,3 +43,17 @@ Desktop.ini
 # .env
 .env.local
 .env.*.local
+
+# Certificates, keys, and signing credentials
+*.p12
+*.pfx
+*.cer
+*.crt
+*.key
+*.pem
+*.mobileprovision
+*.ipa
+*.jks
+*.keystore
+*.exe
+zsign*

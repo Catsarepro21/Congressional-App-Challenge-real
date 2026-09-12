@@ -433,7 +433,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
           try {
             const result = await FoodVisionService.analyzeImage(
               photo.uri,
-              profile.useGeminiFoodVision || false,
+              useSafeScaleStore.getState().aiPreference,
               apiKey
             );
             setFoodAnalysisResult(result);

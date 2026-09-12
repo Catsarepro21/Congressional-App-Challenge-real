@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, Alert } from "react-native";
+import { View, Text, Alert, Image } from "react-native";
 import { useSafeScaleStore } from "../store/useSafeScaleStore";
+import FoodNutritionModal from "../components/care/FoodNutritionModal";
+import * as ImagePicker from "expo-image-picker";
 import {
   Button,
   Card,
@@ -16,9 +18,13 @@ import {
 export default function JournalScreen() {
   const moods = useSafeScaleStore((state) => state.moodLogs);
   const symptoms = useSafeScaleStore((state) => state.symptomLogs);
+  const loggedItems = useSafeScaleStore((state) => state.loggedItems);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<"Check-in" | "Symptom" | null>(null);
+  const [foodPhotoUri, setFoodPhotoUri] = useState<string | null>(null);
+  const [foodModalOpen, setFoodModalOpen] = useState(false);
+
   const entries = [
     ...moods.map((item) => ({
       id: `m-${item.id}`,
@@ -27,6 +33,10 @@ export default function JournalScreen() {
       kind: "Check-in",
       title: item.feelings.join(", ") || "Daily check-in",
       body: `${item.notes || "No notes added."}\nStress: ${item.stressLevel}`,
+      macros: undefined,
+      calories: undefined,
+      allergenWarnings: undefined as string[] | undefined,
+      photoUri: undefined as string | undefined,
     })),
     ...symptoms.map((item) => ({
       id: `s-${item.id}`,
@@ -35,6 +45,22 @@ export default function JournalScreen() {
       kind: "Symptom",
       title: item.type,
       body: `Self-reported severity: ${item.severity}/10`,
+      macros: undefined,
+      calories: undefined,
+      allergenWarnings: undefined as string[] | undefined,
+      photoUri: undefined as string | undefined,
+    })),
+    ...loggedItems.map((item) => ({
+      id: `l-${item.id}`,
+      rawId: item.id,
+      date: item.date ? `${item.date} ${item.timestamp}` : item.timestamp,
+      kind: item.type === "Meal" ? "Meal" : "Hydration",
+      title: item.name,
+      body: item.portion ? `Portion: ${item.portion} · ${item.value}` : item.value,
+      macros: item.macros,
+      calories: item.calories,
+      allergenWarnings: item.allergenWarnings,
+      photoUri: item.photoUri,
     })),
   ]
     .filter(
@@ -45,6 +71,7 @@ export default function JournalScreen() {
           .includes(query.toLowerCase()),
     )
     .sort((a, b) => b.date.localeCompare(a.date));
+
   function remove(id: string, kind: string) {
     Alert.alert("Delete this entry?", "This removes the saved journal entry.", [
       { text: "Cancel", style: "cancel" },
@@ -54,6 +81,8 @@ export default function JournalScreen() {
         onPress: () => {
           if (kind === "Symptom")
             useSafeScaleStore.getState().deleteSymptomLog(id);
+          else if (kind === "Meal" || kind === "Hydration")
+            useSafeScaleStore.getState().deleteLoggedItem(id);
           else
             useSafeScaleStore.setState((state) => ({
               moodLogs: state.moodLogs.filter((item) => item.id !== id),
@@ -62,10 +91,33 @@ export default function JournalScreen() {
       },
     ]);
   }
+
+  async function snapMealPhoto() {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setFoodPhotoUri(result.assets[0].uri);
+        setFoodModalOpen(true);
+      }
+    } catch {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setFoodPhotoUri(result.assets[0].uri);
+        setFoodModalOpen(true);
+      }
+    }
+  }
+
   return (
     <Page
       title="Your health journal"
-      subtitle="A place for how you feel and what you want to remember."
+      subtitle="A place for how you feel, what you eat, and what you want to remember."
     >
       <View style={s.wrap}>
         <Button
@@ -78,15 +130,21 @@ export default function JournalScreen() {
           secondary
           onPress={() => setForm("Symptom")}
         />
+        <Button
+          label="Log a meal"
+          secondary
+          icon="camera"
+          onPress={snapMealPhoto}
+        />
       </View>
       <Field
         label="Search your journal"
-        placeholder="Notes, symptoms, or a date"
+        placeholder="Notes, symptoms, meals, or a date"
         value={query}
         onChangeText={setQuery}
       />
       <Chips
-        options={["All", "Check-in", "Symptom"]}
+        options={["All", "Check-in", "Symptom", "Meal"]}
         value={filter}
         onChange={setFilter}
       />
@@ -102,7 +160,7 @@ export default function JournalScreen() {
             detail={
               query || filter !== "All"
                 ? "Try another search or filter."
-                : "Capture how you feel, a question for your clinician, or something you noticed today."
+                : "Capture how you feel, a meal you ate, or something you noticed today."
             }
           />
         </Card>
@@ -116,8 +174,40 @@ export default function JournalScreen() {
               <Text style={s.body}>{entry.date}</Text>
             </View>
             <Text style={s.heading}>{entry.title}</Text>
+            {entry.photoUri ? (
+              <Image
+                source={{ uri: entry.photoUri }}
+                style={{ width: "100%", height: 140, borderRadius: 12, marginVertical: 8 }}
+                resizeMode="cover"
+              />
+            ) : null}
             <Text style={s.body}>{entry.body}</Text>
-            <View style={{ alignSelf: "flex-start" }}>
+            {entry.macros ? (
+              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {entry.calories ? (
+                  <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: "#166534" }}>{entry.calories} kcal</Text>
+                  </View>
+                ) : null}
+                <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#1E40AF" }}>{entry.macros.protein}g protein</Text>
+                </View>
+                <View style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#92400E" }}>{entry.macros.carbs}g carbs</Text>
+                </View>
+                <View style={{ backgroundColor: "#FEE2E2", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#991B1B" }}>{entry.macros.fat}g fat</Text>
+                </View>
+              </View>
+            ) : null}
+            {entry.allergenWarnings && entry.allergenWarnings.length > 0 ? (
+              <View style={{ backgroundColor: "#FEE2E2", borderRadius: 8, padding: 8, marginTop: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: C.red }}>
+                  ⚠️ Allergen alert: {entry.allergenWarnings.join(", ")}
+                </Text>
+              </View>
+            ) : null}
+            <View style={{ alignSelf: "flex-start", marginTop: 8 }}>
               <Button
                 label="Delete entry"
                 secondary
@@ -128,6 +218,11 @@ export default function JournalScreen() {
         ))
       )}
       {form ? <JournalForm kind={form} onClose={() => setForm(null)} /> : null}
+      <FoodNutritionModal
+        visible={foodModalOpen}
+        onClose={() => { setFoodModalOpen(false); setFoodPhotoUri(null); }}
+        photoUri={foodPhotoUri ?? undefined}
+      />
     </Page>
   );
 }

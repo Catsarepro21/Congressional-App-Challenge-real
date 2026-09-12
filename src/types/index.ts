@@ -300,6 +300,15 @@ export interface SafeScaleState {
   /** Timestamp of the last successful health data synchronization. */
   lastSyncedAt: string | null;
 
+  /** Whether a background auto-sync is currently in progress. */
+  isAutoSyncing: boolean;
+
+  /** Toggle background health auto-sync on app open / active state. */
+  setAutoSyncEnabled: (enabled: boolean) => void;
+
+  /** Silently sync the active health source if auto-sync is enabled and throttle interval has elapsed. */
+  triggerAutoSync: () => void;
+
   /** Rolling history of daily biometric records for the past week (max 7 days). */
   weeklyHistory: WeeklyHistoryEntry[];
 
@@ -542,6 +551,18 @@ export interface LoggedItem {
   readonly value: string; // e.g. "500 ml", "650 kcal"
   readonly date?: string; // Local YYYY-MM-DD; absent for legacy entries
   readonly timestamp: string; // HH:MM
+  readonly calories?: number;
+  readonly macros?: {
+    carbs: number;
+    protein: number;
+    fat: number;
+    fiber?: number;
+    sugar?: number;
+    sodium?: number;
+  };
+  readonly portion?: string;
+  readonly photoUri?: string;
+  readonly allergenWarnings?: string[];
 }
 
 /**
@@ -572,11 +593,22 @@ export interface EmergencyContact {
  * Represents the user's personal identity and physical baseline metrics.
  */
 export type HealthSource = 'apple' | 'health-connect' | 'google-health' | 'google-fit';
+
+/** Describes a wearable device detected via health sample metadata. */
+export interface HealthWearableInfo {
+  detected: boolean;
+  name: string;         // e.g. "Apple Watch", "Pixel Watch", "Galaxy Watch"
+  model?: string;
+  source: HealthSource;
+  lastSampleAt?: string;
+}
+
 export interface HealthConnection {
   accessToken?: string;
   refreshToken?: string;
   connectedAt: string;
   lastSyncedAt?: string;
+  wearable?: HealthWearableInfo;
 }
 export interface UserProfile {
   healthConnections?: Partial<Record<HealthSource, HealthConnection>>;
@@ -589,6 +621,7 @@ export interface UserProfile {
   organDonor?: boolean;
   unitPreference?: 'metric' | 'imperial';
   useGeminiFoodVision?: boolean;
+  autoSyncEnabled?: boolean;
   geminiApiKey?: string;
   useGeminiWeeklyReport?: boolean;
   useCloudAIDocuments?: boolean;
@@ -609,6 +642,8 @@ export interface FoodAnalysisResult {
   sugar: number;    // g
   sodium: number;   // mg
   confidence: 'high' | 'medium' | 'low';
+  /** Detected ingredient names (returned by cloud AI for allergen cross-check). */
+  ingredients?: string[];
 }
 
 export interface WeeklyReport {
