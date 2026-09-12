@@ -3,14 +3,23 @@
 <plist version="1.0">
 <dict>
 	<key>application-identifier</key>
-	<string>A349CM55H9.com.anonymous.safescalehealth</string>
+	<string>A349CM55H9.com.anonymous.SafeScale-health</string>
 	<key>com.apple.developer.team-identifier</key>
 	<string>A349CM55H9</string>
 	<key>get-task-allow</key>
 	<true/>
 	<key>com.apple.developer.healthkit</key>
 	<true/>
+	<key>com.apple.developer.healthkit.background-delivery</key>
+	<true/>
 	<key>com.apple.developer.healthkit.access</key>
-	<array/>
+	<array>
+		<string>health-records</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>A349CM55H9.*</string>
+	</array>
 </dict>
 </plist>
+
