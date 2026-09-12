@@ -35,6 +35,13 @@ export default function SettingsScreen() {
   const [name, setName] = useState(profile.name);
   const [dob, setDob] = useState(profile.dob);
   const [blood, setBlood] = useState(profile.bloodType || "Unknown");
+
+  React.useEffect(() => {
+    if (profile.name) setName(profile.name);
+    if (profile.dob) setDob(profile.dob);
+    if (profile.bloodType) setBlood(profile.bloodType);
+  }, [profile.name, profile.dob, profile.bloodType]);
+
   const [allergy, setAllergy] = useState("");
   const [contactForm, setContactForm] = useState(false);
   const [message, setMessage] = useState("");
