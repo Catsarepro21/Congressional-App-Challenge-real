@@ -537,6 +537,8 @@ export class HealthDataService {
         if (P.AppleExerciseTime) readPermissions.push(P.AppleExerciseTime);
         if (P.AppleStandTime) readPermissions.push(P.AppleStandTime);
         if (P.Workout) readPermissions.push(P.Workout);
+        if (P.HeartRateVariability) readPermissions.push(P.HeartRateVariability);
+        else if (P.HeartRateVariabilitySDNN) readPermissions.push(P.HeartRateVariabilitySDNN);
       }
 
       if (readPermissions.length === 0) {

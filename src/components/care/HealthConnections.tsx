@@ -3,6 +3,7 @@ import { Alert, Platform, Text, View, Switch } from 'react-native';
 import { useSafeScaleStore } from '../../store/useSafeScaleStore';
 import { HEALTH_SOURCE_NAMES, syncHealthSource, type ProfileSuggestion } from '../../services/HealthSyncService';
 import { HealthDataService } from '../../services/HealthDataService';
+import { classifyHRV } from '../../services/CardioDiagnosticsService';
 import type { HealthSource } from '../../types';
 import { Button, Heading, s, C } from './UI';
 
@@ -60,6 +61,13 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
       }
       if (result.activityRings) {
         current.setActivityRings(result.activityRings);
+      }
+      if (result.sleepStages) {
+        current.updateSleepStages(result.sleepStages);
+      }
+      if (typeof result.hrvMs === 'number' && result.hrvMs > 0) {
+        const diag = classifyHRV(result.hrvMs);
+        current.updateHRVMetrics({ ...diag, lastSyncedAt: new Date().toISOString() });
       }
       let statusMsg = result.readings
         ? `${HEALTH_SOURCE_NAMES[source]} readings updated!`

@@ -547,6 +547,22 @@ export interface SafeScaleState {
   startWorkout: (type: 'Run' | 'Walk' | 'Cycle') => void;
   updateWorkoutProgress: (coords: any, steps: number, distance: number, calories: number) => void;
   stopWorkout: () => void;
+
+  // ----- Sleep Architecture State & Actions -----
+  sleepStages: SleepStageBreakdown;
+  sleepDebt: SleepDebtData;
+  updateSleepStages: (stages: Partial<SleepStageBreakdown>) => void;
+  recalculateSleepDebt: () => void;
+
+  // ----- Intermittent Fasting State & Actions -----
+  fastingSession: FastingSession;
+  startFast: (protocol?: FastingProtocol, customHours?: number) => void;
+  endFast: () => FastingHistoryEntry | null;
+  setFastingProtocol: (protocol: FastingProtocol, customHours?: number) => void;
+
+  // ----- Cardiovascular & HRV Diagnostics -----
+  hrvMetrics: HRVMetrics;
+  updateHRVMetrics: (metrics: Partial<HRVMetrics>) => void;
 }
 
 /**
@@ -791,3 +807,87 @@ export interface RecoveryReadinessScore {
   strainFactor: number;// 0 to 100
   recommendation: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SLEEP ARCHITECTURE & CIRCADIAN RHYTHM
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SleepStageBreakdown {
+  deepMinutes: number;   // Slow-wave sleep (target: 15-25%)
+  remMinutes: number;    // Rapid Eye Movement (target: 20-25%)
+  coreMinutes: number;   // Light / Core sleep (target: 45-55%)
+  awakeMinutes: number;  // WASO - Wake After Sleep Onset
+  totalSleepMinutes: number;
+  efficiencyPercent: number; // (totalSleep / timeInBed) * 100
+  lastRecordedDate?: string;
+}
+
+export interface SleepDebtData {
+  targetMinutes: number;        // Default 480 min (8 hours)
+  debtMinutes: number;          // Negative indicates sleep deficit
+  weeklyAverageMinutes: number;
+  circadianBedtimeWindow: {
+    start: string;              // e.g. "22:15"
+    end: string;                // e.g. "23:00"
+    recommendation: string;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTERMITTENT FASTING & METABOLIC TIMERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type FastingProtocol = '14:10' | '16:8' | '18:6' | '20:4' | 'OMAD' | 'Custom';
+
+export type FastingMetabolicStage =
+  | 'Digestion'           // 0 - 4h
+  | 'Glycogen Depletion'  // 4 - 12h
+  | 'Ketosis'             // 12 - 18h
+  | 'Autophagy';          // 18h+
+
+export interface FastingHistoryEntry {
+  readonly id: string;
+  startedAt: string;
+  endedAt: string;
+  targetHours: number;
+  durationSeconds: number;
+  protocol: FastingProtocol;
+  completed: boolean;
+}
+
+export interface FastingSession {
+  isFasting: boolean;
+  startedAt: string | null;
+  targetHours: number;
+  protocol: FastingProtocol;
+  history: FastingHistoryEntry[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CARDIOVASCULAR & AUTONOMIC DIAGNOSTICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface HRVMetrics {
+  sdnnMs: number;
+  status: 'High' | 'Balanced' | 'Low';
+  balanceDescription: string;
+  autonomicTone?: string;
+  recoveryStatus?: string;
+  insight?: string;
+  lastSyncedAt?: string;
+}
+
+export type AHA_BP_Category =
+  | 'Normal'
+  | 'Elevated'
+  | 'Stage 1'
+  | 'Stage 2'
+  | 'Crisis';
+
+export interface BloodPressureDiagnostic {
+  category: AHA_BP_Category;
+  label: string;
+  color: string;
+  advice: string;
+}
+

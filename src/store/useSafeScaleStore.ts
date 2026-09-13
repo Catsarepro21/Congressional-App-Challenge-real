@@ -48,6 +48,12 @@ import type {
   WorkoutType,
   ActivityRingsData,
   RecoveryReadinessScore,
+  SleepStageBreakdown,
+  SleepDebtData,
+  FastingProtocol,
+  FastingSession,
+  FastingHistoryEntry,
+  HRVMetrics,
 } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { NotificationService } from '../services/NotificationService';
@@ -58,6 +64,9 @@ import {
   estimateCaloriesBurned,
   computeRecoveryScore,
 } from '../services/WorkoutService';
+import { calculateSleepDebt } from '../services/SleepAnalysisService';
+import { getProtocolTargetHours } from '../services/FastingService';
+import { classifyHRV } from '../services/CardioDiagnosticsService';
 
 // ---------------------------------------------------------------------------
 // Vaccine Milestones Generator
@@ -154,6 +163,40 @@ const DEFAULT_ACTIVITY_RINGS: ActivityRingsData = {
   exerciseTargetMinutes: 30,
   standHours: 0,
   standTargetHours: 12,
+};
+
+const DEFAULT_SLEEP_STAGES: SleepStageBreakdown = {
+  deepMinutes: 0,
+  remMinutes: 0,
+  coreMinutes: 0,
+  awakeMinutes: 0,
+  totalSleepMinutes: 0,
+  efficiencyPercent: 0,
+};
+
+const DEFAULT_SLEEP_DEBT: SleepDebtData = {
+  targetMinutes: 480,
+  debtMinutes: 0,
+  weeklyAverageMinutes: 0,
+  circadianBedtimeWindow: {
+    start: '10:15 PM',
+    end: '11:00 PM',
+    recommendation: 'Based on circadian rhythm and an 8h sleep target, aim to wind down between 10:15 PM and 11:00 PM.',
+  },
+};
+
+const DEFAULT_FASTING_SESSION: FastingSession = {
+  isFasting: false,
+  startedAt: null,
+  targetHours: 16,
+  protocol: '16:8',
+  history: [],
+};
+
+const DEFAULT_HRV_METRICS: HRVMetrics = {
+  sdnnMs: 0,
+  status: 'Balanced',
+  balanceDescription: 'No HRV telemetry recorded yet. Wear Apple Watch during rest to calibrate autonomic balance.',
 };
 
 /**
@@ -341,6 +384,13 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         if (result.activityRings) {
           current.setActivityRings(result.activityRings);
         }
+        if (result.sleepStages) {
+          current.updateSleepStages(result.sleepStages);
+        }
+        if (typeof result.hrvMs === 'number' && result.hrvMs > 0) {
+          const diag = classifyHRV(result.hrvMs);
+          current.updateHRVMetrics({ ...diag, lastSyncedAt: new Date().toISOString() });
+        }
       })
       .catch(() => { /* silent */ })
       .finally(() => set({ isAutoSyncing: false }));
@@ -361,6 +411,10 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   activeWorkout: null,
   activityRings: DEFAULT_ACTIVITY_RINGS,
   recoveryScore: undefined,
+  sleepStages: DEFAULT_SLEEP_STAGES,
+  sleepDebt: DEFAULT_SLEEP_DEBT,
+  fastingSession: DEFAULT_FASTING_SESSION,
+  hrvMetrics: DEFAULT_HRV_METRICS,
   lastSuccessfulSync: null,
 
   // ----- Direct Wearable APIs State -----
@@ -753,6 +807,48 @@ export const useSafeScaleStore = create<SafeScaleState>()(
           standTargetHours: 12,
           lastSyncedAt: new Date().toISOString(),
         } : DEFAULT_ACTIVITY_RINGS,
+        sleepStages: nextTestMode ? {
+          deepMinutes: 85,
+          remMinutes: 105,
+          coreMinutes: 230,
+          awakeMinutes: 30,
+          totalSleepMinutes: 420,
+          efficiencyPercent: 93,
+          lastRecordedDate: localDate(),
+        } : DEFAULT_SLEEP_STAGES,
+        sleepDebt: nextTestMode ? {
+          targetMinutes: 480,
+          debtMinutes: -60,
+          weeklyAverageMinutes: 445,
+          circadianBedtimeWindow: {
+            start: '10:20 PM',
+            end: '11:05 PM',
+            recommendation: 'Based on circadian rhythm and an 8h sleep target, aim to wind down between 10:20 PM and 11:05 PM.',
+          },
+        } : DEFAULT_SLEEP_DEBT,
+        fastingSession: nextTestMode ? {
+          isFasting: true,
+          startedAt: new Date(Date.now() - 14 * 3600 * 1000 - 22 * 60 * 1000).toISOString(),
+          targetHours: 16,
+          protocol: '16:8',
+          history: [
+            {
+              id: 'fast-sample-1',
+              startedAt: new Date(Date.now() - 38 * 3600 * 1000).toISOString(),
+              endedAt: new Date(Date.now() - 22 * 3600 * 1000).toISOString(),
+              targetHours: 16,
+              durationSeconds: 16 * 3600 + 15 * 60,
+              protocol: '16:8',
+              completed: true,
+            },
+          ],
+        } : DEFAULT_FASTING_SESSION,
+        hrvMetrics: nextTestMode ? {
+          sdnnMs: 68,
+          status: 'High',
+          balanceDescription: 'Optimal parasympathetic (vagal) recovery. Your nervous system is resilient and primed for training.',
+          lastSyncedAt: new Date().toISOString(),
+        } : DEFAULT_HRV_METRICS,
       };
     });
     useSafeScaleStore.getState().recalculateRecoveryScore();
@@ -1371,6 +1467,99 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     set({ recoveryScore: recovery });
   },
 
+  // ----- Sleep Architecture Actions -----
+  updateSleepStages: (stages: Partial<SleepStageBreakdown>) => {
+    set((state) => {
+      const nextStages = { ...state.sleepStages, ...stages };
+      const nextSleepMins = nextStages.totalSleepMinutes || state.biometricCore.sleepMinutes || 0;
+      return {
+        sleepStages: nextStages,
+        biometricCore: {
+          ...state.biometricCore,
+          sleepMinutes: nextSleepMins,
+        },
+      };
+    });
+    useSafeScaleStore.getState().recalculateSleepDebt();
+    useSafeScaleStore.getState().recalculateRecoveryScore();
+  },
+
+  recalculateSleepDebt: () => {
+    const state = useSafeScaleStore.getState();
+    const historyMins = state.weeklyHistory.map((h) => h.sleepMinutes || 0);
+    const todaySleep = state.sleepStages.totalSleepMinutes || state.biometricCore.sleepMinutes || 0;
+    const allDays = [...historyMins, todaySleep].slice(-7);
+    const debt = calculateSleepDebt(allDays, 480);
+    set({ sleepDebt: debt });
+  },
+
+  // ----- Intermittent Fasting Actions -----
+  startFast: (protocol?: FastingProtocol, customHours?: number) => {
+    set((state) => {
+      const prot = protocol || state.fastingSession.protocol || '16:8';
+      const targetH = customHours || getProtocolTargetHours(prot);
+      return {
+        fastingSession: {
+          ...state.fastingSession,
+          isFasting: true,
+          startedAt: new Date().toISOString(),
+          protocol: prot,
+          targetHours: targetH,
+        },
+      };
+    });
+  },
+
+  endFast: () => {
+    const state = useSafeScaleStore.getState();
+    const sess = state.fastingSession;
+    if (!sess.isFasting || !sess.startedAt) return null;
+
+    const endedAt = new Date().toISOString();
+    const durationSeconds = Math.max(0, Math.round((Date.parse(endedAt) - Date.parse(sess.startedAt)) / 1000));
+    const completed = durationSeconds >= sess.targetHours * 3600;
+
+    const entry: FastingHistoryEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      startedAt: sess.startedAt,
+      endedAt,
+      targetHours: sess.targetHours,
+      durationSeconds,
+      protocol: sess.protocol,
+      completed,
+    };
+
+    set((s) => ({
+      fastingSession: {
+        ...s.fastingSession,
+        isFasting: false,
+        startedAt: null,
+        history: [entry, ...s.fastingSession.history].slice(0, 30),
+      },
+    }));
+
+    return entry;
+  },
+
+  setFastingProtocol: (protocol: FastingProtocol, customHours?: number) => {
+    const targetHours = customHours || getProtocolTargetHours(protocol);
+    set((state) => ({
+      fastingSession: {
+        ...state.fastingSession,
+        protocol,
+        targetHours,
+      },
+    }));
+  },
+
+  // ----- Cardiovascular & HRV Diagnostics -----
+  updateHRVMetrics: (metrics: Partial<HRVMetrics>) => set((state) => ({
+    hrvMetrics: {
+      ...state.hrvMetrics,
+      ...metrics,
+    },
+  })),
+
   setDeviceConnected: (device, connected) => set((state) => ({
     connectedDevices: {
       ...state.connectedDevices,
@@ -1411,6 +1600,10 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         appWorkouts: state.appWorkouts,
         workouts: state.workouts,
         activityRings: state.activityRings,
+        sleepStages: state.sleepStages,
+        sleepDebt: state.sleepDebt,
+        fastingSession: state.fastingSession,
+        hrvMetrics: state.hrvMetrics,
         lastSuccessfulSync: state.lastSuccessfulSync,
         connectedDevices: state.connectedDevices,
       });

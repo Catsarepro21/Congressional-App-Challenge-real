@@ -22,6 +22,10 @@ function load(path, mocks = {}) {
   return exports;
 }
 const daily = load("src/utils/daily.ts");
+const sleepAnalysis = load("src/services/SleepAnalysisService.ts");
+const fastingService = load("src/services/FastingService.ts");
+const cardioDiagnostics = load("src/services/CardioDiagnosticsService.ts");
+
 function makeStore() {
   let saved;
   const storage = {
@@ -38,6 +42,9 @@ function makeStore() {
       estimateCaloriesBurned: () => 300,
       computeRecoveryScore: () => ({ score: 85, status: 'Optimal', sleepFactor: 100, rhrFactor: 90, strainFactor: 100, recommendation: 'Optimal' }),
     },
+    "../services/SleepAnalysisService": sleepAnalysis,
+    "../services/FastingService": fastingService,
+    "../services/CardioDiagnosticsService": cardioDiagnostics,
     zustand: require("zustand"),
     "zustand/middleware": require("zustand/middleware"),
     "@react-native-async-storage/async-storage": storage,
@@ -269,6 +276,9 @@ test("auto-sync throttles by 15 minutes and respects autoSyncEnabled flag", asyn
       estimateCaloriesBurned: () => 300,
       computeRecoveryScore: () => ({ score: 85, status: 'Optimal', sleepFactor: 100, rhrFactor: 90, strainFactor: 100, recommendation: 'Optimal' }),
     },
+    "../services/SleepAnalysisService": sleepAnalysis,
+    "../services/FastingService": fastingService,
+    "../services/CardioDiagnosticsService": cardioDiagnostics,
     zustand: require("zustand"),
     "zustand/middleware": require("zustand/middleware"),
     "@react-native-async-storage/async-storage": storage,

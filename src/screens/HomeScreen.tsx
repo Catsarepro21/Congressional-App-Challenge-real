@@ -5,6 +5,7 @@ import HealthConnections from "../components/care/HealthConnections";
 import FoodNutritionModal from "../components/care/FoodNutritionModal";
 import { localDate } from "../utils/daily";
 import Medications from "../components/care/Medications";
+import FastingTracker from "../components/care/FastingTracker";
 import { Button, Card, Heading, Icon, Page, Sheet, C, s } from "../components/care/UI";
 import { promptMealPhoto } from "../utils/mealPhotoPicker";
 
@@ -116,6 +117,7 @@ export default function HomeScreen({
       </View>
       <View style={{ flexDirection: width >= 850 ? "row" : "column", gap: 20 }}>
         <View style={{ flex: 1.5, gap: 20 }}>
+          <FastingTracker />
           <Medications />
           <Card>
             <Heading
