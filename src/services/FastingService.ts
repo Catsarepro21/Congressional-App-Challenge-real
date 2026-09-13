@@ -16,43 +16,12 @@ export interface MetabolicStageDetails {
   benefits: string[];
 }
 
+// Legacy keys remain for saved-session compatibility; these are elapsed-time bands only.
 export const METABOLIC_STAGES: Record<FastingMetabolicStage, MetabolicStageDetails> = {
-  Digestion: {
-    stage: 'Digestion',
-    label: 'Anabolic / Digestion',
-    minHours: 0,
-    maxHours: 4,
-    color: '#3B8B9B',
-    description: 'Insulin and blood glucose are elevated as your body breaks down nutrients from your last meal.',
-    benefits: ['Nutrient absorption', 'Glycogen storage replenishment'],
-  },
-  'Glycogen Depletion': {
-    stage: 'Glycogen Depletion',
-    label: 'Glycogen Depletion',
-    minHours: 4,
-    maxHours: 12,
-    color: '#875B24',
-    description: 'Blood sugar stabilizes and insulin declines. The liver burns through stored glycogen reserves.',
-    benefits: ['Blood sugar regulation', 'Insulin sensitivity improvement', 'Digestive rest'],
-  },
-  Ketosis: {
-    stage: 'Ketosis',
-    label: 'Ketosis & Fat Oxidation',
-    minHours: 12,
-    maxHours: 18,
-    color: '#FA114F',
-    description: 'Glycogen is depleted. The liver begins metabolizing fatty acids into ketones for cellular and brain fuel.',
-    benefits: ['Active subcutaneous fat oxidation', 'Enhanced mental clarity', 'Appetite suppression'],
-  },
-  Autophagy: {
-    stage: 'Autophagy',
-    label: 'Autophagy & Cellular Renewal',
-    minHours: 18,
-    maxHours: 72,
-    color: '#18685D',
-    description: 'Cells activate deep self-cleaning, breaking down damaged proteins, senescent cells, and recycling organelles.',
-    benefits: ['Mitochondrial biogenesis', 'Cellular detoxification', 'Longevity pathway activation'],
-  },
+  Digestion: { stage: 'Digestion', label: '0–4 hours', minHours: 0, maxHours: 4, color: '#3B8B9B', description: 'Time since the recorded start. Digestion and energy use vary with the meal and the person.', benefits: [] },
+  'Glycogen Depletion': { stage: 'Glycogen Depletion', label: '4–12 hours', minHours: 4, maxHours: 12, color: '#875B24', description: 'Elapsed time does not establish your insulin level or remaining glycogen.', benefits: [] },
+  Ketosis: { stage: 'Ketosis', label: '12–18 hours', minHours: 12, maxHours: 18, color: '#A33F39', description: 'This timer cannot determine whether you are in ketosis.', benefits: [] },
+  Autophagy: { stage: 'Autophagy', label: '18+ hours', minHours: 18, maxHours: 72, color: '#18685D', description: 'This timer cannot measure autophagy or cellular renewal. Longer fasting is not a target to pursue for this label.', benefits: [] },
 };
 
 /**

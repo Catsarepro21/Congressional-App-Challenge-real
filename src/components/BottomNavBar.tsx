@@ -18,7 +18,7 @@ export function BottomNavBar({
 }) {
   const inset = useSafeAreaInsets();
   const normalizedIndex =
-    activeIndex === 6 ? 2 : activeIndex === 7 ? 3 : activeIndex === 5 ? 4 : activeIndex;
+    activeIndex === 9 ? 2 : activeIndex === 8 ? 4 : activeIndex === 6 ? 2 : activeIndex === 7 ? 3 : activeIndex === 5 ? 4 : activeIndex;
 
   return (
     <View

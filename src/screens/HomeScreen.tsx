@@ -1,231 +1,75 @@
-import React, { useState } from "react";
-import { View, Text, useWindowDimensions } from "react-native";
-import { useSafeScaleStore } from "../store/useSafeScaleStore";
-import HealthConnections from "../components/care/HealthConnections";
-import FoodNutritionModal from "../components/care/FoodNutritionModal";
-import { localDate } from "../utils/daily";
-import Medications from "../components/care/Medications";
-import FastingTracker from "../components/care/FastingTracker";
-import { Button, Card, Heading, Icon, Page, Sheet, C, s } from "../components/care/UI";
-import { promptMealPhoto } from "../utils/mealPhotoPicker";
+import React, { useState } from 'react';
+import { View, Text } from 'react-native';
+import { useSafeScaleStore } from '../store/useSafeScaleStore';
+import HealthConnections from '../components/care/HealthConnections';
+import FoodNutritionModal from '../components/care/FoodNutritionModal';
+import Medications from '../components/care/Medications';
+import FastingTracker from '../components/care/FastingTracker';
+import SleepArchitectureCard from '../components/care/SleepArchitectureCard';
+import { Button, Card, Heading, Page, Sheet, C, s } from '../components/care/UI';
+import { localDate } from '../utils/daily';
+import { normalizeTodayCards, TODAY_CARDS, DEFAULT_TODAY_CARDS } from '../utils/timeline';
+import { promptMealPhoto } from '../utils/mealPhotoPicker';
+import type { TodayCardId } from '../types';
 
-export default function HomeScreen({
-  onNavigate,
-}: {
-  onNavigate: (index: number) => void;
-}) {
-  const profile = useSafeScaleStore((state) => state.profile);
-  const meds = useSafeScaleStore((state) => state.medicationSchedule);
-  const logs = useSafeScaleStore((state) => state.moodLogs);
-  const vitals = useSafeScaleStore((state) => state.biometricCore);
-  const lastSync = useSafeScaleStore((state) => state.lastSyncedAt);
-  const demo = useSafeScaleStore((state) => state.isTestMode);
-  const allergies = useSafeScaleStore((state) => state.userAllergies);
+export default function HomeScreen({ onNavigate }: { onNavigate: (index: number) => void }) {
+  const profile = useSafeScaleStore(state => state.profile);
+  const updateProfile = useSafeScaleStore(state => state.updateProfile);
+  const meds = useSafeScaleStore(state => state.medicationSchedule);
+  const logs = useSafeScaleStore(state => state.moodLogs);
+  const vitals = useSafeScaleStore(state => state.biometricCore);
+  const lastSync = useSafeScaleStore(state => state.lastSyncedAt);
+  const demo = useSafeScaleStore(state => state.isTestMode);
+  const fasting = useSafeScaleStore(state => state.fastingSession.isFasting);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const [mealOpen, setMealOpen] = useState(false);
   const [foodPhotoUri, setFoodPhotoUri] = useState<string | null>(null);
-  const [foodModalOpen, setFoodModalOpen] = useState(false);
-  const isAutoSyncing = useSafeScaleStore((state) => state.isAutoSyncing);
-  const { width } = useWindowDimensions();
-  const taken = meds.filter((med) => med.status === "Completed").length;
-  const today = localDate();
-  const checkedIn = logs.some((log) => log.timestamp.slice(0, 10) === today);
-  return (
-    <Page
-      title="A little care, every day."
-      subtitle={new Date().toLocaleDateString(undefined, {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })}
-    >
-      {demo ? (
-        <Text style={[s.label, { color: C.amber }]}>
-          SAMPLE MODE · Showing fictional data
-        </Text>
-      ) : null}
-      <View
-        style={{
-          backgroundColor: C.ink,
-          borderRadius: 25,
-          padding: width > 700 ? 32 : 24,
-          gap: 20,
-        }}
-      >
-        <View style={s.row}>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: "#A4D6BD",
-                fontSize: 11,
-                letterSpacing: 1.5,
-                fontWeight: "700",
-              }}
-            >
-              YOUR DAY, AT A GLANCE
-            </Text>
-            <Text
-              style={{
-                color: C.white,
-                fontSize: 26,
-                fontWeight: "600",
-                marginTop: 12,
-              }}
-            >
-              {profile.name && profile.name !== "Jane Doe"
-                ? `Hello, ${profile.name.split(" ")[0]}.`
-                : "Make room for your health."}
-            </Text>
-          </View>
-          <Icon name="leaf-circle-outline" size={52} color="#A4D6BD" />
-        </View>
-        <Text style={{ color: "#D2E2DB", fontSize: 15, lineHeight: 24 }}>
-          {meds.length
-            ? `${taken} of ${meds.length} daily doses recorded. ${taken === meds.length ? "Your medication log is up to date." : "Your routine is ready below."}`
-            : "Keep your routine, notes, and health records together."}
-        </Text>
-        <View style={s.wrap}>
-          <Button
-            label={checkedIn ? "View your check-in" : "How are you feeling?"}
-            secondary
-            icon="notebook-outline"
-            onPress={() => onNavigate(2)}
-          />
-          <Button
-            label="Fitness & Rings"
-            secondary
-            icon="heart-pulse"
-            onPress={() => onNavigate(1)}
-          />
-          <Button
-            label="Medical ID"
-            secondary
-            icon="card-account-details-outline"
-            onPress={() => onNavigate(4)}
-          />
-          <Button
-            label="Snap meal photo"
-            secondary
-            icon="camera"
-            onPress={() => {
-              promptMealPhoto((uri) => {
-                setFoodPhotoUri(uri);
-                setFoodModalOpen(true);
-              });
-            }}
-          />
-        </View>
-      </View>
-      <View style={{ flexDirection: width >= 850 ? "row" : "column", gap: 20 }}>
-        <View style={{ flex: 1.5, gap: 20 }}>
-          <FastingTracker />
-          <Medications />
-          <Card>
-            <Heading
-              title="Keep the details that matter"
-              detail="Write down symptoms and questions while they are fresh, then bring them to your next appointment."
-            />
-            <View style={s.wrap}>
-              <Button
-                label="Open journal"
-                secondary
-                onPress={() => onNavigate(6)}
-              />
-              <Button
-                label="View records"
-                secondary
-                onPress={() => onNavigate(7)}
-              />
-            </View>
-          </Card>
-        </View>
-        <View style={{ flex: 1, gap: 20 }}>
-          <Card>
-            <View style={s.row}>
-              <Icon name="heart-pulse" />
-              <Heading title="Latest readings" />
-            </View>
-            <Text style={s.body}>
-              {(() => {
-                const parts: string[] = [];
-                if (lastSync) parts.push(`Last synced ${new Date(lastSync).toLocaleString()}`);
-                else parts.push('No health sync yet. Connect when you are ready.');
-                // Show watch badge
-                const conn = profile.healthConnections;
-                const src = profile.lastHealthSource;
-                const wearable = src && conn?.[src]?.wearable;
-                if (wearable?.detected) parts.push(`⌚ ${wearable.name}`);
-                if (isAutoSyncing) parts.push('Syncing…');
-                return parts.join(' · ');
-              })()}
-            </Text>
-            {[
-              [
-                "Heart rate",
-                vitals.heartRate > 0
-                  ? `${Math.round(vitals.heartRate)} bpm`
-                  : "No reading",
-              ],
-              [
-                "Sleep",
-                vitals.sleepMinutes > 0
-                  ? `${Math.floor(vitals.sleepMinutes / 60)}h ${Math.round(vitals.sleepMinutes % 60)}m`
-                  : "No reading",
-              ],
-              [
-                "Steps",
-                vitals.steps > 0
-                  ? Math.round(vitals.steps).toLocaleString()
-                  : "No reading",
-              ],
-            ].map(([label, value]) => (
-              <View
-                key={label}
-                style={[
-                  s.row,
-                  {
-                    justifyContent: "space-between",
-                    borderBottomWidth: 1,
-                    borderColor: C.line,
-                    paddingBottom: 12,
-                  },
-                ]}
-              >
-                <Text style={s.body}>{label}</Text>
-                <Text style={s.heading}>{value}</Text>
-              </View>
-            ))}
-            <Button
-              label="Sync health readings"
-              secondary
-              icon="sync"
-              onPress={() => setConnectionsOpen(true)}
-            />
-            {connectionsOpen ? <Sheet title="Health connections" onClose={() => setConnectionsOpen(false)}>
-              <HealthConnections />
-            </Sheet> : null}
-          </Card>
-          <Card>
-            <Heading
-              title="Your allergy list"
-              detail={
-                allergies.length
-                  ? allergies.join(" · ")
-                  : "No allergies recorded. Add known allergies in your profile."
-              }
-            />
-            <Button
-              label="Edit profile & allergies"
-              secondary
-              onPress={() => onNavigate(5)}
-            />
-          </Card>
-        </View>
-      </View>
-      <FoodNutritionModal
-        visible={foodModalOpen}
-        onClose={() => { setFoodModalOpen(false); setFoodPhotoUri(null); }}
-        photoUri={foodPhotoUri ?? undefined}
-      />
-    </Page>
-  );
+  const cards = normalizeTodayCards(profile.todayCards);
+  const taken = meds.filter(med => med.status === 'Completed').length;
+  const nextMed = [...meds].filter(med => med.status !== 'Completed').sort((a, b) => a.time.localeCompare(b.time))[0];
+  const checkedIn = logs.some(log => log.timestamp.slice(0, 10) === localDate());
+  const save = (todayCards: TodayCardId[]) => updateProfile({ todayCards });
+  const move = (id: TodayCardId, direction: number) => {
+    const order = [...cards]; const from = order.indexOf(id); const to = from + direction;
+    if (from < 0 || to < 0 || to >= order.length) return;
+    [order[from], order[to]] = [order[to], order[from]]; save(order);
+  };
+  const renderCard = (id: TodayCardId) => {
+    switch (id) {
+      case 'medications': return <Medications />;
+      case 'fasting': return <FastingTracker />;
+      case 'sleep': return <SleepArchitectureCard />;
+      case 'activity': return <Card><Heading title="Make room for movement" detail="View activity rings and record a workout." /><Button label="Open activity" icon="heart-pulse" secondary onPress={() => onNavigate(1)} /></Card>;
+      case 'journal': return <Card><Heading title={checkedIn ? 'Your check-in is saved' : 'How are you feeling?'} detail="Capture symptoms, mood, and questions while they are fresh." /><View style={s.wrap}><Button label={checkedIn ? 'View journal' : 'Add a check-in'} secondary onPress={() => onNavigate(2)} /><Button label="View timeline" secondary onPress={() => onNavigate(9)} /></View></Card>;
+      case 'readings': return <Card><Heading title="Latest health readings" detail={lastSync ? `Last sync ${new Date(lastSync).toLocaleString()}` : 'No sync yet. Connect Apple Health when you are ready.'} />
+        <Text style={s.body}>Latest imported snapshot; individual readings may be older than the sync time.</Text>
+        {[['Heart rate', vitals.heartRate > 0 ? `${Math.round(vitals.heartRate)} bpm` : 'No reading'], ['Sleep', vitals.sleepMinutes > 0 ? `${Math.floor(vitals.sleepMinutes / 60)}h ${Math.round(vitals.sleepMinutes % 60)}m` : 'No reading'], ['Steps', lastSync ? Math.round(vitals.steps).toLocaleString() : 'No reading']].map(([label, value]) => <View key={label} style={[s.row, { justifyContent: 'space-between' }]}><Text style={s.body}>{label}</Text><Text style={s.heading}>{value}</Text></View>)}
+        <Button label="Sync health readings" secondary icon="sync" onPress={() => setConnectionsOpen(true)} /></Card>;
+    }
+  };
+  return <Page title={profile.name ? `Hello, ${profile.name.split(' ')[0]}.` : 'A little care, every day.'} subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}>
+    {demo ? <Text style={[s.label, { color: C.amber }]}>SAMPLE MODE · Showing fictional data</Text> : null}
+    <View style={{ backgroundColor: C.ink, borderRadius: 25, padding: 24, gap: 16 }}>
+      <Text style={{ color: '#A4D6BD', fontWeight: '700', letterSpacing: 1 }}>YOUR NEXT SMALL STEP</Text>
+      <Text style={{ color: C.white, fontSize: 24, fontWeight: '600' }}>{nextMed && cards.includes('medications') ? `${nextMed.name} · ${nextMed.time}` : checkedIn ? 'Your day is taking shape.' : 'Take a moment to check in.'}</Text>
+      <Text style={{ color: '#D2E2DB', fontSize: 15, lineHeight: 23 }}>{nextMed && cards.includes('medications') ? `${taken} of ${meds.length} daily doses recorded. Your schedule is below.` : 'Keep your routine and see your health records together.'}</Text>
+      <View style={s.wrap}><Button label="View timeline" secondary onPress={() => onNavigate(9)} /><Button label="Add check-in" secondary onPress={() => onNavigate(2)} /></View>
+    </View>
+    <View style={s.wrap}><Button label="Log meal" secondary onPress={() => setMealOpen(true)} /><Button label="Snap meal photo" secondary icon="camera" onPress={() => promptMealPhoto(setFoodPhotoUri)} /><Button label="Medical ID" secondary icon="card-account-details-outline" onPress={() => onNavigate(8)} /><Button label="Customize Today" secondary icon="tune" onPress={() => setCustomizing(true)} /></View>
+    {fasting && !cards.includes('fasting') ? <Card><Heading title="Your fasting timer is running" detail="Hiding the card does not stop your timer." /><Button label="Show fasting timer" secondary onPress={() => save([...cards, 'fasting'])} /></Card> : null}
+    {cards.map(id => <View key={id}>{renderCard(id)}</View>)}
+    {!cards.length ? <Card><Heading title="Make this space yours" detail="Choose the cards you want to see each day." /><Button label="Choose cards" onPress={() => setCustomizing(true)} /></Card> : null}
+    {customizing ? <Sheet title="Customize Today" onClose={() => setCustomizing(false)}>
+      <Text style={s.body}>Your visible cards appear first, in order. Changes save automatically. Hiding a card keeps its records and reminders.</Text>
+      {[...cards, ...TODAY_CARDS.map(c => c.id).filter(id => !cards.includes(id))].map(id => <View key={id} style={{ gap: 10, paddingVertical: 14, borderBottomWidth: 1, borderColor: C.line }}>
+        <Text style={s.heading}>{TODAY_CARDS.find(c => c.id === id)?.title}</Text>
+        <View style={s.wrap}><Button label={`${cards.includes(id) ? 'Hide' : 'Show'} ${TODAY_CARDS.find(c => c.id === id)?.title}`} secondary onPress={() => save(cards.includes(id) ? cards.filter(c => c !== id) : [...cards, id])} />
+          {cards.includes(id) ? <><Button label={`Move ${id} up`} secondary disabled={cards.indexOf(id) === 0} onPress={() => move(id, -1)} /><Button label={`Move ${id} down`} secondary disabled={cards.indexOf(id) === cards.length - 1} onPress={() => move(id, 1)} /></> : null}</View>
+      </View>)}
+      <Button label="Restore default layout" secondary onPress={() => save([...DEFAULT_TODAY_CARDS])} /><Button label="Done" onPress={() => setCustomizing(false)} />
+    </Sheet> : null}
+    {connectionsOpen ? <Sheet title="Health connections" onClose={() => setConnectionsOpen(false)}><HealthConnections /></Sheet> : null}
+    <FoodNutritionModal visible={mealOpen || foodPhotoUri !== null} onClose={() => { setFoodPhotoUri(null); setMealOpen(false); }} photoUri={foodPhotoUri || undefined} />
+  </Page>;
 }

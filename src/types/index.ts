@@ -271,6 +271,7 @@ export interface SafeScaleState {
   /** Ordered list of medications in today's administration schedule. */
   medicationSchedule: MedicationItem[];
   medicationDay: string | null;
+  doseEvents: DoseEvent[];
   ensureCurrentDay: () => void;
 
   /** Live biometric summary, updated by HealthDataService.syncTelemetry(). */
@@ -634,7 +635,11 @@ export interface HealthConnection {
   lastSyncedAt?: string;
   wearable?: HealthWearableInfo;
 }
+export type TodayCardId = 'medications' | 'readings' | 'sleep' | 'activity' | 'journal' | 'fasting';
+export interface DoseEvent { id: string; medicationId: string; name: string; dosage: string; recordedAt: string; date: string; }
+
 export interface UserProfile {
+  todayCards?: TodayCardId[];
   healthConnections?: Partial<Record<HealthSource, HealthConnection>>;
   lastHealthSource?: HealthSource;
   name: string;
@@ -801,7 +806,8 @@ export interface ActivityRingsData {
 
 export interface RecoveryReadinessScore {
   score: number; // 0 to 100
-  status: 'Optimal' | 'Good' | 'Fair' | 'Rest Needed';
+  status: 'Optimal' | 'Good' | 'Fair' | 'Rest Needed' | 'Not enough data';
+  hasEnoughData?: boolean;
   sleepFactor: number; // 0 to 100
   rhrFactor: number;   // 0 to 100
   strainFactor: number;// 0 to 100
@@ -813,6 +819,8 @@ export interface RecoveryReadinessScore {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface SleepStageBreakdown {
+  unspecifiedMinutes?: number;
+  inBedMinutes?: number;
   deepMinutes: number;   // Slow-wave sleep (target: 15-25%)
   remMinutes: number;    // Rapid Eye Movement (target: 20-25%)
   coreMinutes: number;   // Light / Core sleep (target: 45-55%)

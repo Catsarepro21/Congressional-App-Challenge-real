@@ -341,27 +341,11 @@ test("food nutrition AI routes correctly based on user aiPreference", async () =
     "../types": {},
   });
 
-  // Opt-out mode: uses offline keyword database, no cloud
-  const optOutResult = await fv.FoodVisionService.analyzeImage("file:///burger.jpg", "opt-out");
-  assert.ok(optOutResult);
-  assert.equal(optOutResult.foodName, "Burger");
-  assert.equal(optOutResult.calories, 540);
-  assert.equal(optOutResult.protein, 28);
-  assert.equal(optOutResult.carbs, 45);
-  assert.equal(optOutResult.fat, 26);
 
-  // On-device mode: falls back to offline database
-  const onDeviceResult = await fv.FoodVisionService.analyzeImage("file:///salmon.jpg", "on-device");
-  assert.ok(onDeviceResult);
-  assert.equal(onDeviceResult.foodName, "Salmon");
-  assert.equal(onDeviceResult.calories, 350);
-  assert.equal(onDeviceResult.protein, 40);
+  await assert.rejects(fv.FoodVisionService.analyzeImage("file:///burger.jpg", "opt-out"), /not available offline/);
+  await assert.rejects(fv.FoodVisionService.analyzeImage("file:///salmon.jpg", "on-device"), /not available offline/);
+  await assert.rejects(fv.FoodVisionService.analyzeImage("file:///random.jpg", "cloud"), /API key/);
 
-  // Unknown food: provides safe fallback
-  const unknownResult = await fv.FoodVisionService.analyzeImage("file:///random_xyz.jpg", "opt-out");
-  assert.ok(unknownResult);
-  assert.equal(unknownResult.foodName, "Mixed Meal");
-  assert.equal(unknownResult.confidence, "low");
 });
 
 test("logged food entries store macros, calories, portions, and allergen warnings", () => {
@@ -403,3 +387,26 @@ test("logged food entries store macros, calories, portions, and allergen warning
   assert.deepEqual(logged.allergenWarnings, ["Dairy"]);
 });
 
+
+test('dose timeline survives rollover, supports undo, and sample mode isolates preferences', () => {
+  const {store,saved}=makeStore();
+  store.setState({medicationSchedule:[{id:'dose',name:'Fictional',dosage:'1',time:'08:00',status:'Pending',icon:'pill',stock:5}],medicationDay:daily.localDate()});
+  store.getState().setMedicationStatus('dose','Completed');
+  store.getState().setMedicationStatus('dose','Completed');
+  assert.equal(store.getState().doseEvents.length,1);
+  assert.ok(store.getState().doseEvents[0].recordedAt.includes('T'));
+  assert.equal(saved().state.doseEvents.length,1);
+  store.getState().setMedicationStatus('dose','Pending');
+  assert.equal(store.getState().doseEvents.length,0);
+  store.getState().setMedicationStatus('dose','Completed');
+  store.setState({medicationDay:'2000-01-01'});
+  store.getState().ensureCurrentDay();
+  assert.equal(store.getState().doseEvents.length,1);
+  store.getState().updateProfile({todayCards:['sleep','journal']});
+  store.getState().toggleTestMode();
+  assert.equal(store.getState().doseEvents.length,0);
+  store.getState().updateProfile({todayCards:[]});
+  store.getState().toggleTestMode();
+  assert.equal(store.getState().profile.todayCards.join(','),'sleep,journal');
+  assert.equal(store.getState().doseEvents.length,1);
+});

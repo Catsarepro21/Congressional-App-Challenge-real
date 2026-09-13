@@ -80,7 +80,7 @@ export default function ActivityScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
-    if (!recoveryScore) {
+    if (!recoveryScore?.hasEnoughData) {
       recalculateRecovery();
     }
   }, []);
@@ -342,14 +342,14 @@ export default function ActivityScreen() {
           <Icon name="lightning-bolt-circle" size={24} color={recoveryColor} />
           <Heading
             title="Recovery Readiness"
-            detail="Physiological readiness based on sleep duration, resting heart rate, and training strain"
+            detail="Experimental estimate from recorded sleep, resting heart rate, and activity; not a diagnosis"
           />
         </View>
 
         <View style={styles.readinessContainer}>
           <View style={[styles.readinessScoreBadge, { borderColor: recoveryColor }]}>
             <Text style={[styles.readinessScoreNumber, { color: recoveryColor }]}>
-              {recoveryScore?.score || 78}
+              {recoveryScore?.hasEnoughData ? recoveryScore.score : '—'}
             </Text>
             <Text style={styles.readinessScoreMax}>/ 100</Text>
           </View>
@@ -357,11 +357,11 @@ export default function ActivityScreen() {
           <View style={{ flex: 1, gap: 4 }}>
             <View style={s.row}>
               <Text style={[styles.readinessStatusBadge, { backgroundColor: recoveryColor }]}>
-                {recoveryScore?.status || 'Good'}
+                {recoveryScore?.hasEnoughData ? recoveryScore.status : 'Not enough data'}
               </Text>
             </View>
             <Text style={styles.readinessRecommendation}>
-              {recoveryScore?.recommendation || 'Normal training volume recommended today.'}
+              {recoveryScore?.recommendation || 'Sync health readings to estimate recovery.'}
             </Text>
           </View>
         </View>
@@ -370,15 +370,15 @@ export default function ActivityScreen() {
         <View style={styles.factorsRow}>
           <View style={styles.factorItem}>
             <Text style={styles.factorLabel}>SLEEP (45%)</Text>
-            <Text style={styles.factorValue}>{recoveryScore?.sleepFactor || 85}%</Text>
+            <Text style={styles.factorValue}>{recoveryScore?.hasEnoughData ? `${recoveryScore.sleepFactor}%` : '—'}</Text>
           </View>
           <View style={styles.factorItem}>
             <Text style={styles.factorLabel}>RHR DEVIATION (35%)</Text>
-            <Text style={styles.factorValue}>{recoveryScore?.rhrFactor || 80}%</Text>
+            <Text style={styles.factorValue}>{recoveryScore?.hasEnoughData ? `${recoveryScore.rhrFactor}%` : '—'}</Text>
           </View>
           <View style={styles.factorItem}>
             <Text style={styles.factorLabel}>WORKOUT STRAIN (20%)</Text>
-            <Text style={styles.factorValue}>{recoveryScore?.strainFactor || 90}%</Text>
+            <Text style={styles.factorValue}>{recoveryScore?.hasEnoughData ? `${recoveryScore.strainFactor}%` : '—'}</Text>
           </View>
         </View>
       </Card>
@@ -393,7 +393,7 @@ export default function ActivityScreen() {
       <Card>
         <Heading
           title="Record or Log Workouts"
-          detail="Workouts recorded in SafeScale are written back to Apple Health so they count towards your Apple Watch fitness rings."
+          detail="SafeScale attempts to save completed workouts to Apple Health. Ring credit depends on the samples accepted by HealthKit."
         />
         <View style={s.wrap}>
           <Button
