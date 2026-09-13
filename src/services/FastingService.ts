@@ -65,3 +65,17 @@ export function formatFastingDuration(totalSeconds: number): string {
   const secs = totalSeconds % 60;
   return `${hrs}h ${mins.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
 }
+
+export const FastingService = {
+  getProtocolTargetHours,
+  getFastingStage,
+  getMetabolicStage: (elapsedHours: number) => {
+    const stage = getFastingStage(elapsedHours);
+    return {
+      name: stage,
+      ...METABOLIC_STAGES[stage],
+    };
+  },
+  formatFastingDuration,
+};
+

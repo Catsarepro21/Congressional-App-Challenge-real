@@ -3,6 +3,8 @@ import { View, Text } from 'react-native';
 import { useSafeScaleStore } from '../store/useSafeScaleStore';
 import HealthConnections from '../components/care/HealthConnections';
 import FoodNutritionModal from '../components/care/FoodNutritionModal';
+import FoodSearchModal from '../components/care/FoodSearchModal';
+import BarcodeScannerModal from '../components/care/BarcodeScannerModal';
 import Medications from '../components/care/Medications';
 import FastingTracker from '../components/care/FastingTracker';
 import SleepArchitectureCard from '../components/care/SleepArchitectureCard';
@@ -25,6 +27,8 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
   const [customizing, setCustomizing] = useState(false);
   const [mealOpen, setMealOpen] = useState(false);
   const [foodPhotoUri, setFoodPhotoUri] = useState<string | null>(null);
+  const [foodSearchOpen, setFoodSearchOpen] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
   const cards = normalizeTodayCards(profile.todayCards);
   const taken = meds.filter(med => med.status === 'Completed').length;
   const nextMed = [...meds].filter(med => med.status !== 'Completed').sort((a, b) => a.time.localeCompare(b.time))[0];
@@ -56,7 +60,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
       <Text style={{ color: '#D2E2DB', fontSize: 15, lineHeight: 23 }}>{nextMed && cards.includes('medications') ? `${taken} of ${meds.length} daily doses recorded. Your schedule is below.` : 'Keep your routine and see your health records together.'}</Text>
       <View style={s.wrap}><Button label="View timeline" secondary onPress={() => onNavigate(9)} /><Button label="Add check-in" secondary onPress={() => onNavigate(2)} /></View>
     </View>
-    <View style={s.wrap}><Button label="Log meal" secondary onPress={() => setMealOpen(true)} /><Button label="Snap meal photo" secondary icon="camera" onPress={() => promptMealPhoto(setFoodPhotoUri)} /><Button label="Medical ID" secondary icon="card-account-details-outline" onPress={() => onNavigate(8)} /><Button label="Customize Today" secondary icon="tune" onPress={() => setCustomizing(true)} /></View>
+    <View style={s.wrap}><Button label="AI Health Assistant" secondary icon="brain" onPress={() => onNavigate(10)} /><Button label="Log meal" secondary onPress={() => setMealOpen(true)} /><Button label="Search food" secondary icon="magnify" onPress={() => setFoodSearchOpen(true)} /><Button label="Scan barcode" secondary icon="barcode-scan" onPress={() => setBarcodeOpen(true)} /><Button label="Snap meal photo" secondary icon="camera" onPress={() => promptMealPhoto(setFoodPhotoUri)} /><Button label="Medical ID" secondary icon="card-account-details-outline" onPress={() => onNavigate(8)} /><Button label="Customize Today" secondary icon="tune" onPress={() => setCustomizing(true)} /></View>
     {fasting && !cards.includes('fasting') ? <Card><Heading title="Your fasting timer is running" detail="Hiding the card does not stop your timer." /><Button label="Show fasting timer" secondary onPress={() => save([...cards, 'fasting'])} /></Card> : null}
     {cards.map(id => <View key={id}>{renderCard(id)}</View>)}
     {!cards.length ? <Card><Heading title="Make this space yours" detail="Choose the cards you want to see each day." /><Button label="Choose cards" onPress={() => setCustomizing(true)} /></Card> : null}
@@ -71,5 +75,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
     </Sheet> : null}
     {connectionsOpen ? <Sheet title="Health connections" onClose={() => setConnectionsOpen(false)}><HealthConnections /></Sheet> : null}
     <FoodNutritionModal visible={mealOpen || foodPhotoUri !== null} onClose={() => { setFoodPhotoUri(null); setMealOpen(false); }} photoUri={foodPhotoUri || undefined} />
+    <FoodSearchModal visible={foodSearchOpen} onClose={() => setFoodSearchOpen(false)} />
+    <BarcodeScannerModal visible={barcodeOpen} onClose={() => setBarcodeOpen(false)} />
   </Page>;
 }

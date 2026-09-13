@@ -113,3 +113,9 @@ export function classifyHRV(sdnnMs: number, _age: number = 30): HRVMetrics {
     balanceDescription: 'Sympathetic nervous system dominance detected. Indicates accumulated physical fatigue or physiological stress.',
   };
 }
+
+export const CardioDiagnosticsService = {
+  classifyBloodPressure,
+  classifyHRV,
+};
+

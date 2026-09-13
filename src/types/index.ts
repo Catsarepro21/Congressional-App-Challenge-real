@@ -34,6 +34,8 @@ export interface AIDeviceCapabilities {
   readonly runtime?: 'apple-foundation' | 'android-aicore' | 'mediapipe-genai';
   /** Device chip identifier for diagnostics */
   readonly chipId?: string;
+  /** Whether the offline USDA Food Database is available */
+  readonly isOfflineFoodDBSupported?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +115,13 @@ export interface BiometricSummary {
    * Must contain >= 3 entries for variance-based scoring to activate.
    */
   historicalRHR: number[];
+  /** Optional clinical snapshot fields */
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  hrvSdnn?: number;
+  recoveryScore?: number;
+  spO2?: number;
+  bloodGlucose?: number;
 }
 
 /**
@@ -588,6 +597,8 @@ export interface LoggedItem {
   readonly portion?: string;
   readonly photoUri?: string;
   readonly allergenWarnings?: string[];
+  readonly upcBarcode?: string;
+  readonly source?: 'usda' | 'openfoodfacts' | 'cloud-gemini' | 'manual' | 'on-device';
 }
 
 /**
@@ -644,9 +655,11 @@ export interface UserProfile {
   lastHealthSource?: HealthSource;
   name: string;
   dob: string;
+  age?: number;
   bloodType: string;
   height: number; // in cm
   weight: number; // in kg
+  chronicConditions?: string[];
   organDonor?: boolean;
   unitPreference?: 'metric' | 'imperial';
   useGeminiFoodVision?: boolean;
@@ -675,6 +688,10 @@ export interface FoodAnalysisResult {
   confidence: 'high' | 'medium' | 'low';
   /** Detected ingredient names (returned by cloud AI for allergen cross-check). */
   ingredients?: string[];
+  /** Sourcing origin for the nutritional estimate */
+  source?: 'usda' | 'openfoodfacts' | 'cloud-gemini' | 'manual' | 'on-device';
+  /** Associated UPC barcode if scanned */
+  barcode?: string;
 }
 
 export interface WeeklyReport {
@@ -866,6 +883,7 @@ export interface FastingHistoryEntry {
 export interface FastingSession {
   isFasting: boolean;
   startedAt: string | null;
+  startTime?: string | null;
   targetHours: number;
   protocol: FastingProtocol;
   history: FastingHistoryEntry[];
@@ -880,6 +898,7 @@ export interface HRVMetrics {
   status: 'High' | 'Balanced' | 'Low';
   balanceDescription: string;
   autonomicTone?: string;
+  tone?: string;
   recoveryStatus?: string;
   insight?: string;
   lastSyncedAt?: string;
@@ -898,4 +917,6 @@ export interface BloodPressureDiagnostic {
   color: string;
   advice: string;
 }
+
+export * from './usda';
 

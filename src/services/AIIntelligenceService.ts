@@ -59,7 +59,42 @@ export function getDeviceCapabilities(): AIDeviceCapabilities {
   return {
     isOnDeviceSupported: false,
     unsupportedReason: 'Native on-device AI is not implemented in this build. Manual entry and offline ingredient rules remain available.',
+    isOfflineFoodDBSupported: true,
   };
+}
+
+let USDALookupRef: typeof import('./USDALookupService').USDALookupService | null = null;
+let BarcodeLookupRef: typeof import('./BarcodeLookupService').BarcodeLookupService | null = null;
+let NaturalLanguageParserRef: typeof import('./NaturalLanguageMealParser').NaturalLanguageMealParser | null = null;
+
+function getUSDALookup() {
+  if (!USDALookupRef) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      USDALookupRef = require('./USDALookupService').USDALookupService;
+    } catch {}
+  }
+  return USDALookupRef;
+}
+
+function getBarcodeLookup() {
+  if (!BarcodeLookupRef) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      BarcodeLookupRef = require('./BarcodeLookupService').BarcodeLookupService;
+    } catch {}
+  }
+  return BarcodeLookupRef;
+}
+
+function getNaturalLanguageParser() {
+  if (!NaturalLanguageParserRef) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      NaturalLanguageParserRef = require('./NaturalLanguageMealParser').NaturalLanguageMealParser;
+    } catch {}
+  }
+  return NaturalLanguageParserRef;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,5 +262,36 @@ export const AIIntelligenceService = {
       case 'opt-out':
         return 'Disable all AI models. Uses deterministic rule-based checks and manual entry only. Maximum privacy.';
     }
+  },
+
+  /**
+   * Search the embedded USDA food database offline.
+   */
+  searchFoodDatabase: (query: string, options?: { category?: any; limit?: number }) => {
+    const service = getUSDALookup();
+    if (!service) return [];
+    return service.searchFoods(query, options);
+  },
+
+  /**
+   * Look up a barcode across offline USDA and Open Food Facts.
+   */
+  lookupBarcode: async (barcode: string) => {
+    const service = getBarcodeLookup();
+    if (!service) {
+      throw new Error('Barcode resolution service unavailable.');
+    }
+    return service.lookupBarcode(barcode);
+  },
+
+  /**
+   * Parse multi-item meal descriptions offline into verified USDA nutrition.
+   */
+  parseNaturalLanguageMeal: (text: string) => {
+    const parser = getNaturalLanguageParser();
+    if (!parser) {
+      throw new Error('Natural language meal parser unavailable.');
+    }
+    return parser.parseMealText(text);
   },
 };

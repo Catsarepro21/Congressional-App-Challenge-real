@@ -100,6 +100,17 @@ const executeGeminiRequest = async (
   return rawText;
 };
 
+let guardRef: typeof import('./CloudPermissionGuard').CloudPermissionGuard | null = null;
+function getGuard() {
+  if (!guardRef) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      guardRef = require('./CloudPermissionGuard').CloudPermissionGuard;
+    } catch {}
+  }
+  return guardRef;
+}
+
 export const CloudAIService = {
   /**
    * Scans a food label photo and extracts ingredients details.
@@ -108,22 +119,39 @@ export const CloudAIService = {
     imageUri: string,
     apiKey: string,
   ): Promise<{ brand: string; name: string; ingredients: string[] }> => {
-    const rawText = await executeGeminiRequest(imageUri, apiKey, INGREDIENT_OCR_PROMPT);
-    const jsonText = rawText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-    
-    const parsed = JSON.parse(jsonText) as {
-      brand?: string;
-      name?: string;
-      ingredients?: string[];
+    const action = async () => {
+      const rawText = await executeGeminiRequest(imageUri, apiKey, INGREDIENT_OCR_PROMPT);
+      const jsonText = rawText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      
+      const parsed = JSON.parse(jsonText) as {
+        brand?: string;
+        name?: string;
+        ingredients?: string[];
+      };
+
+      return {
+        brand: parsed.brand || '',
+        name: parsed.name || 'Scanned Label',
+        ingredients: parsed.ingredients && parsed.ingredients.length > 0
+          ? parsed.ingredients
+          : ['Ingredients details unavailable'],
+      };
     };
 
-    return {
-      brand: parsed.brand || '',
-      name: parsed.name || 'Scanned Label',
-      ingredients: parsed.ingredients && parsed.ingredients.length > 0
-        ? parsed.ingredients
-        : ['Ingredients details unavailable'],
-    };
+    const guard = getGuard();
+    if (guard) {
+      return await guard.executeWithPermission(
+        {
+          purpose: 'Scan food package ingredients with Google Gemini Vision Cloud API',
+          endpoint: 'https://generativelanguage.googleapis.com (Gemini 2.5 Flash Vision)',
+          dataPayloadSummary: 'Cropped label image bytes',
+          sensitiveFields: ['Label photo'],
+        },
+        action,
+      );
+    }
+
+    return await action();
   },
 
   /**
@@ -139,23 +167,40 @@ export const CloudAIService = {
     provider: string;
     status: string;
   }> => {
-    const rawText = await executeGeminiRequest(imageUri, apiKey, DOCUMENT_OCR_PROMPT);
-    const jsonText = rawText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-    
-    const parsed = JSON.parse(jsonText) as {
-      type?: 'Prescription' | 'LabResult' | 'Immunization';
-      title?: string;
-      value?: string;
-      provider?: string;
-      status?: string;
+    const action = async () => {
+      const rawText = await executeGeminiRequest(imageUri, apiKey, DOCUMENT_OCR_PROMPT);
+      const jsonText = rawText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      
+      const parsed = JSON.parse(jsonText) as {
+        type?: 'Prescription' | 'LabResult' | 'Immunization';
+        title?: string;
+        value?: string;
+        provider?: string;
+        status?: string;
+      };
+
+      return {
+        type: parsed.type || 'Prescription',
+        title: parsed.title || 'Scanned Record',
+        value: parsed.value || 'Extraction details unavailable',
+        provider: parsed.provider || 'Clinical Provider',
+        status: parsed.status || 'Active',
+      };
     };
 
-    return {
-      type: parsed.type || 'Prescription',
-      title: parsed.title || 'Scanned Record',
-      value: parsed.value || 'Extraction details unavailable',
-      provider: parsed.provider || 'Clinical Provider',
-      status: parsed.status || 'Active',
-    };
+    const guard = getGuard();
+    if (guard) {
+      return await guard.executeWithPermission(
+        {
+          purpose: 'Scan clinical medical document with Google Gemini Vision Cloud API',
+          endpoint: 'https://generativelanguage.googleapis.com (Gemini 2.5 Flash Vision)',
+          dataPayloadSummary: 'Medical document image (PII auto-redacted)',
+          sensitiveFields: ['Medical document image'],
+        },
+        action,
+      );
+    }
+
+    return await action();
   },
 };
