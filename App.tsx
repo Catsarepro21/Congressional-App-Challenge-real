@@ -22,10 +22,12 @@ import ProfileScreen from "./src/screens/ProfileScreen";
 import EmergencyScreen from "./src/screens/EmergencyScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
+import HealthChatScreen from "./src/screens/HealthChatScreen";
 import { BottomNavBar } from "./src/components/BottomNavBar";
 import { useSafeScaleStore } from "./src/store/useSafeScaleStore";
 
 import WebAlertHost from "./src/components/WebAlertHost";
+import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
 
 const BACKGROUND = "#F5F6F1";
 
@@ -114,6 +116,8 @@ export default function App() {
       case 4:
       case 5:
         return <ProfileScreen />;
+      case 10:
+        return <HealthChatScreen onBack={() => handleTabPress(0)} />;
       default:
         return <HomeScreen onNavigate={handleTabPress} />;
     }
@@ -122,6 +126,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <WebAlertHost />
+      <CloudPermissionModal />
       <StatusBar barStyle="dark-content" backgroundColor={BACKGROUND} />
       <View style={{ flex: 1, backgroundColor: BACKGROUND }}>
         {renderScreen()}

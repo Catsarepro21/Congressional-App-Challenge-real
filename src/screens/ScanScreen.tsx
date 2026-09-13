@@ -437,9 +437,10 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
               apiKey
             );
             setFoodAnalysisResult(result);
-          } catch (e) {
+          } catch (e: unknown) {
             console.error('Food analysis error:', e);
-            Alert.alert('Analysis Failed', 'Could not analyze the food photo. Please try again.');
+            const msg = e instanceof Error ? e.message : 'Could not analyze the food photo. Please try again.';
+            Alert.alert('Analysis Notice', msg);
           } finally {
             setIsScanning(false);
           }

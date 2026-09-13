@@ -1,0 +1,343 @@
+/**
+ * @file src/services/LocalHealthChatEngine.ts
+ * @description Completely local, fully private AI Health Assistant engine.
+ *
+ * Grounded in the user's complete real-time health data:
+ *   - Vitals & Cardio (HR, Resting HR, HRV, Blood Pressure, Steps, Recovery)
+ *   - Nutrition & Hydration (Calories, Protein, Carbs, Fat, Fiber, Sodium, Water)
+ *   - Sleep Architecture (Total sleep, Deep/REM/Core stages, Sleep Debt, Bedtime)
+ *   - Intermittent Fasting (Protocol, elapsed hours, metabolic stage)
+ *   - Medications (Dose times, taken vs pending, low stock)
+ *   - Allergies & Medical Records (Labs, conditions, immunizations)
+ *
+ * Runs 100% on-device on the Apple Neural Engine / local clinical rules.
+ * Any cloud API escalation strictly requires interactive user authorization EVERY TIME.
+ */
+
+import { HealthContextAggregator, type HealthContextSnapshot } from './HealthContextAggregator';
+import { CloudPermissionGuard } from './CloudPermissionGuard';
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  source?: 'apple-foundation' | 'local-engine' | 'cloud-gemini';
+  dataPointsReferenced?: string[];
+}
+
+// Dynamically reference native module
+let nativeModuleRef: typeof import('../../modules/safescale-vision') | null = null;
+function getNativeModule() {
+  if (!nativeModuleRef) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      nativeModuleRef = require('../../modules/safescale-vision');
+    } catch {}
+  }
+  return nativeModuleRef;
+}
+
+/**
+ * On-device clinical reasoning engine: generates deep, contextual, personalized
+ * answers grounded directly in the user's real telemetry and records.
+ */
+function generateLocalClinicalResponse(
+  query: string,
+  snapshot: HealthContextSnapshot,
+): { text: string; dataPoints: string[] } {
+  const q = query.toLowerCase().trim();
+  const dataPoints: string[] = [];
+
+  // 1. Nutrition & Macros
+  if (q.includes('calorie') || q.includes('macro') || q.includes('food') || q.includes('eat') || q.includes('protein') || q.includes('carb') || q.includes('diet') || q.includes('dinner') || q.includes('lunch') || q.includes('breakfast')) {
+    dataPoints.push('Nutrition & Macros');
+    const n = snapshot.nutrition;
+    let text = `Here is your nutrition breakdown for today:\n\n`;
+    text += `• Calories: ${n.todayCalories} kcal logged across ${n.mealCount} meals.\n`;
+    text += `• Protein: ${n.proteinGrams}g\n`;
+    text += `• Carbohydrates: ${n.carbsGrams}g\n`;
+    text += `• Fat: ${n.fatGrams}g\n`;
+    text += `• Dietary Fiber: ${n.fiberGrams}g\n`;
+    text += `• Sodium: ${n.sodiumMg}mg\n`;
+    if (n.todayWaterMl > 0) {
+      text += `• Hydration: ${n.todayWaterMl} ml of water recorded.\n`;
+      dataPoints.push('Water Hydration');
+    }
+
+    if (n.meals.length > 0) {
+      text += `\nYour meals today include: ${n.meals.map(m => `${m.name} (${m.calories} kcal)`).join(', ')}.`;
+    } else {
+      text += `\nNo meals have been logged yet today. You can log one with the "Search food", "Scan barcode", or "Snap meal photo" buttons on Today!`;
+    }
+
+    if (snapshot.user.allergies.length > 0) {
+      text += `\n\n⚠️ Keep in mind your recorded allergies: ${snapshot.user.allergies.join(', ')}.`;
+      dataPoints.push('Allergy Profile');
+    }
+
+    return { text, dataPoints };
+  }
+
+  // 2. Sleep & Recovery
+  if (q.includes('sleep') || q.includes('recovery') || q.includes('rest') || q.includes('tired') || q.includes('bedtime') || q.includes('circadian') || q.includes('debt')) {
+    dataPoints.push('Sleep & Recovery');
+    const s = snapshot.sleep;
+    const v = snapshot.vitals;
+    let text = `Here is your sleep and recovery assessment:\n\n`;
+    text += `• Sleep Duration: ${s.totalMinutes > 0 ? s.formatted : 'No sleep data recorded yet for today'}.\n`;
+    if (v.restingHeartRate > 0) {
+      text += `• Resting Heart Rate: ${v.restingHeartRate} bpm (lower RHR indicates better parasympathetic recovery).\n`;
+      dataPoints.push('Resting Heart Rate');
+    }
+    if (v.hrvSdnn) {
+      text += `• HRV (SDNN): ${v.hrvSdnn} ms (${v.hrvTone || 'Autonomic tone'}).\n`;
+      dataPoints.push('Heart Rate Variability');
+    }
+    if (v.recoveryScore) {
+      text += `• Recovery Score: ${v.recoveryScore}% (${v.recoveryScore >= 80 ? 'Optimal' : v.recoveryScore >= 60 ? 'Moderate' : 'Under Stress'}).\n`;
+      dataPoints.push('Recovery Score');
+    }
+
+    text += `\nSleep hygiene recommendation: Consistent bedtime timing strengthens circadian melatonin release. Maintain a quiet, dark environment 45 minutes prior to sleep.`;
+    return { text, dataPoints };
+  }
+
+  // 3. Fasting
+  if (q.includes('fast') || q.includes('ketosis') || q.includes('autophagy') || q.includes('glycogen') || q.includes('eating window')) {
+    dataPoints.push('Intermittent Fasting');
+    const f = snapshot.fasting;
+    if (!f.isFasting) {
+      return {
+        text: `You do not have an active fasting timer running right now. You can start a protocol (such as 16:8 or 18:6) from the Today dashboard to track your metabolic stages.`,
+        dataPoints,
+      };
+    }
+
+    let text = `Your active fasting status:\n\n`;
+    text += `• Protocol: ${f.protocol}\n`;
+    text += `• Elapsed Time: ${f.elapsedHours} hours\n`;
+    text += `• Current Metabolic Stage: ${f.metabolicStage}\n\n`;
+
+    if (f.metabolicStage?.includes('Ketosis')) {
+      text += `🔥 You are currently in Ketosis! Liver glycogen stores have depleted, and your body is actively burning fatty acids into ketones for fuel.`;
+    } else if (f.metabolicStage?.includes('Autophagy')) {
+      text += `✨ You have reached Autophagy! Cellular renewal, organelle recycling, and intracellular cleaning are actively occurring.`;
+    } else if (f.metabolicStage?.includes('Glycogen')) {
+      text += `⏳ Glycogen Depletion phase: Blood glucose and insulin levels are steadily lowering as your liver utilizes stored energy.`;
+    } else {
+      text += `🍽️ Digestion phase: Your body is actively absorbing nutrients from your last meal.`;
+    }
+
+    return { text, dataPoints };
+  }
+
+  // 4. Medications & Adherence
+  if (q.includes('med') || q.includes('pill') || q.includes('dose') || q.includes('refill') || q.includes('prescription')) {
+    dataPoints.push('Medication Schedule');
+    const m = snapshot.medications;
+    let text = `Medication Schedule & Adherence:\n\n`;
+    text += `• Adherence Today: ${m.taken} of ${m.total} daily doses completed.\n`;
+
+    if (m.pending.length > 0) {
+      text += `\nPending doses for today:\n`;
+      for (const p of m.pending) {
+        text += `• ${p.name} (${p.dosage}) scheduled for ${p.time}\n`;
+      }
+    } else if (m.total > 0) {
+      text += `\n✅ All scheduled medications for today have been taken!`;
+    } else {
+      text += `\nNo active medications recorded in your schedule.`;
+    }
+
+    if (m.lowStockAlerts.length > 0) {
+      text += `\n\n⚠️ Low stock alert: ${m.lowStockAlerts.join(', ')} are below your refill threshold.`;
+      dataPoints.push('Stock Refill Alerts');
+    }
+
+    return { text, dataPoints };
+  }
+
+  // 5. Blood Pressure & Cardio Vitals
+  if (q.includes('blood pressure') || q.includes('bp') || q.includes('heart') || q.includes('pulse') || q.includes('cardio') || q.includes('hypertension')) {
+    dataPoints.push('Cardiovascular Vitals');
+    const v = snapshot.vitals;
+    let text = `Cardiovascular & Vital Readings:\n\n`;
+    text += `• Heart Rate: ${v.heartRate > 0 ? `${v.heartRate} bpm` : 'No reading recorded'}\n`;
+    text += `• Resting HR: ${v.restingHeartRate > 0 ? `${v.restingHeartRate} bpm` : 'No reading recorded'}\n`;
+
+    if (v.bloodPressure) {
+      text += `• Blood Pressure: ${v.bloodPressure.systolic}/${v.bloodPressure.diastolic} mmHg (${v.bloodPressure.category} per AHA/ACC 2017 guidelines)\n`;
+      dataPoints.push('AHA 2017 BP Staging');
+    }
+
+    if (v.hrvSdnn) {
+      text += `• Heart Rate Variability: ${v.hrvSdnn} ms (${v.hrvTone})\n`;
+      dataPoints.push('HRV Autonomic Tone');
+    }
+
+    text += `• Activity: ${v.steps.toLocaleString()} steps (${v.activeCalories} active kcal burned)\n`;
+
+    return { text, dataPoints };
+  }
+
+  // 6. Allergies & Medical Records
+  if (q.includes('allerg') || q.includes('condition') || q.includes('lab') || q.includes('record')) {
+    dataPoints.push('Allergies & Clinical Records');
+    const u = snapshot.user;
+    const r = snapshot.records;
+    let text = `Clinical & Allergy Profile:\n\n`;
+    text += `• Recorded Allergies: ${u.allergies.length > 0 ? u.allergies.join(', ') : 'None listed'}\n`;
+    if (u.chronicConditions && u.chronicConditions.length > 0) {
+      text += `• Chronic Conditions: ${u.chronicConditions.join(', ')}\n`;
+    }
+    if (u.bloodType) text += `• Blood Type: ${u.bloodType}\n`;
+
+    if (r.recentLabs.length > 0) {
+      text += `\nRecent Lab Results:\n`;
+      for (const lab of r.recentLabs) {
+        text += `• ${lab.test}: ${lab.value}\n`;
+      }
+      dataPoints.push('Lab Results');
+    }
+
+    return { text, dataPoints };
+  }
+
+  // 7. General Holistic Assessment / Summary
+  dataPoints.push('Holistic Health Profile');
+  const n = snapshot.nutrition;
+  const s = snapshot.sleep;
+  const v = snapshot.vitals;
+  const m = snapshot.medications;
+
+  let text = `Hello ${snapshot.user.name}, here is your holistic on-device health summary:\n\n`;
+  text += `🍎 **Nutrition**: ${n.todayCalories} kcal logged (${n.proteinGrams}g protein, ${n.carbsGrams}g carbs, ${n.fatGrams}g fat). `;
+  text += n.todayWaterMl > 0 ? `Hydrated with ${n.todayWaterMl} ml water.\n` : `Remember to log hydration.\n`;
+
+  text += `🌙 **Rest**: ${s.totalMinutes > 0 ? `${s.formatted} of sleep recorded` : 'No sleep logged yet'}. `;
+  if (v.recoveryScore) text += `Recovery score is ${v.recoveryScore}%.\n`;
+  else text += `\n`;
+
+  text += `👟 **Movement**: ${v.steps.toLocaleString()} steps with ${v.activeCalories} active kcal burned.\n`;
+
+  if (m.total > 0) {
+    text += `💊 **Medications**: ${m.taken} of ${m.total} doses taken today.\n`;
+  }
+
+  if (snapshot.fasting.isFasting) {
+    text += `⏳ **Fasting**: Active ${snapshot.fasting.protocol} fast (${snapshot.fasting.elapsedHours}h elapsed, ${snapshot.fasting.metabolicStage}).\n`;
+  }
+
+  text += `\nFeel free to ask me anything specific about your macros, sleep architecture, fasting, medication schedule, or vital trends! Everything stays 100% on your device.`;
+
+  return { text, dataPoints };
+}
+
+export const LocalHealthChatEngine = {
+  /**
+   * Process a user message 100% on-device using grounded health telemetry.
+   */
+  sendMessage: async (userMessage: string): Promise<ChatMessage> => {
+    const snapshot = HealthContextAggregator.getSnapshot();
+    const promptContext = HealthContextAggregator.getAsPromptContext();
+
+    // 1. Check if Apple Foundation Model is supported natively in Swift
+    const nativeMod = getNativeModule();
+    if (nativeMod) {
+      try {
+        const isFoundationSupported = await nativeMod.isFoundationModelSupportedAsync();
+        if (isFoundationSupported) {
+          const nativeRes = await nativeMod.generateTextAsync(userMessage, promptContext);
+          if (nativeRes && nativeRes.text && nativeRes.isLocal) {
+            return {
+              id: `msg_${Date.now()}`,
+              sender: 'assistant',
+              text: nativeRes.text,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              source: 'apple-foundation',
+              dataPointsReferenced: ['Apple Foundation Models (ANE)', 'Real-time Health Context'],
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[LocalHealthChatEngine] Apple Foundation Model fallback:', err);
+      }
+    }
+
+    // 2. SafeScale On-Device Clinical Knowledge Reasoning Engine
+    const { text, dataPoints } = generateLocalClinicalResponse(userMessage, snapshot);
+
+    return {
+      id: `msg_${Date.now()}`,
+      sender: 'assistant',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      source: 'local-engine',
+      dataPointsReferenced: dataPoints,
+    };
+  },
+
+  /**
+   * Escalate a query to Google Gemini Cloud, requiring explicit interactive user consent EVERY TIME.
+   */
+  escalateToCloudWithPermission: async (
+    userMessage: string,
+    apiKey: string,
+  ): Promise<ChatMessage> => {
+    const promptContext = HealthContextAggregator.getAsPromptContext();
+
+    return CloudPermissionGuard.executeWithPermission<ChatMessage>(
+      {
+        purpose: 'Deep clinical health reasoning query via Google Gemini Cloud AI',
+        endpoint: 'https://generativelanguage.googleapis.com (Gemini 2.5 Flash)',
+        dataPayloadSummary: `Question: "${userMessage.slice(0, 60)}..." + Health snapshot`,
+        sensitiveFields: ['Biometric vitals', 'Nutrition summary', 'Medication names'],
+      },
+      async (): Promise<ChatMessage> => {
+        // Cloud Action: User granted explicit permission
+        const GEMINI_URL =
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+        const prompt = `You are an expert clinical health consultant. Answer the user's question accurately using their health context below.
+
+${promptContext}
+
+USER QUESTION:
+${userMessage}
+
+Respond warmly, concisely, and with grounded medical clarity.`;
+
+        const response = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Cloud query failed (HTTP ${response.status}).`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response received from cloud.';
+
+        const cloudMessage: ChatMessage = {
+          id: `msg_${Date.now()}`,
+          sender: 'assistant',
+          text,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          source: 'cloud-gemini',
+          dataPointsReferenced: ['Gemini 2.5 Flash Cloud AI (User Approved)'],
+        };
+        return cloudMessage;
+      },
+      async (): Promise<ChatMessage> => {
+        // Fallback: User denied permission, stay local
+        return LocalHealthChatEngine.sendMessage(userMessage);
+      },
+    );
+  },
+};

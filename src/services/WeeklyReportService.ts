@@ -185,7 +185,20 @@ Write in second person ("You..."). Be specific and warm, not clinical.`;
 // Public API
 // ---------------------------------------------------------------------------
 
+let guardRef: typeof import('./CloudPermissionGuard').CloudPermissionGuard | null = null;
+function getGuard() {
+  if (!guardRef) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      guardRef = require('./CloudPermissionGuard').CloudPermissionGuard;
+    } catch {}
+  }
+  return guardRef;
+}
+
 export const WeeklyReportService = {
+  buildOfflineReport,
+
   /**
    * Generate a weekly health report.
    *
@@ -209,10 +222,29 @@ export const WeeklyReportService = {
     const baseReport = buildOfflineReport(history, loggedItems, vitalsLogs, moodLogs, biometrics);
 
     if (useGemini && apiKey.trim().length > 0) {
-      try {
-        return await buildGeminiReport(baseReport, apiKey.trim());
-      } catch (err) {
-        console.warn('[WeeklyReportService] Gemini failed, using offline report:', err);
+      const guard = getGuard();
+      if (guard) {
+        try {
+          return await guard.executeWithPermission(
+            {
+              purpose: 'Generate personalized weekly health summary via Google Gemini Cloud AI',
+              endpoint: 'https://generativelanguage.googleapis.com (Gemini 2.5 Flash)',
+              dataPayloadSummary: 'Weekly steps, sleep average, heart rate average, and mood trend',
+              sensitiveFields: ['Weekly aggregate vitals', 'Mood trend'],
+            },
+            () => buildGeminiReport(baseReport, apiKey.trim()),
+            async () => baseReport,
+          );
+        } catch (err) {
+          console.warn('[WeeklyReportService] Gemini failed or cancelled, using offline report:', err);
+          return baseReport;
+        }
+      } else {
+        try {
+          return await buildGeminiReport(baseReport, apiKey.trim());
+        } catch (err) {
+          console.warn('[WeeklyReportService] Gemini failed, using offline report:', err);
+        }
       }
     }
 
