@@ -38,18 +38,29 @@ const buildOfflineReport = (
   moodLogs: MoodEntry[],
   biometrics: BiometricSummary,
 ): WeeklyReport => {
+
+  // Restrict every input to the same seven local calendar dates.
+  const calendarDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const today = new Date(), start = new Date(today);
+  start.setDate(start.getDate() - 6);
+  const first = calendarDate(start), last = calendarDate(today);
+  const inWindow = (date?: string) => !!date && /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= first && date <= last;
+  const entryDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : calendarDate(new Date(value));
+  history = history.filter(h => inWindow(h.date));
+  loggedItems = loggedItems.filter(x => inWindow(x.date));
+  vitalsLogs = vitalsLogs.filter(x => inWindow(entryDate(x.timestamp)));
+  moodLogs = moodLogs.filter(x => inWindow(entryDate(x.timestamp)));
   const totalSteps = history.reduce((acc, d) => acc + d.steps, 0);
-  const avgSleep   = avg(history.map((d) => d.sleepMinutes));
-  const avgHR      = avg(history.map((d) => d.heartRate));
-
-  const calorieEntries = loggedItems
-    .filter((item) => item.type === 'Meal')
-    .map((item) => {
-      const match = item.value.match(/\d+/);
-      return match ? parseInt(match[0], 10) : 0;
-    });
-  const avgCalories = avg(calorieEntries);
-
+  const avgSleep = avg(history.map(d => d.sleepMinutes).filter(n => n > 0));
+  const avgHR = avg(history.map(d => d.heartRate).filter(n => n > 0));
+  const mealsByDay = new Map<string, number>();
+  for (const meal of loggedItems.filter(x => x.type === 'Meal')) {
+    const match = meal.value.match(/^(\d+(?:\.\d+)?)\s*kcal$/i);
+    const calories = meal.calories ?? (match ? Number(match[1]) : NaN);
+    if (Number.isFinite(calories) && calories >= 0 && meal.date)
+      mealsByDay.set(meal.date, (mealsByDay.get(meal.date) || 0) + calories);
+  }
+  const avgCalories = avg([...mealsByDay.values()]);
   const glucoseVals = vitalsLogs
     .filter((v) => v.bloodGlucose !== undefined && v.bloodGlucose > 0)
     .map((v) => v.bloodGlucose as number);
@@ -71,11 +82,7 @@ const buildOfflineReport = (
   const parts: string[] = [];
 
   if (totalSteps > 0) {
-    const goal = 70000; // 10k/day × 7
-    const pct  = Math.round((totalSteps / goal) * 100);
-    parts.push(
-      `You logged ${totalSteps.toLocaleString()} steps this week — ${pct}% of the recommended 70,000 step weekly goal.`
-    );
+    parts.push(`You logged ${totalSteps.toLocaleString()} steps across ${history.length} saved days in the past seven days.`);
   }
 
   if (avgSleep > 0) {
@@ -84,12 +91,11 @@ const buildOfflineReport = (
   }
 
   if (avgCalories > 0) {
-    parts.push(`You consumed an average of ${avgCalories} kcal per day based on your food logs.`);
+    parts.push(`Your logged meals averaged ${avgCalories} kcal per recorded day across ${mealsByDay.size} days. Unlogged meals are not included.`);
   }
 
   if (avgGlucose !== null) {
-    const status = avgGlucose < 100 ? 'normal fasting range' : avgGlucose < 126 ? 'prediabetic range' : 'elevated range';
-    parts.push(`Your average blood glucose was ${avgGlucose} mg/dL, which is in the ${status}.`);
+    parts.push(`Recorded blood glucose averaged ${avgGlucose} mg/dL. Meal context may differ between readings.`);
   }
 
   if (avgSpO2 !== null) {
@@ -98,7 +104,7 @@ const buildOfflineReport = (
   }
 
   if (avgHR > 0) {
-    parts.push(`Average resting heart rate: ${avgHR} bpm.`);
+    parts.push(`Average recorded heart rate: ${avgHR} bpm.`);
   }
 
   if (moodScores.length > 0) {
@@ -135,16 +141,16 @@ const buildGeminiReport = async (
 ): Promise<WeeklyReport> => {
   const statsText = `
 - Total steps: ${stats.totalSteps.toLocaleString()}
-- Average daily calories consumed: ${stats.avgDailyCalories} kcal
+- Average logged calories per recorded day (may be incomplete): ${stats.avgDailyCalories} kcal
 - Average sleep: ${fmtHours(stats.avgSleepMinutes)} per night
-- Average resting heart rate: ${stats.avgRestingHR} bpm
+- Average recorded heart rate: ${stats.avgRestingHR} bpm
 - Average blood glucose: ${stats.avgBloodGlucose !== null ? `${stats.avgBloodGlucose} mg/dL` : 'Not logged'}
 - Average SpO2: ${stats.avgSpO2 !== null ? `${stats.avgSpO2}%` : 'Not logged'}
 - Mood trend: ${stats.moodTrend}`.trim();
 
   const prompt = `You are a friendly, encouraging health coach writing a personalized weekly health summary for a user.
 
-Based on these anonymized health stats from the past 7 days:
+Do not diagnose, infer causes, or treat missing or incomplete logs as measured totals. Based on these aggregate health stats from the past 7 days:
 ${statsText}
 
 Write a concise, encouraging 3-4 sentence paragraph that:

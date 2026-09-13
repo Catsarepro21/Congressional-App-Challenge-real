@@ -56,55 +56,9 @@ import type {
  * so the UI can disable the option and show the reason.
  */
 export function getDeviceCapabilities(): AIDeviceCapabilities {
-  if (Platform.OS === 'ios') {
-    // Core ML and the Neural Engine are standard SDK capabilities that work
-    // with a free Apple Developer account (Personal Team signing). No paid
-    // entitlement is required.
-    //
-    // Use Platform.Version to detect the iOS version at runtime. All devices
-    // capable of running iOS 18.1+ with Apple Intelligence have A17 Pro or
-    // A18+ chips (iPhone 15 Pro, all iPhone 16+, M-series iPads/Macs).
-    // We cannot determine the exact model from JS without a native module,
-    // but iOS 18+ is a strong signal. The inference path already falls back
-    // gracefully if the on-device bridge is unavailable.
-    const iosVersion = typeof Platform.Version === 'string'
-      ? parseFloat(Platform.Version)
-      : Number(Platform.Version);
-
-    if (Number.isFinite(iosVersion) && iosVersion >= 18) {
-      return {
-        isOnDeviceSupported: true,
-        runtime: 'apple-foundation',
-      };
-    }
-
-    return {
-      isOnDeviceSupported: false,
-      unsupportedReason:
-        'On-device Apple Intelligence requires iPhone 15 Pro, any iPhone 16 or newer, ' +
-        'or an M-series iPad/Mac with iOS 18.1+.',
-      runtime: 'apple-foundation',
-    };
-  }
-
-  if (Platform.OS === 'android') {
-    // On Android, AICore availability is checked via:
-    //   context.getSystemService("aicore") !== null
-    // MediaPipe GenAI is a fallback that works on most modern Android devices.
-    return {
-      isOnDeviceSupported: false,
-      unsupportedReason:
-        'On-device Android AI requires Pixel 8+ or Galaxy S24+ with Android 14+. ' +
-        'Install the native build to enable automatic detection.',
-      runtime: 'android-aicore',
-    };
-  }
-
-  // Web preview — on-device models are never available
   return {
     isOnDeviceSupported: false,
-    unsupportedReason:
-      'On-device AI is not available in the browser preview. Use Cloud AI or install the native app.',
+    unsupportedReason: 'Native on-device AI is not implemented in this build. Manual entry and offline ingredient rules remain available.',
   };
 }
 

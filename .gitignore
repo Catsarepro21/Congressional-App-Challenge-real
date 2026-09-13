@@ -56,4 +56,7 @@ Desktop.ini
 *.jks
 *.keystore
 *.exe
-zsign*
+zsign*
+
+# Local verification exports
+/dist-preview/

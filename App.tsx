@@ -13,6 +13,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { View, StatusBar, ActivityIndicator, AppState } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import TimelineScreen from "./src/screens/TimelineScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import ActivityScreen from "./src/screens/ActivityScreen";
 import JournalScreen from "./src/screens/JournalScreen";
@@ -106,6 +107,10 @@ export default function App() {
       case 3:
       case 7:
         return <RecordsScreen />;
+      case 8:
+        return <EmergencyScreen />;
+      case 9:
+        return <TimelineScreen />;
       case 4:
       case 5:
         return <ProfileScreen />;

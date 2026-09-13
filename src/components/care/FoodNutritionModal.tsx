@@ -4,12 +4,12 @@ import { useSafeScaleStore } from '../../store/useSafeScaleStore';
 import { FoodVisionService } from '../../services/FoodVisionService';
 import { AllergenEngine } from '../../services/AllergenEngine';
 import type { FoodAnalysisResult, AIIntelligenceProvider } from '../../types';
-import { Button, Heading, Sheet, s, C } from './UI';
+import { Button, Field, Heading, Sheet, s, C } from './UI';
 
 const AI_LABELS: Record<AIIntelligenceProvider, string> = {
-  'on-device': 'On-Device AI',
+  'on-device': 'Manual entry · Photo recognition unavailable',
   'cloud': 'Cloud AI (Gemini)',
-  'opt-out': 'Offline Database',
+  'opt-out': 'Manual entry',
 };
 
 interface FoodNutritionModalProps {
@@ -31,26 +31,33 @@ export default function FoodNutritionModal({ visible, onClose, photoUri }: FoodN
   const [allergenWarnings, setAllergenWarnings] = useState<string[]>([]);
   const [logged, setLogged] = useState(false);
   const [error, setError] = useState('');
+  const [manualName, setManualName] = useState('');
+  const [manualCalories, setManualCalories] = useState('');
+  const requestId = useRef(0);
+  useEffect(() => () => { requestId.current += 1; }, []);
+
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
     if (analyzing) {
-      Animated.loop(
+      const animation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
           Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
         ])
-      ).start();
+      );
+      animation.start();
+      return () => animation.stop();
     } else {
       pulseAnim.setValue(1);
     }
   }, [analyzing, pulseAnim]);
 
   useEffect(() => {
-    if (visible && photoUri && !result && !analyzing) {
-      analyzePhoto(photoUri);
-    }
     if (!visible) {
+      requestId.current += 1;
+      setAnalyzing(false);
+      setManualName(''); setManualCalories('');
       setResult(null);
       setAllergenWarnings([]);
       setLogged(false);
@@ -60,10 +67,12 @@ export default function FoodNutritionModal({ visible, onClose, photoUri }: FoodN
   }, [visible, photoUri]);
 
   async function analyzePhoto(uri: string) {
+    const id = ++requestId.current;
     setAnalyzing(true);
     setError('');
     try {
       const foodResult = await FoodVisionService.analyzeImage(uri, aiPreference, apiKey);
+      if (id !== requestId.current) return;
       setResult(foodResult);
       // Cross-check ingredients for allergens if available
       if (foodResult.ingredients && foodResult.ingredients.length > 0 && allergies.length > 0) {
@@ -73,15 +82,15 @@ export default function FoodNutritionModal({ visible, onClose, photoUri }: FoodN
         }
       }
     } catch (e) {
-      setError('Could not analyze the food photo. Please try again.');
+      if (id === requestId.current) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : 'Photo analysis timed out. Please try again.');
       console.warn('[FoodNutritionModal] Analysis failed:', e);
     } finally {
-      setAnalyzing(false);
+      if (id === requestId.current) setAnalyzing(false);
     }
   }
 
   function handleLog() {
-    if (!result) return;
+    if (!result || logged) return;
     addLoggedItem({
       type: 'Meal',
       name: result.foodName,
@@ -122,7 +131,22 @@ export default function FoodNutritionModal({ visible, onClose, photoUri }: FoodN
         </Text>
       </View>
 
-      {/* Analyzing state */}
+      {!analyzing && !result && !logged ? <View style={{ gap: 12 }}>
+        {aiPreference === 'cloud' && photoUri ? <>
+          <Text style={s.body}>Send this photo to Google Gemini for a nutrition estimate. A photo cannot rule out hidden ingredients or allergens.</Text>
+          <Button label="Send photo for analysis" onPress={() => { if (photoUri) analyzePhoto(photoUri); }} />
+        </> : <Text style={s.body}>Offline photo recognition is not implemented. Record what you know below; no image analysis or nutrition values are invented.</Text>}
+        <Field label="Meal name" value={manualName} onChangeText={setManualName} />
+        <Field label="Calories (optional, kcal)" value={manualCalories} onChangeText={setManualCalories} keyboardType="decimal-pad" />
+        <Button label="Save manual meal" onPress={() => {
+          const calories = manualCalories.trim() ? Number(manualCalories) : undefined;
+          if (!manualName.trim() || (calories !== undefined && (!Number.isFinite(calories) || calories < 0))) { setError('Enter a meal name and a valid nonnegative calorie value, or leave calories blank.'); return; }
+          addLoggedItem({ type: 'Meal', name: manualName.trim(), value: calories === undefined ? 'Calories not recorded' : `${calories} kcal`, calories, photoUri });
+          setLogged(true); setError('');
+        }} />
+      </View> : null}
+      {logged && !result ? <Text style={s.body}>Meal saved to your journal and timeline.</Text> : null}
+            {/* Analyzing state */}
       {analyzing ? (
         <Animated.View style={{ opacity: pulseAnim, paddingVertical: 32, alignItems: 'center' }}>
           <Text style={{ fontSize: 15, color: C.ink, fontWeight: '600' }}>Analyzing nutrition & allergens…</Text>

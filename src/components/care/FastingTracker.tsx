@@ -78,17 +78,17 @@ export default function FastingTracker() {
       {/* Header */}
       <View style={fastStyles.headerRow}>
         <View style={{ flex: 1 }}>
-          <Text style={s.eyebrow}>METABOLIC CLOCK</Text>
+          <Text style={s.eyebrow}>OPTIONAL TIMER</Text>
           <Text style={s.heading}>Intermittent Fasting</Text>
         </View>
         <Pressable
           onPress={() => setShowScienceModal(true)}
           accessibilityRole="button"
-          accessibilityLabel="Fasting science info"
+          accessibilityLabel="About the fasting timer"
           style={fastStyles.infoBadge}
         >
           <Icon name="information-outline" size={18} color={C.green} />
-          <Text style={fastStyles.infoBadgeText}>Stages</Text>
+          <Text style={fastStyles.infoBadgeText}>About</Text>
         </Pressable>
       </View>
 
@@ -139,7 +139,7 @@ export default function FastingTracker() {
               </Text>
               <Text style={[fastStyles.timerSub, { color: isTargetAchieved ? '#18685D' : C.amber }]}>
                 {isTargetAchieved
-                  ? `+${formatFastingDuration(elapsedSeconds - targetSeconds)} Overtime`
+                  ? `+${formatFastingDuration(elapsedSeconds - targetSeconds)} since target`
                   : `Remaining: ${formatFastingDuration(remainingSeconds)}`}
               </Text>
             </View>
@@ -161,7 +161,7 @@ export default function FastingTracker() {
             <View style={fastStyles.progressLabelRow}>
               <Text style={fastStyles.progressLabel}>{progressPercent}% of target</Text>
               <Text style={[fastStyles.progressLabel, { color: stageInfo.color, fontWeight: '700' }]}>
-                {stageInfo.stage}
+                {stageInfo.label}
               </Text>
             </View>
           </View>
@@ -191,7 +191,7 @@ export default function FastingTracker() {
                     ]}
                     numberOfLines={1}
                   >
-                    {stg === 'Glycogen Depletion' ? 'Glycogen' : stg}
+                    {info.label}
                   </Text>
                   <Text style={fastStyles.pipelineHours}>{info.minHours}h+</Text>
                 </View>
@@ -303,8 +303,8 @@ export default function FastingTracker() {
         <View style={fastStyles.modalContainer}>
           <View style={fastStyles.modalHeader}>
             <View>
-              <Text style={s.eyebrow}>PHYSIOLOGY & BIOCHEMISTRY</Text>
-              <Text style={s.heading}>Metabolic Fasting Stages</Text>
+              <Text style={s.eyebrow}>ELAPSED TIME</Text>
+              <Text style={s.heading}>About the fasting timer</Text>
             </View>
             <Pressable
               onPress={() => setShowScienceModal(false)}

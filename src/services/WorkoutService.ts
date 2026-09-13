@@ -139,13 +139,20 @@ export function computeRecoveryScore({
   sleepMinutes = 0,
   currentRHR = 0,
   baselineRHR = 0,
-  yesterdayStrainCalories = 0,
+  yesterdayStrainCalories,
 }: {
   sleepMinutes?: number;
   currentRHR?: number;
   baselineRHR?: number;
   yesterdayStrainCalories?: number;
 }): RecoveryReadinessScore {
+  if (![sleepMinutes, currentRHR, baselineRHR].every(v => Number.isFinite(v) && v > 0)
+      || yesterdayStrainCalories === undefined || !Number.isFinite(yesterdayStrainCalories) || yesterdayStrainCalories < 0) {
+    return { score: 0, status: 'Not enough data', hasEnoughData: false,
+      sleepFactor: 0, rhrFactor: 0, strainFactor: 0,
+      recommendation: 'Sync sleep, resting heart rate history, and yesterday’s activity before estimating recovery.' };
+  }
+
   // 1. Sleep Factor (target 480 min = 8 hours)
   let sleepFactor = 70;
   if (sleepMinutes > 0) {
@@ -205,20 +212,21 @@ export function computeRecoveryScore({
 
   if (score >= 85) {
     status = 'Optimal';
-    recommendation = 'Optimal physiological readiness. Great day for progressive overload or high intensity.';
+    recommendation = 'Your recorded inputs are near the upper end of this experimental score. Consider how you feel before choosing activity.';
   } else if (score >= 70) {
     status = 'Good';
-    recommendation = 'Solid recovery state. Aerobic base training or standard routine is well tolerated.';
+    recommendation = 'Your recorded inputs are in the middle-to-upper range. Use this estimate alongside how you feel.';
   } else if (score >= 50) {
     status = 'Fair';
-    recommendation = 'Elevated fatigue detected. Consider lighter tempo, mobility work, or zone 2 cardio.';
+    recommendation = 'Your recorded inputs lower this estimate. Check your records and how you feel.';
   } else {
     status = 'Rest Needed';
-    recommendation = 'High systemic strain. Prioritize restorative sleep, hydration, and active rest today.';
+    recommendation = 'Your recorded inputs lower this estimate substantially. This does not diagnose fatigue or illness.';
   }
 
   return {
     score,
+    hasEnoughData: true,
     status,
     sleepFactor,
     rhrFactor,

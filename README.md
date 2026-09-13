@@ -1,5 +1,21 @@
 # SafeScale Health
 
+## September 13, 2026: personalized daily experience
+
+- Today supports persistent hide/show/reorder controls, with fasting hidden by default. An active fasting timer remains discoverable even if its card is hidden.
+- The connected timeline combines dated meals, water, symptoms, mood, vitals, completed workouts, retained daily sleep summaries, and newly recorded medication doses. Filter by type and date. Date-only records remain untimed; undated legacy meals are excluded rather than assigned invented dates.
+- Medication completion history persists across days; repeated completion is idempotent and undo removes that day's completion event. Historical doses predating this version cannot be reconstructed.
+- Medical ID now opens its dedicated screen.
+- Sleep stages union duplicate intervals, keep unspecified/conflicting sleep separate from Core, and no longer invent empty-data efficiency. Missing nights are excluded from duration-target comparisons. The proportional stage bar is labeled accurately, not as a chronological hypnogram.
+- Recovery requires recorded inputs instead of default scores. Fasting displays elapsed-time bands instead of claiming measured ketosis or autophagy. Weekly reports group calories by recorded day and restrict inputs to the last seven local dates.
+- Manual meal logging works without a photo. Cloud photo analysis requires a send action and validates returned fields. Offline photo recognition and native AI stubs are explicitly unavailable; no synthetic meal fallback is used.
+- See [AI_ROADMAP.md](AI_ROADMAP.md) for the current AI architecture, remaining work, and acceptance criteria.
+
+Validation: 47 tests passed; TypeScript passed; web and iOS JavaScript exports passed. Browser checks covered card hide/reorder persistence after reload, manual meal save into the timeline, filtering, and Medical ID navigation. Today was visually inspected at desktop and 390-pixel phone width.
+
+This changes source code only: no native IPA was rebuilt or re-signed, and signing files were not modified. Live HealthKit, cloud inference, and native camera behavior require device validation. Sleep history retains the existing seven-day storage limit; the timeline does not reconstruct older sleep records. App data still uses the existing unencrypted local storage.
+
+
 ## September 10, 2026: focused daily-care redesign
 
 The main experience now has five tabs: Today, Journal, Records, Medical ID, and Settings. The responsive layout uses shared, accessible components and replaces the oversized home/settings screens.
