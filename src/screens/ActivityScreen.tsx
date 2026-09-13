@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useSafeScaleStore } from '../store/useSafeScaleStore';
 import { ActivityRings } from '../components/care/ActivityRings';
+import SleepArchitectureCard from '../components/care/SleepArchitectureCard';
+import AutonomicCardioCard from '../components/care/AutonomicCardioCard';
 import { Button, Card, Heading, Icon, Page, Sheet, C, s, Chips, type IconName } from '../components/care/UI';
 import {
   estimateCaloriesBurned,
@@ -380,6 +382,12 @@ export default function ActivityScreen() {
           </View>
         </View>
       </Card>
+
+      {/* SLEEP ARCHITECTURE & CIRCADIAN RHYTHM CARD */}
+      <SleepArchitectureCard />
+
+      {/* AUTONOMIC NERVOUS SYSTEM & HRV DIAGNOSTICS */}
+      <AutonomicCardioCard />
 
       {/* WORKOUT QUICK ACTIONS */}
       <Card>

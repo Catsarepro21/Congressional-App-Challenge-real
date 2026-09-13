@@ -76,7 +76,7 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
   const today = { startDate: start.toISOString(), endDate: now.toISOString() };
   const dayStart = now.getTime() - 86400000;
   const recent = { startDate: new Date(dayStart).toISOString(), endDate: now.toISOString(), ascending: false };
-  const [steps, energy, hr, rhr, sleep, exercise, stand] = await Promise.all([
+  const [steps, energy, hr, rhr, sleep, exercise, stand, hrv] = await Promise.all([
     queryHealth(bridge, 'getStepCount', today),
     queryHealth(bridge, 'getActiveEnergyBurned', { ...today, unit: 'kilocalorie' }),
     queryHealth(bridge, 'getHeartRateSamples', { ...recent, unit: 'bpm' }),
@@ -84,18 +84,31 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
     queryHealth(bridge, 'getSleepSamples', recent),
     queryHealth(bridge, 'getAppleExerciseTime', { ...today, unit: 'minute' }),
     queryHealth(bridge, 'getAppleStandTime', { ...today, unit: 'minute' }),
+    queryHealth(bridge, 'getHeartRateVariabilitySamples', recent),
   ]);
   const values = (samples: any) => Array.isArray(samples) ? samples.filter(s => Number.isFinite(s.value) && s.value >= 0) : [];
   const hrValues = values(hr).filter(s => s.value > 0);
   const rhrValues = values(rhr).filter(s => s.value > 0).sort((a,b) => Date.parse(b.startDate) - Date.parse(a.startDate));
-  const sleepMinutes = sleepMinutesFromSamples(Array.isArray(sleep) ? sleep : [], dayStart, now.getTime());
+  const rawSleep = Array.isArray(sleep) ? sleep : [];
+  const sleepMinutes = sleepMinutesFromSamples(rawSleep, dayStart, now.getTime());
+  const hrvValues = values(hrv).filter(s => s.value > 0);
+  const latestHrv = hrvValues.length ? Math.round(hrvValues[0].value) : 0;
+
+  let sleepStages = undefined;
+  try {
+    const { parseSleepStageSamples } = require('./SleepAnalysisService');
+    sleepStages = parseSleepStageSamples(rawSleep);
+  } catch {
+    // Safe fallback if called outside bundle context
+  }
+
   if (!(Number.isFinite(steps?.value) && steps.value > 0) && !values(energy).length && !hrValues.length && !rhrValues.length && !sleepMinutes) return null;
 
   // Detect wearable from sample source metadata
   const wearable = detectWearable(
     Array.isArray(hr) ? hr : [],
     Array.isArray(rhr) ? rhr : [],
-    Array.isArray(sleep) ? sleep : [],
+    rawSleep,
   );
 
   const activeCalories = Math.round(values(energy).reduce((sum,s) => sum + s.value, 0));
@@ -109,6 +122,8 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
     heartRate: hrValues.length ? Math.round(hrValues.reduce((sum,s) => sum + s.value, 0) / hrValues.length) : 0,
     restingHeartRate: rhrValues.length ? Math.round(rhrValues[0].value) : 0,
     sleepMinutes,
+    sleepStages,
+    hrvMs: latestHrv,
     // A single night cannot establish sleep consistency.
     sleepConsistency: 0,
     wearable,

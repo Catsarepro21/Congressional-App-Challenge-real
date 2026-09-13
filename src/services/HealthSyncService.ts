@@ -21,6 +21,8 @@ export interface HealthSyncResult {
   readings: Partial<BiometricSummary> | null;
   profile?: ProfileSuggestion;
   activityRings?: any;
+  sleepStages?: any;
+  hrvMs?: number;
 }
 
 export async function bounded<T>(operation: Promise<T>, milliseconds = 45000): Promise<T> {
@@ -92,10 +94,14 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
       }
     }
     const activityRings = (rawData as any)?.activityRings;
+    const sleepStages = (rawData as any)?.sleepStages;
+    const hrvMs = (rawData as any)?.hrvMs;
     return {
       readings,
       profile,
       activityRings,
+      sleepStages,
+      hrvMs,
       connection: {
         ...previous,
         connectedAt: previous?.connectedAt || new Date().toISOString(),

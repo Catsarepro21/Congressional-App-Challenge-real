@@ -12,7 +12,12 @@ function load(file, mocks = {}) {
   }, setTimeout, clearTimeout, console, Error });
   return exports;
 }
-const reader = load('src/services/NativeHealthReader.ts');
+const sleepAnalysis = load('src/services/SleepAnalysisService.ts');
+const fastingService = load('src/services/FastingService.ts');
+const cardioDiagnostics = load('src/services/CardioDiagnosticsService.ts');
+const reader = load('src/services/NativeHealthReader.ts', {
+  './SleepAnalysisService': sleepAnalysis,
+});
 function coordinator(os, native = {}, google = {}) {
   return load('src/services/HealthSyncService.ts', {
     'react-native': { Platform: { OS: os }, NativeModules: {} },
@@ -111,6 +116,9 @@ test('demo mode preserves real records in memory and storage', async () => {
     '../services/HealthDataService':{HealthDataService:{}},
     '../services/HealthSyncService':{syncHealthSource: async () => null, readableData: d => d},
     '../services/NotificationService':{NotificationService:{}},
+    '../services/SleepAnalysisService': sleepAnalysis,
+    '../services/FastingService': fastingService,
+    '../services/CardioDiagnosticsService': cardioDiagnostics,
   }).useSafeScaleStore;
   await store.persist.rehydrate();
   store.setState({ userAllergies:['Sesame'], emergencyContacts:[{id:'real',name:'Saved contact',phone:'test'}] });
