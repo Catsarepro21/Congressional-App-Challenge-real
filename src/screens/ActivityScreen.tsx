@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import AutonomicCardioCard from '../components/care/AutonomicCardioCard';
 import { Button, Card, Heading, Icon, Page, Sheet, C, s, Chips, type IconName } from '../components/care/UI';
 import {
   estimateCaloriesBurned,
+  workoutElapsedSeconds,
   calculatePace,
   calculateMaxHeartRate,
   getHeartRateZone,
@@ -76,7 +77,6 @@ export default function ActivityScreen() {
   const [newWeightKg, setNewWeightKg] = useState('60');
 
   // Timer interval for active workout
-  const timerRef = useRef<any>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
@@ -86,35 +86,12 @@ export default function ActivityScreen() {
   }, []);
 
   useEffect(() => {
-    if (activeWorkout) {
-      const initialSec = activeWorkout.durationSeconds || Math.max(0, Math.round((Date.now() - Date.parse(activeWorkout.startedAt)) / 1000));
-      setElapsedSeconds(initialSec);
-
-      timerRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => {
-          const next = prev + 1;
-          // Periodically sync live stats into activeWorkout
-          const userWeight = profile.weight || 70;
-          const liveCalories = estimateCaloriesBurned(activeWorkout.type, next, userWeight);
-          updateLiveWorkout({
-            durationSeconds: next,
-            caloriesBurned: liveCalories,
-          });
-          return next;
-        });
-      }, 1000);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      setElapsedSeconds(0);
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [activeWorkout?.id]);
+    if (!activeWorkout) { setElapsedSeconds(0); return; }
+    const refresh = () => setElapsedSeconds(workoutElapsedSeconds(activeWorkout.startedAt));
+    refresh();
+    const timer = setInterval(refresh, 1000);
+    return () => clearInterval(timer);
+  }, [activeWorkout?.id, activeWorkout?.startedAt]);
 
   const handleStartWorkout = () => {
     const defaultName = `${selectedType} Session`;
@@ -205,8 +182,8 @@ export default function ActivityScreen() {
       : C.red;
 
   const maxHR = calculateMaxHeartRate(profile.dob ? (new Date().getFullYear() - new Date(profile.dob).getFullYear()) : 30);
-  const currentBpm = biometricCore.heartRate || 120;
-  const currentZone = getHeartRateZone(currentBpm, maxHR);
+  const currentBpm = biometricCore.heartRate;
+  const currentZone = Number.isFinite(currentBpm) && currentBpm > 0 ? getHeartRateZone(currentBpm, maxHR) : null;
 
   return (
     <Page
@@ -245,7 +222,7 @@ export default function ActivityScreen() {
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>CALORIES</Text>
               <Text style={styles.statValue}>
-                {activeWorkout.caloriesBurned || estimateCaloriesBurned(activeWorkout.type, elapsedSeconds, profile.weight || 70)}
+                {estimateCaloriesBurned(activeWorkout.type, elapsedSeconds, profile.weight || 70)}
                 <Text style={styles.statUnit}> kcal</Text>
               </Text>
             </View>
@@ -261,7 +238,7 @@ export default function ActivityScreen() {
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>INTENSITY</Text>
               <Text style={[styles.statValue, { color: '#00E7FF' }]}>
-                Zone {currentZone}
+                {currentZone === null ? 'Not recorded' : `Zone ${currentZone}`}
               </Text>
             </View>
           </View>

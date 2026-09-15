@@ -47,8 +47,7 @@ export const CloudPermissionGuard = {
   ): Promise<boolean> => {
     // If a request is already active, reject new concurrent requests for safety
     if (activeResolver) {
-      activeResolver(false);
-      activeResolver = null;
+      return false;
     }
 
     const fullDetails: CloudRequestDetails = {
@@ -65,7 +64,8 @@ export const CloudPermissionGuard = {
   /**
    * Called by the UI modal when the user taps "Allow Once".
    */
-  approveCurrentRequest: () => {
+  approveCurrentRequest: (id: string) => {
+    if (useCloudPermissionStore.getState().currentRequest?.id !== id) return;
     if (activeResolver) {
       activeResolver(true);
       activeResolver = null;
@@ -76,7 +76,8 @@ export const CloudPermissionGuard = {
   /**
    * Called by the UI modal when the user taps "Deny & Keep On-Device".
    */
-  denyCurrentRequest: () => {
+  denyCurrentRequest: (id: string) => {
+    if (useCloudPermissionStore.getState().currentRequest?.id !== id) return;
     if (activeResolver) {
       activeResolver(false);
       activeResolver = null;

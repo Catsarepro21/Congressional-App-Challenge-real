@@ -166,7 +166,7 @@ export default function FoodNutritionModal({
     addLoggedItem({
       type: 'Meal',
       name: result.foodName,
-      value: `${result.calories} kcal`,
+      value: result.calories === undefined ? 'Calories not recorded' : `${result.calories ?? '—'} kcal`,
       calories: result.calories,
       macros: {
         carbs: result.carbs,
@@ -379,16 +379,16 @@ export default function FoodNutritionModal({
 
           {/* Calorie banner */}
           <View style={{ backgroundColor: C.pale, borderRadius: 16, padding: 16, alignItems: 'center' }}>
-            <Text style={{ fontSize: 36, fontWeight: '800', color: C.green }}>{result.calories}</Text>
+            <Text style={{ fontSize: 36, fontWeight: '800', color: C.green }}>{result.calories ?? '—'}</Text>
             <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, letterSpacing: 1 }}>CALORIES</Text>
           </View>
 
           {/* Macro pills */}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {[
-              { label: 'Protein', value: `${result.protein}g`, color: '#3B82F6' },
-              { label: 'Carbs', value: `${result.carbs}g`, color: '#F59E0B' },
-              { label: 'Fat', value: `${result.fat}g`, color: '#EF4444' },
+              { label: 'Protein', value: `${result.protein ?? '—'}g`, color: '#3B82F6' },
+              { label: 'Carbs', value: `${result.carbs ?? '—'}g`, color: '#F59E0B' },
+              { label: 'Fat', value: `${result.fat ?? '—'}g`, color: '#EF4444' },
             ].map(macro => (
               <View key={macro.label} style={{ flex: 1, backgroundColor: `${macro.color}12`, borderRadius: 12, padding: 12, alignItems: 'center' }}>
                 <Text style={{ fontSize: 18, fontWeight: '700', color: macro.color }}>{macro.value}</Text>
@@ -400,9 +400,9 @@ export default function FoodNutritionModal({
           {/* Micronutrients */}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {[
-              { label: 'Fiber', value: `${result.fiber}g` },
-              { label: 'Sugar', value: `${result.sugar}g` },
-              { label: 'Sodium', value: `${result.sodium}mg` },
+              { label: 'Fiber', value: `${result.fiber ?? '—'}g` },
+              { label: 'Sugar', value: `${result.sugar ?? '—'}g` },
+              { label: 'Sodium', value: `${result.sodium ?? '—'}mg` },
             ].map(micro => (
               <View key={micro.label} style={{ flex: 1, alignItems: 'center' }}>
                 <Text style={{ fontSize: 14, fontWeight: '600', color: C.ink }}>{micro.value}</Text>
@@ -421,7 +421,7 @@ export default function FoodNutritionModal({
             </View>
           ) : allergies.length > 0 ? (
             <View style={{ backgroundColor: '#DCFCE7', borderRadius: 12, padding: 14, gap: 4 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#166534' }}>✓ No known allergens detected</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#166534' }}>No match found. Check the ingredient label; a photo cannot establish allergen safety.</Text>
               <Text style={{ fontSize: 11, color: '#166534' }}>Checked against: {allergies.join(', ')}</Text>
             </View>
           ) : null}

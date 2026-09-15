@@ -224,12 +224,11 @@ export const NotificationService = {
 
       await NotificationService.cancelVaccineReminder(milestoneId);
 
-      const targetDate = new Date(dueDate);
-      if (isNaN(targetDate.getTime()) || targetDate <= new Date()) {
-        return null;
-      }
-
-      targetDate.setHours(9, 0, 0, 0);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dueDate);
+      if (!match) return null;
+      const [, year, month, day] = match.map(Number);
+      const targetDate = new Date(year, month - 1, day, 9, 0, 0, 0);
+      if (targetDate.getFullYear() !== year || targetDate.getMonth() !== month - 1 || targetDate.getDate() !== day || targetDate <= new Date()) return null;
 
       const trigger: any = targetDate;
 

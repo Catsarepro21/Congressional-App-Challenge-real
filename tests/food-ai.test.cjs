@@ -187,6 +187,7 @@ test("BarcodeLookupService: Open Food Facts fallback parses product nutriments",
   const customBarcodeService = load("src/services/BarcodeLookupService.ts", {
     "./USDALookupService": usdaLookup,
     "../types": {},
+    "./CloudPermissionGuard": {CloudPermissionGuard: {requestPermission: async () => true}},
     fetch: mockFetch,
   }).BarcodeLookupService;
 

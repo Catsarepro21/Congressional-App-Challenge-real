@@ -7,7 +7,8 @@ export default function AutonomicCardioCard() {
   const hrvMetrics = useSafeScaleStore((state) => state.hrvMetrics);
   const biometricCore = useSafeScaleStore((state) => state.biometricCore);
 
-  const sdnn = hrvMetrics.sdnnMs || 52;
+  const sdnn = hrvMetrics.sdnnMs;
+  if (!Number.isFinite(sdnn) || sdnn <= 0) return <Card><Heading title="Heart Rate Variability (HRV)" detail="Not recorded. Sync a supported health source to see your readings." /></Card>;
   const isSympathetic = sdnn < 38;
   const isParasympathetic = sdnn > 75;
   const isBalanced = !isSympathetic && !isParasympathetic;
@@ -26,7 +27,7 @@ export default function AutonomicCardioCard() {
         <View style={[styles.statusBadge, { backgroundColor: toneColor + '20' }]}>
           <Icon name="pulse" size={16} color={toneColor} />
           <Text style={[styles.statusBadgeText, { color: toneColor }]}>
-            {isSympathetic ? 'Sympathetic' : isParasympathetic ? 'High Recovery' : 'Balanced Tone'}
+            {isSympathetic ? 'Lower reading' : isParasympathetic ? 'Higher reading' : 'Recorded reading'}
           </Text>
         </View>
       </View>
@@ -43,7 +44,7 @@ export default function AutonomicCardioCard() {
 
         <View style={styles.rhrComparison}>
           <Text style={styles.rhrLabel}>Resting Heart Rate</Text>
-          <Text style={styles.rhrValue}>{biometricCore.heartRate || 64} bpm</Text>
+          <Text style={styles.rhrValue}>{biometricCore.restingHeartRate > 0 ? biometricCore.restingHeartRate : '—'} bpm</Text>
         </View>
       </View>
 
@@ -69,17 +70,16 @@ export default function AutonomicCardioCard() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
           <Icon name="shield-check-outline" size={16} color={toneColor} />
           <Text style={[styles.insightTitle, { color: toneColor }]}>
-            {hrvMetrics.autonomicTone || 'Balanced Autonomic Tone'}
+            {'HRV reading'}
           </Text>
         </View>
         <Text style={styles.insightText}>
-          {hrvMetrics.insight ||
-            'Your autonomic nervous system reflects healthy balance between sympathetic arousal and parasympathetic rest-and-digest recovery.'}
+          {'A single HRV reading does not establish stress, nervous-system balance, or readiness for training.'}
         </Text>
         <View style={styles.recoveryTag}>
           <Text style={styles.recoveryTagLabel}>STATUS:</Text>
           <Text style={[styles.recoveryTagValue, { color: toneColor }]}>
-            {hrvMetrics.recoveryStatus || 'Optimal Recovery'}
+            {'Recorded HRV'}
           </Text>
         </View>
       </View>

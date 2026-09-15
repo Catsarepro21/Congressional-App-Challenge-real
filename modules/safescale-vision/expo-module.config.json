@@ -1,7 +1,1 @@
-{
-  "name": "safescale-vision",
-  "platforms": ["ios", "android"],
-  "ios": {
-    "modules": ["SafeScaleVisionModule"]
-  }
-}
+{"platforms":["apple"],"apple":{"modules":["SafeScaleVisionModule"]}}

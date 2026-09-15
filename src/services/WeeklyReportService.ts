@@ -241,7 +241,7 @@ export const WeeklyReportService = {
         }
       } else {
         try {
-          return await buildGeminiReport(baseReport, apiKey.trim());
+          return baseReport;
         } catch (err) {
           console.warn('[WeeklyReportService] Gemini failed, using offline report:', err);
         }

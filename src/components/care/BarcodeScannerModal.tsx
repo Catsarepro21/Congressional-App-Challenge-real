@@ -95,6 +95,7 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
 
     setLoading(true);
     setError('');
+    setAllergenWarnings([]);
     setCameraActive(false);
 
     try {
@@ -138,7 +139,7 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
     addLoggedItem({
       type: 'Meal',
       name: result.foodName,
-      value: `${result.calories} kcal`,
+      value: result.calories === undefined ? 'Calories not recorded' : `${result.calories ?? '—'} kcal`,
       calories: result.calories,
       macros: {
         carbs: result.carbs,
@@ -270,31 +271,31 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
 
           {/* Big Calorie Box */}
           <View style={localStyles.calorieBanner}>
-            <Text style={localStyles.calorieVal}>{result.calories}</Text>
+            <Text style={localStyles.calorieVal}>{result.calories ?? '—'}</Text>
             <Text style={localStyles.calorieUnit}>CALORIES</Text>
           </View>
 
           {/* Macros */}
           <View style={localStyles.macroRow}>
             <View style={[localStyles.macroBox, { backgroundColor: '#3B82F614' }]}>
-              <Text style={[localStyles.macroBoxVal, { color: '#1D4ED8' }]}>{result.protein}g</Text>
+              <Text style={[localStyles.macroBoxVal, { color: '#1D4ED8' }]}>{result.protein ?? '—'}g</Text>
               <Text style={localStyles.macroBoxLabel}>Protein</Text>
             </View>
             <View style={[localStyles.macroBox, { backgroundColor: '#F59E0B14' }]}>
-              <Text style={[localStyles.macroBoxVal, { color: '#B45309' }]}>{result.carbs}g</Text>
+              <Text style={[localStyles.macroBoxVal, { color: '#B45309' }]}>{result.carbs ?? '—'}g</Text>
               <Text style={localStyles.macroBoxLabel}>Carbs</Text>
             </View>
             <View style={[localStyles.macroBox, { backgroundColor: '#EF444414' }]}>
-              <Text style={[localStyles.macroBoxVal, { color: '#B91C1C' }]}>{result.fat}g</Text>
+              <Text style={[localStyles.macroBoxVal, { color: '#B91C1C' }]}>{result.fat ?? '—'}g</Text>
               <Text style={localStyles.macroBoxLabel}>Fat</Text>
             </View>
           </View>
 
           {/* Micro details */}
           <View style={localStyles.microDetails}>
-            <Text style={localStyles.microItem}>Fiber: {result.fiber}g</Text>
-            <Text style={localStyles.microItem}>Sugar: {result.sugar}g</Text>
-            <Text style={localStyles.microItem}>Sodium: {result.sodium}mg</Text>
+            <Text style={localStyles.microItem}>Fiber: {result.fiber ?? '—'}g</Text>
+            <Text style={localStyles.microItem}>Sugar: {result.sugar ?? '—'}g</Text>
+            <Text style={localStyles.microItem}>Sodium: {result.sodium ?? '—'}mg</Text>
           </View>
 
           {/* Allergen Alerts */}
@@ -309,7 +310,7 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
             <View style={localStyles.allergenBannerSafe}>
               <MaterialCommunityIcons name="shield-check" size={18} color="#166534" />
               <Text style={localStyles.allergenBannerTextSafe}>
-                Safe from your allergies ({allergies.join(', ')})
+                {result.ingredients?.length ? 'No match found in available ingredients. Check the label; this does not establish safety.' : 'Ingredients unavailable. Allergens could not be checked.'}
               </Text>
             </View>
           ) : null}

@@ -587,9 +587,9 @@ export interface LoggedItem {
   readonly timestamp: string; // HH:MM
   readonly calories?: number;
   readonly macros?: {
-    carbs: number;
-    protein: number;
-    fat: number;
+    carbs?: number;
+    protein?: number;
+    fat?: number;
     fiber?: number;
     sugar?: number;
     sodium?: number;
@@ -678,13 +678,13 @@ export interface UserProfile {
 export interface FoodAnalysisResult {
   foodName: string;
   portionEstimate: string;
-  calories: number;
-  carbs: number;    // g
-  protein: number;  // g
-  fat: number;      // g
-  fiber: number;    // g
-  sugar: number;    // g
-  sodium: number;   // mg
+  calories?: number;
+  carbs?: number;    // g
+  protein?: number;  // g
+  fat?: number;      // g
+  fiber?: number;    // g
+  sugar?: number;    // g
+  sodium?: number;   // mg
   confidence: 'high' | 'medium' | 'low';
   /** Detected ingredient names (returned by cloud AI for allergen cross-check). */
   ingredients?: string[];

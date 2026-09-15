@@ -32,7 +32,7 @@ export default function CloudPermissionModal() {
       visible={true}
       transparent
       animationType="fade"
-      onRequestClose={CloudPermissionGuard.denyCurrentRequest}
+      onRequestClose={() => CloudPermissionGuard.denyCurrentRequest(currentRequest.id)}
     >
       <View style={localStyles.backdrop}>
         <View style={localStyles.container}>
@@ -78,7 +78,7 @@ export default function CloudPermissionModal() {
           <View style={localStyles.privacyNotice}>
             <MaterialCommunityIcons name="lock-outline" size={16} color={C.green} />
             <Text style={localStyles.privacyNoticeText}>
-              Your health data is 100% private and on-device by default. If denied, the app will continue using offline models only.
+              Denying cancels this upload. Other connected services keep their existing permissions.
             </Text>
           </View>
 
@@ -86,19 +86,19 @@ export default function CloudPermissionModal() {
           <View style={{ gap: 10, width: '100%', marginTop: 8 }}>
             {/* Safe Primary Choice: Deny & Stay Local */}
             <Pressable
-              onPress={CloudPermissionGuard.denyCurrentRequest}
+              onPress={() => CloudPermissionGuard.denyCurrentRequest(currentRequest.id)}
               style={({ pressed }) => [
                 localStyles.denyButton,
                 { opacity: pressed ? 0.8 : 1 },
               ]}
             >
               <MaterialCommunityIcons name="shield-check" size={18} color={C.white} />
-              <Text style={localStyles.denyButtonText}>Deny & Keep 100% Local</Text>
+              <Text style={localStyles.denyButtonText}>Cancel Upload</Text>
             </Pressable>
 
             {/* Explicit Cloud Send Choice */}
             <Pressable
-              onPress={CloudPermissionGuard.approveCurrentRequest}
+              onPress={() => CloudPermissionGuard.approveCurrentRequest(currentRequest.id)}
               style={({ pressed }) => [
                 localStyles.allowButton,
                 { opacity: pressed ? 0.7 : 1 },
