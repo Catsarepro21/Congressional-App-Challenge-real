@@ -641,7 +641,7 @@ export class HealthDataService {
     };
 
     const startDate = workout.startedAt || new Date().toISOString();
-    const endDate = workout.endedAt || new Date(Date.now() + workout.durationSeconds * 1000).toISOString();
+    const endDate = workout.endedAt || new Date(Date.parse(startDate) + workout.durationSeconds * 1000).toISOString();
 
     const options: any = {
       type: typeMap[workout.type] || 'Other',
@@ -657,8 +657,10 @@ export class HealthDataService {
     }
 
     return new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve(false), 15000);
       try {
         hk.saveWorkout(options, (err: any) => {
+          clearTimeout(timeout);
           if (err) {
             console.warn('[HealthDataService] Failed to save workout to HealthKit:', err);
             resolve(false);
@@ -667,7 +669,7 @@ export class HealthDataService {
           }
         });
       } catch (err) {
-        console.warn('[HealthDataService] Exception saving workout to HealthKit:', err);
+        clearTimeout(timeout);
         resolve(false);
       }
     });

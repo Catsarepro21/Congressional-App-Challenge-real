@@ -98,7 +98,7 @@ export const AnalyticsScreen: React.FC = () => {
 
   const handleGenerateAINarrative = async () => {
     const activeApiKey = (profile.geminiApiKey && profile.geminiApiKey.trim())
-      || (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
+      || '';
     if (!activeApiKey) {
       Alert.alert('API Key Required', 'Please configure your Gemini API Key in the Settings tab to generate AI Coaching Narratives.');
       return;

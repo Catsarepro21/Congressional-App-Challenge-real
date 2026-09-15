@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 function load(file, mocks = {}, globals = {}) {
  const exports = {};
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText, {exports, Date, console, setTimeout, clearTimeout, AbortController, ...globals, require: name => { if(name in mocks) return mocks[name]; throw Error(name); }});
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText, {exports, Date, console, setTimeout, clearTimeout, AbortController, ...globals, require: name => { if(name in mocks) return mocks[name]; if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name); }});
  return exports;
 }
 const daily = load('src/utils/daily.ts');

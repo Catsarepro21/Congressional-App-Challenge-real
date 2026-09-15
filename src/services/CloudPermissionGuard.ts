@@ -44,9 +44,10 @@ export const CloudPermissionGuard = {
    */
   requestPermission: async (
     details: Omit<CloudRequestDetails, 'id'>,
+    signal?: AbortSignal,
   ): Promise<boolean> => {
     // If a request is already active, reject new concurrent requests for safety
-    if (activeResolver) {
+    if (signal?.aborted || activeResolver) {
       return false;
     }
 
@@ -56,7 +57,9 @@ export const CloudPermissionGuard = {
     };
 
     return new Promise<boolean>(resolve => {
-      activeResolver = resolve;
+      const cancel = () => CloudPermissionGuard.denyCurrentRequest(fullDetails.id);
+      activeResolver = allowed => {signal?.removeEventListener('abort', cancel); resolve(allowed);};
+      signal?.addEventListener('abort', cancel, {once:true});
       useCloudPermissionStore.getState().setCurrentRequest(fullDetails);
     });
   },
@@ -93,8 +96,10 @@ export const CloudPermissionGuard = {
     details: Omit<CloudRequestDetails, 'id'>,
     cloudAction: () => Promise<T>,
     localFallbackAction?: () => Promise<T>,
+    signal?: AbortSignal,
   ): Promise<T> => {
-    const granted = await CloudPermissionGuard.requestPermission(details);
+    const granted = await CloudPermissionGuard.requestPermission(details, signal);
+    if (signal?.aborted) throw new Error('Request canceled.');
     if (granted) {
       return await cloudAction();
     }

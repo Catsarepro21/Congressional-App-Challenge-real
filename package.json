@@ -9,7 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --test tests/*.test.cjs",
+    "check:secrets": "node scripts/check-secrets.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -23,13 +24,14 @@
     "expo-image-picker": "~56.0.25",
     "expo-location": "~56.0.25",
     "expo-notifications": "~56.0.25",
+    "expo-secure-store": "~56.0.4",
     "expo-sensors": "^56.0.6",
     "expo-status-bar": "~56.0.4",
     "expo-web-browser": "~56.0.6",
     "react": "19.2.3",
     "react-dom": "^19.2.3",
     "react-native": "0.85.3",
-    "react-native-health": "github:agencyenterprise/react-native-health#master",
+    "react-native-health": "github:agencyenterprise/react-native-health#84d946aad6f2c3191998c04c84afc01e3f035b4c",
     "react-native-health-connect": "^3.5.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
@@ -42,5 +44,16 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "overrides": {
+    "metro": "0.84.5",
+    "metro-config": "0.84.5",
+    "metro-transform-worker": "0.84.5",
+    "@expo/plist": {
+      "@xmldom/xmldom": "0.8.15"
+    },
+    "xcode": {
+      "uuid": "11.1.1"
+    }
   }
 }

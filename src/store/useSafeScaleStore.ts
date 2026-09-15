@@ -23,7 +23,7 @@
 import { localDate, validDate, validateVitalReadings, currentMedications, changeDose } from '../utils/daily';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SecureHealthStorage } from '../services/SecureHealthStorage';
 
 import type {
   SafeScaleState,
@@ -1333,26 +1333,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
   // ----- Complete Workout Hub Actions -----
   addWorkout: (workout: WorkoutSession) => {
-    set((state) => {
-      const nextWorkouts = [workout, ...state.workouts];
-      const moveCals = (state.activityRings?.moveCalories || 0) + (workout.caloriesBurned || 0);
-      const exMins = (state.activityRings?.exerciseMinutes || 0) + Math.round((workout.durationSeconds || 0) / 60);
-      return {
-        workouts: nextWorkouts,
-        activityRings: {
-          ...state.activityRings,
-          moveCalories: moveCals,
-          exerciseMinutes: exMins,
-          lastSyncedAt: new Date().toISOString(),
-        },
-        biometricCore: {
-          ...state.biometricCore,
-          activeCalories: (state.biometricCore.activeCalories || 0) + (workout.caloriesBurned || 0),
-        },
-      };
-    });
-
-    HealthDataService.saveWorkoutToHealthKit(workout).catch(() => {});
+    set(state => ({workouts: [{...workout, healthSyncStatus: 'pending'}, ...state.workouts]}));
+    syncSavedWorkout(workout);
     useSafeScaleStore.getState().recalculateRecoveryScore();
   },
 
@@ -1407,6 +1389,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       endedAt,
       durationSeconds,
       caloriesBurned,
+      healthSyncStatus: 'pending',
     };
 
     set((s) => ({
@@ -1419,19 +1402,9 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       trackingSteps: 0,
       trackingDistance: 0,
       trackingCalories: 0,
-      activityRings: {
-        ...s.activityRings,
-        moveCalories: (s.activityRings?.moveCalories || 0) + caloriesBurned,
-        exerciseMinutes: (s.activityRings?.exerciseMinutes || 0) + Math.round(durationSeconds / 60),
-        lastSyncedAt: new Date().toISOString(),
-      },
-      biometricCore: {
-        ...s.biometricCore,
-        activeCalories: (s.biometricCore.activeCalories || 0) + caloriesBurned,
-      },
     }));
 
-    HealthDataService.saveWorkoutToHealthKit(finishedWorkout).catch(() => {});
+    syncSavedWorkout(finishedWorkout);
     useSafeScaleStore.getState().recalculateRecoveryScore();
 
     return finishedWorkout;
@@ -1584,7 +1557,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     }),
     {
       name: 'safescale-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => SecureHealthStorage),
       partialize: (state) => {
         // Demo edits never replace the real profile on disk, including after a restart.
         if (state.isTestMode && demoSnapshot) state = demoSnapshot;
@@ -1732,3 +1705,15 @@ export const selectMoodLogs = (
 export const selectVitalsLogs = (
   state: SafeScaleState,
 ): VitalLogEntry[] => state.vitalsLogs;
+
+/** Imported rings remain authoritative; a local estimate never increments them. */
+function syncSavedWorkout(workout: WorkoutSession): void {
+  const demo = useSafeScaleStore.getState().isTestMode;
+  const save = demo ? Promise.resolve(false) : Promise.resolve().then(() => HealthDataService.saveWorkoutToHealthKit(workout));
+  void save.catch(() => false).then(saved => {
+    // Ignore a completion from a different profile mode or a deleted record.
+    if (useSafeScaleStore.getState().isTestMode !== demo) return;
+    useSafeScaleStore.setState(state => ({workouts: state.workouts.map(item => item.id === workout.id
+      ? {...item, healthSyncStatus: saved ? 'saved' as const : 'not-saved' as const} : item)}));
+  });
+}

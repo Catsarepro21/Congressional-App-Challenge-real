@@ -112,7 +112,7 @@ test('demo mode preserves real records in memory and storage', async () => {
       computeRecoveryScore: () => ({ score: 85, status: 'Optimal', sleepFactor: 100, rhrFactor: 90, strainFactor: 100, recommendation: 'Optimal' }),
     },
     zustand: require('zustand'), 'zustand/middleware':require('zustand/middleware'),
-    '@react-native-async-storage/async-storage':storage,
+    '../services/SecureHealthStorage':{SecureHealthStorage:storage},
     '../services/HealthDataService':{HealthDataService:{}},
     '../services/HealthSyncService':{syncHealthSource: async () => null, readableData: d => d},
     '../services/NotificationService':{NotificationService:{}},

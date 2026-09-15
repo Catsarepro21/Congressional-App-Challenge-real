@@ -1,43 +1,6 @@
-/**
- * @file src/services/AIIntelligenceService.ts
- * @description Unified multi-tier AI adapter for SafeScale Health.
- *
- * Routes intelligence requests through one of three backends based on the
- * user's stored preference (aiPreference) and runtime hardware capabilities:
- *
- *   Tier 1 — On-Device Foundation Models
- *     iOS:     Apple Foundation Models via Core ML / Apple Neural Engine
- *              (iPhone 15 Pro+, all iPhone 16+, M-series iPads/Macs, iOS 18.1+).
- *              Available on free Apple Developer accounts — Core ML and the
- *              Neural Engine are standard SDK capabilities with no paid
- *              entitlement requirement.
- *     Android: Google AICore / Gemini Nano (Pixel 8+, Galaxy S24+, Android 14+)
- *              or MediaPipe GenAI with Gemma 2B as a fallback.
- *
- *   Tier 2 — Cloud API (Gemini 2.5 Flash via HTTPS)
- *     Works on every device and the web preview.
- *
- *   Tier 3 — Opt-Out (Deterministic Heuristics)
- *     AllergenEngine + static ingredient dictionary. Zero model invocations.
- *
- * FREE DEVELOPER ACCOUNT NOTES:
- *   • Core ML, Vision, NaturalLanguage, and the Neural Engine are standard
- *     iOS SDK frameworks. They do NOT require a paid Apple Developer Program
- *     membership.
- *   • HealthKit is also confirmed available on free Personal Team accounts
- *     per Apple's capability table.
- *   • Push Notifications (APNs) and CloudKit require paid membership — this
- *     service uses neither.
- *
- * ARCHITECTURAL CONTRACT:
- *   The service is stateless. The caller supplies the current aiPreference
- *   and any required context. The service never reads from or writes to the
- *   Zustand store directly.
- */
-
+/** AI routing: availability comes from the installed native module, never device-name guesses. */
 import { Platform } from 'react-native';
 import { LocalAIService } from './LocalAIService';
-import { CloudAIService } from './CloudAIService';
 import type {
   AIIntelligenceProvider,
   AIDeviceCapabilities,
@@ -55,12 +18,23 @@ import type {
  * web preview and on unsupported hardware it returns a safe negative result
  * so the UI can disable the option and show the reason.
  */
-export function getDeviceCapabilities(): AIDeviceCapabilities {
-  return {
-    isOnDeviceSupported: false,
-    unsupportedReason: 'Native on-device AI is not implemented in this build. Manual entry and offline ingredient rules remain available.',
-    isOfflineFoodDBSupported: true,
-  };
+let capabilities: AIDeviceCapabilities = {isOnDeviceSupported:false, isOfflineFoodDBSupported:true,
+  unsupportedReason:'Checking native model availability.'};
+export function getDeviceCapabilities(): AIDeviceCapabilities { return capabilities; }
+export async function refreshDeviceCapabilities(): Promise<AIDeviceCapabilities> {
+  let vision = false; let text = false;
+  if (Platform.OS === 'ios') {
+    try {
+      const native = require('../../modules/safescale-vision');
+      [vision, text] = await Promise.all([native.isVisionSupportedAsync(), native.isFoundationModelSupportedAsync()]);
+    } catch { /* Unlinked modules are unavailable, not simulated. */ }
+  }
+  capabilities = {isOnDeviceSupported:vision || text, isVisionSupported:vision, isTextGenerationSupported:text,
+    runtime:text ? 'apple-foundation' : undefined, isOfflineFoodDBSupported:true,
+    unsupportedReason:vision || text ? undefined : Platform.OS === 'ios'
+      ? 'Native AI is unavailable. Install the current native build; Apple text generation also requires an available Apple Intelligence model.'
+      : 'Native AI is not implemented for this platform. Offline food search and ingredient checks are available.'};
+  return capabilities;
 }
 
 let USDALookupRef: typeof import('./USDALookupService').USDALookupService | null = null;
@@ -98,50 +72,8 @@ function getNaturalLanguageParser() {
 }
 
 // ---------------------------------------------------------------------------
-// On-Device Foundation Model Stubs
-// ---------------------------------------------------------------------------
+// Ingredient checks remain deterministic; photo and chat model calls have separate services.
 
-/**
- * Placeholder for the native Apple Foundation Model bridge.
- *
- * In a production native build this calls into Swift via expo-modules-core:
- *   - Uses the FoundationModels framework (iOS 26+) or Core ML (iOS 18.1+) with a
- *     quantized model for ingredient/document analysis.
- *   - Executes entirely on the Apple Neural Engine (ANE).
- *   - Zero network calls, zero telemetry.
- *   - Works with free Personal Team signing (no paid capability needed).
- *
- * Until the native module is compiled, this falls back to LocalAIService
- * (the deterministic ingredient dictionary) so the app never crashes.
- */
-async function runAppleFoundationModel(
-  ingredients: string[],
-  allergies: string[],
-  itemName: string,
-): Promise<LocalAIAnalysisResult> {
-  // TODO: Replace with NativeModules.SafeScaleIntelligence.analyzeIngredients()
-  // once the Expo native module is built and linked.
-  return LocalAIService.analyzeIngredients(ingredients, allergies, itemName);
-}
-
-/**
- * Placeholder for Android AICore / Gemini Nano bridge.
- *
- * In a production native build this calls into Kotlin:
- *   - Checks for AICore system service availability.
- *   - Falls back to MediaPipe GenAI (Gemma 2B) if AICore is absent.
- *   - Executes on-device via GPU/NNAPI/TPU.
- */
-async function runAndroidAICore(
-  ingredients: string[],
-  allergies: string[],
-  itemName: string,
-): Promise<LocalAIAnalysisResult> {
-  // TODO: Replace with NativeModules.SafeScaleIntelligence.analyzeIngredients()
-  return LocalAIService.analyzeIngredients(ingredients, allergies, itemName);
-}
-
-// ---------------------------------------------------------------------------
 // Unified Public API
 // ---------------------------------------------------------------------------
 
@@ -150,18 +82,12 @@ export const AIIntelligenceService = {
    * Returns runtime capabilities for the current device.
    */
   getCapabilities: getDeviceCapabilities,
+  refreshCapabilities: refreshDeviceCapabilities,
 
   /**
    * Analyze a list of ingredients against the user's allergy profile.
    *
-   * Routes through the appropriate backend based on `provider`:
-   *   - 'on-device': Apple Foundation Model (iOS) or AICore/Gemma (Android)
-   *   - 'cloud':     Gemini 2.5 Flash via CloudAIService
-   *   - 'opt-out':   LocalAIService deterministic dictionary
-   *
-   * If on-device is selected but the device is not supported, falls back
-   * to the cloud provider. If the cloud provider fails (e.g. network error),
-   * falls back to opt-out heuristics so the user always gets a result.
+   * Checks extracted text locally for every provider. Photo OCR has its own consent-gated path.
    */
   analyzeIngredients: async (
     provider: AIIntelligenceProvider,
@@ -170,65 +96,8 @@ export const AIIntelligenceService = {
     itemName: string = 'Scanned Product',
     apiKey?: string,
   ): Promise<LocalAIAnalysisResult> => {
-    // ── Tier 3: Opt-Out ───────────────────────────────────────────────
-    if (provider === 'opt-out') {
-      return LocalAIService.analyzeIngredients(ingredients, allergies, itemName);
-    }
-
-    // ── Tier 1: On-Device ─────────────────────────────────────────────
-    if (provider === 'on-device') {
-      const caps = getDeviceCapabilities();
-
-      if (caps.isOnDeviceSupported) {
-        try {
-          if (Platform.OS === 'ios') {
-            return await runAppleFoundationModel(ingredients, allergies, itemName);
-          }
-          if (Platform.OS === 'android') {
-            return await runAndroidAICore(ingredients, allergies, itemName);
-          }
-        } catch {
-          // On-device inference failed; fall through to cloud
-        }
-      }
-      // Device unsupported or inference failed — fall through to cloud
-      if (apiKey) {
-        try {
-          const cloudResult = await CloudAIService.analyzeIngredientsOCR(
-            '', // No image URI in ingredient-list mode
-            apiKey,
-          );
-          return LocalAIService.analyzeIngredients(
-            cloudResult.ingredients,
-            allergies,
-            cloudResult.name || itemName,
-          );
-        } catch {
-          // Cloud also failed — final fallback to heuristics
-        }
-      }
-      return LocalAIService.analyzeIngredients(ingredients, allergies, itemName);
-    }
-
-    // ── Tier 2: Cloud ─────────────────────────────────────────────────
-    if (provider === 'cloud' && apiKey) {
-      try {
-        const cloudResult = await CloudAIService.analyzeIngredientsOCR(
-          '', // ingredient-list mode, no image
-          apiKey,
-        );
-        return LocalAIService.analyzeIngredients(
-          cloudResult.ingredients,
-          allergies,
-          cloudResult.name || itemName,
-        );
-      } catch {
-        // Network / API error — graceful fallback
-        return LocalAIService.analyzeIngredients(ingredients, allergies, itemName);
-      }
-    }
-
-    // Default safe fallback
+    // Already-extracted ingredient text needs no image upload or model. In particular,
+    // never send an empty image URI or silently escalate a local request to cloud.
     return LocalAIService.analyzeIngredients(ingredients, allergies, itemName);
   },
 
@@ -256,7 +125,7 @@ export const AIIntelligenceService = {
   providerDescription: (provider: AIIntelligenceProvider): string => {
     switch (provider) {
       case 'on-device':
-        return 'Runs locally on your device\u2019s Neural Engine. No health or allergy data ever leaves your phone.';
+        return 'Use available native photo and text models. Ingredient checks stay offline; cloud requests require separate approval.';
       case 'cloud':
         return 'Uses secure cloud AI for analysis. Requires an internet connection. Data is sent to Google servers.';
       case 'opt-out':

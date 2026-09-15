@@ -15,7 +15,8 @@ function load(path, mocks = {}) {
       console,
       require: (name) => {
         if (name in mocks) return mocks[name];
-        throw Error(name);
+        if (name === './AllergenEngine') return load('src/services/AllergenEngine.ts');
+        if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);
       },
     },
   );
@@ -47,7 +48,7 @@ function makeStore() {
     "../services/CardioDiagnosticsService": cardioDiagnostics,
     zustand: require("zustand"),
     "zustand/middleware": require("zustand/middleware"),
-    "@react-native-async-storage/async-storage": storage,
+    "../services/SecureHealthStorage": {SecureHealthStorage: storage},
     "../services/HealthDataService": { HealthDataService: {} },
     "../services/HealthSyncService": {
       syncHealthSource: async () => null,
@@ -281,7 +282,7 @@ test("auto-sync throttles by 15 minutes and respects autoSyncEnabled flag", asyn
     "../services/CardioDiagnosticsService": cardioDiagnostics,
     zustand: require("zustand"),
     "zustand/middleware": require("zustand/middleware"),
-    "@react-native-async-storage/async-storage": storage,
+    "../services/SecureHealthStorage": {SecureHealthStorage: storage},
     "../services/HealthDataService": { HealthDataService: {} },
     "../services/HealthSyncService": {
       syncHealthSource: async () => {

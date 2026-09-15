@@ -1,3 +1,4 @@
+import { controlledRequest } from './RequestControl';
 /**
  * @file src/services/CloudAIService.ts
  * @description Cloud-backed Visual AI services using Google Gemini 2.5 Flash Vision.
@@ -81,23 +82,16 @@ const executeGeminiRequest = async (
     },
   };
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
+  return controlledRequest(async signal => {
+    const response = await fetch(GEMINI_API_URL, {
+      method:'POST', signal, headers:{'Content-Type':'application/json','x-goog-api-key':apiKey},body:JSON.stringify(requestBody),
+    });
+    if (!response.ok) throw new Error(`Image analysis failed (HTTP ${response.status}).`);
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.map((p: {text?: string}) => p.text || '').join('');
+    if (!text?.trim()) throw new Error('No text could be extracted. Try a clearer image.');
+    return text;
   });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${errText}`);
-  }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  return rawText;
 };
 
 let guardRef: typeof import('./CloudPermissionGuard').CloudPermissionGuard | null = null;
@@ -129,6 +123,7 @@ export const CloudAIService = {
         ingredients?: string[];
       };
 
+      if (!Array.isArray(parsed.ingredients) || !parsed.ingredients.length || !parsed.ingredients.every(i => typeof i === 'string' && i.trim())) throw new Error('No reliable ingredient list was extracted. Check the label manually.');
       return {
         brand: parsed.brand || '',
         name: parsed.name || 'Scanned Label',
@@ -179,6 +174,7 @@ export const CloudAIService = {
         status?: string;
       };
 
+      if (!['Prescription','LabResult','Immunization'].includes(parsed.type || '') || typeof parsed.title !== 'string' || !parsed.title.trim() || typeof parsed.value !== 'string' || !parsed.value.trim()) throw new Error('The document could not be reliably extracted. Enter its details manually.');
       return {
         type: parsed.type || 'Prescription',
         title: parsed.title || 'Scanned Record',

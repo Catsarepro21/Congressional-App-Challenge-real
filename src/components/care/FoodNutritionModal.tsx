@@ -54,7 +54,7 @@ export default function FoodNutritionModal({
   const profile = useSafeScaleStore(s => s.profile);
   const allergies = useSafeScaleStore(s => s.userAllergies);
   const apiKey = (profile.geminiApiKey && profile.geminiApiKey.trim())
-    || (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
+    || '';
 
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<FoodAnalysisResult | null>(initialResult || null);

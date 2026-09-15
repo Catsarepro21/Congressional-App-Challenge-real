@@ -28,6 +28,8 @@ export type AIIntelligenceProvider = 'on-device' | 'cloud' | 'opt-out';
 export interface AIDeviceCapabilities {
   /** Whether the current device supports on-device foundation models */
   readonly isOnDeviceSupported: boolean;
+  readonly isVisionSupported?: boolean;
+  readonly isTextGenerationSupported?: boolean;
   /** Human-readable reason when unsupported (e.g. "Requires A17 Pro or newer") */
   readonly unsupportedReason?: string;
   /** The specific on-device runtime available */
@@ -808,6 +810,7 @@ export interface WorkoutSession {
   routeCoordinates?: WorkoutCoordinate[];
   strengthSets?: StrengthSet[];
   source: 'app' | 'apple-health' | 'google-fit';
+  healthSyncStatus?: 'pending' | 'saved' | 'not-saved';
   notes?: string;
 }
 
