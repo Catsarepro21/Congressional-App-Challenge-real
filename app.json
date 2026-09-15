@@ -81,7 +81,8 @@
         {
           "enableBackgroundRemoteNotifications": false
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

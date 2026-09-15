@@ -1,10 +1,11 @@
+import PrivacySettings from '../components/care/PrivacySettings';
 import React, { useState, useEffect } from 'react';
 import { View, Text, Alert, Linking, Pressable, StyleSheet } from 'react-native';
 import { useSafeScaleStore } from '../store/useSafeScaleStore';
 import { validDate, localDate } from '../utils/daily';
 import HealthConnections from '../components/care/HealthConnections';
 import AIProviderSelector from '../components/care/AIProviderSelector';
-import { AIIntelligenceService, getDeviceCapabilities } from '../services/AIIntelligenceService';
+import { AIIntelligenceService, getDeviceCapabilities, refreshDeviceCapabilities } from '../services/AIIntelligenceService';
 import { getSuggestedOwnerName } from '../utils/deviceName';
 import {
   Button,
@@ -140,7 +141,7 @@ export default function ProfileScreen() {
   const handleTestLocalAI = async () => {
     setLocalAiTesting(true);
     try {
-      const caps = getDeviceCapabilities();
+      const caps = await refreshDeviceCapabilities();
       const testIngredients = ['Wheat flour', 'Skim milk powder', 'Soy lecithin', 'Cane sugar', 'Cocoa butter'];
       const startTime = Date.now();
       const result = await AIIntelligenceService.analyzeIngredients(
@@ -154,12 +155,7 @@ export default function ProfileScreen() {
         .filter((i) => i.category === 'Allergen')
         .map((i) => i.name);
       const report = {
-        runtime:
-          caps.runtime === 'apple-foundation'
-            ? 'Apple Neural Engine / Core ML (iOS 18+)'
-            : caps.runtime === 'android-aicore'
-            ? 'Android AICore'
-            : 'On-Device Heuristic Engine',
+        runtime: 'Offline ingredient checker',
         latencyMs: elapsed,
         summary: result.summary,
         flagged,
@@ -406,6 +402,8 @@ export default function ProfileScreen() {
         <HealthConnections />
       </Card>
 
+      <PrivacySettings />
+
       {/* AI ENGINE & ON-DEVICE BENCHMARK */}
       <Card>
         <View style={s.row}>
@@ -425,7 +423,7 @@ export default function ProfileScreen() {
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={styles.aiBenchmarkTitle}>Local AI Benchmark</Text>
             <Text style={styles.aiBenchmarkSubtitle}>
-              Test Apple Neural Engine / Core ML inference speed with zero network transmission.
+              Test the offline ingredient checker. This does not benchmark native model generation.
             </Text>
           </View>
           <Button

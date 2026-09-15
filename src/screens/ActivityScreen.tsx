@@ -103,7 +103,7 @@ export default function ActivityScreen() {
   const handleFinishWorkout = () => {
     Alert.alert(
       'Finish Workout',
-      'Are you sure you want to finish this workout? It will be saved and synced to Apple Health.',
+      'Are you sure you want to finish this workout? It will be saved locally and Apple Health sync will be attempted.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -440,12 +440,15 @@ export default function ActivityScreen() {
                       {dateStr} · {timeStr} · {Math.round(w.durationSeconds / 60)} min · {w.caloriesBurned} kcal
                       {w.distanceMeters ? ` · ${(w.distanceMeters / 1000).toFixed(2)} km` : ''}
                     </Text>
+                    {w.source === 'app' && <Text style={styles.workoutMeta}>
+                      {w.healthSyncStatus === 'saved' ? 'Saved to Apple Health' : w.healthSyncStatus === 'pending' ? 'Saving to Apple Health…' : 'Saved locally · Apple Health save not confirmed'}
+                    </Text>}
                   </View>
 
                   <Pressable
                     accessibilityLabel="Delete workout"
                     onPress={() => {
-                      Alert.alert('Delete Workout', 'Delete this workout record?', [
+                      Alert.alert('Delete Workout', 'Delete this local record? Any copy in Apple Health must be deleted there separately.', [
                         { text: 'Cancel', style: 'cancel' },
                         { text: 'Delete', style: 'destructive', onPress: () => deleteWorkout(w.id) },
                       ]);
@@ -473,7 +476,7 @@ export default function ActivityScreen() {
       {startModalOpen && (
         <Sheet title="Start a Workout" onClose={() => setStartModalOpen(false)}>
           <Text style={s.body}>
-            Select your activity type. Live metrics, heart rate zones, and calories will be tracked and saved to Apple Health.
+            Select your activity type. A timer and estimated calories will be recorded. Apple Health sync is attempted when you finish.
           </Text>
 
           <View style={styles.typeSelectorGrid}>

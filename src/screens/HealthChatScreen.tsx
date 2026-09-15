@@ -1,3 +1,4 @@
+import { useChatStore } from '../store/useChatStore';
 /**
  * @file src/screens/HealthChatScreen.tsx
  * @description Completely local, fully private AI Health Assistant interface.
@@ -27,7 +28,11 @@ import {
   type ChatMessage,
 } from '../services/LocalHealthChatEngine';
 import { HealthContextAggregator } from '../services/HealthContextAggregator';
-import { Sheet, C, s } from '../components/care/UI';
+import { Button, Sheet, C, s } from '../components/care/UI';
+
+useSafeScaleStore.subscribe((state, previous) => {
+  if (state.isTestMode !== previous.isTestMode) useChatStore.getState().setMessages([]);
+});
 
 const SUGGESTED_PROMPTS = [
   'How are my macros looking today?',
@@ -42,19 +47,16 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
   const insets = useSafeAreaInsets();
   const profile = useSafeScaleStore(state => state.profile);
   const apiKey = (profile.geminiApiKey && profile.geminiApiKey.trim())
-    || (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
+    || '';
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    {
-      id: 'welcome_1',
-      sender: 'assistant',
-      text: `Hello ${profile.name ? profile.name.split(' ')[0] : 'there'}! I am your private on-device Health Assistant. I have direct local access to your biometrics, diet, sleep, fasting, and medications. Cloud requests require your approval. How can I help you today?`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      source: 'local-engine',
-      dataPointsReferenced: ['Local assistant · Provider shown per reply'],
-    },
-  ]);
-
+  const preference = useSafeScaleStore(state => state.aiPreference);
+  const messages = useChatStore(state => state.messages);
+  const setMessages = useChatStore(state => state.setMessages);
+  const activeRequest = useRef<AbortController | null>(null);
+  const [requestKind, setRequestKind] = useState<'local' | 'cloud'>('local');
+  const [lastError, setLastError] = useState('');
+  const lastQuery = useRef<{query:string; cloud:boolean} | null>(null);
+  useEffect(() => () => {activeRequest.current?.abort(); activeRequest.current = null;}, []);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [contextModalOpen, setContextModalOpen] = useState(false);
@@ -64,71 +66,37 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
   const contextSnapshot = HealthContextAggregator.getSnapshot();
 
   useEffect(() => {
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+    const timer = setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+    return () => clearTimeout(timer);
   }, [messages, loading]);
 
-  const handleSend = async (textToSend?: string) => {
-    const query = (textToSend || input).trim();
-    if (!query || loading) return;
-
-    const userMsg: ChatMessage = {
-      id: `user_${Date.now()}`,
-      sender: 'user',
-      text: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setLoading(true);
-
+  const run = async (query: string, cloud = false, retry = false) => {
+    query = query.trim();
+    if (!query || activeRequest.current) return;
+    if (cloud && preference === 'opt-out') {Alert.alert('AI is disabled', 'Enable Cloud AI in Profile to request a cloud answer.'); return;}
+    if (cloud && !apiKey) {Alert.alert('Gemini key needed','Add your key in Profile → Cloud AI & privacy.');return;}
+    const controller = new AbortController(); activeRequest.current = controller;
+    const history = [...messages];
+    lastQuery.current = {query,cloud}; setLastError(''); setRequestKind(cloud ? 'cloud' : 'local');
+    if (!retry) setMessages(old => [...old,{id:`user_${Date.now()}`,sender:'user',text:query,timestamp:new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}]);
+    setInput(''); setLoading(true);
     try {
-      const response = await LocalHealthChatEngine.sendMessage(query);
-      setMessages(prev => [...prev, response]);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error processing query locally.';
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `err_${Date.now()}`,
-          sender: 'assistant',
-          text: `⚠️ ${msg}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          source: 'local-engine',
-        },
-      ]);
+      const options = {history,signal:controller.signal,allowNative:preference !== 'opt-out'};
+      const response = cloud ? await LocalHealthChatEngine.escalateToCloudWithPermission(query,apiKey,options) : await LocalHealthChatEngine.sendMessage(query,options);
+      if (!controller.signal.aborted) setMessages(old => [...old,response]);
+    } catch (error) {
+      if (!controller.signal.aborted) setLastError(error instanceof Error ? error.message : 'The request failed. Please retry.');
     } finally {
-      setLoading(false);
+      if (activeRequest.current === controller) {activeRequest.current = null;setLoading(false);}
     }
   };
-
-  const handleEscalateCloud = async () => {
-    if (!input.trim() && messages.length <= 1) {
-      Alert.alert('Cloud Query', 'Type a question first before asking Cloud AI.');
-      return;
-    }
-
+  const handleSend = (text?: string) => run(text || input);
+  const handleEscalateCloud = () => {
     const query = input.trim() || [...messages].reverse().find(m => m.sender === 'user')?.text || '';
-    if (!apiKey) {
-      Alert.alert('Gemini API Key Needed', 'Add a Gemini API key in Profile to use cloud AI.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const cloudResponse = await LocalHealthChatEngine.escalateToCloudWithPermission(
-        query,
-        apiKey,
-      );
-      setMessages(prev => [...prev, cloudResponse]);
-      setInput('');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Cloud query aborted.';
-      Alert.alert('Notice', msg);
-    } finally {
-      setLoading(false);
-    }
+    if (!query) {Alert.alert('Cloud question','Type a question first.');return;}
+    void run(query,true,!input.trim());
   };
+  const cancel = () => {activeRequest.current?.abort();activeRequest.current = null;setLoading(false);setLastError('Request canceled.');};
 
   return (
     <KeyboardAvoidingView
@@ -264,12 +232,20 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
             </View>
             <View style={[localStyles.messageBubble, localStyles.botBubble, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
               <ActivityIndicator size="small" color={C.green} />
-              <Text style={{ fontSize: 13, color: C.muted, fontWeight: '600' }}>Reasoning locally on-device…</Text>
+              <Text style={{ fontSize: 13, color: C.muted, fontWeight: '600' }}>{requestKind === 'cloud' ? 'Waiting for approval or cloud response…' : preference === 'opt-out' ? 'Checking your recorded data…' : 'Preparing a local reply…'}</Text>
             </View>
           </View>
         )}
       </ScrollView>
 
+      <View style={{paddingHorizontal:16,gap:8}}>
+        {!messages.length ? <Text style={s.body}>Ask about your recorded data. Conversation history stays in memory until the app closes. Model answers may be incomplete; check the original records.</Text> : null}
+        {lastError ? <Text accessibilityRole="alert" style={s.body}>{lastError}</Text> : null}
+        <View style={{flexDirection:'row',gap:12}}>
+          {loading ? <Button label="Cancel reply" secondary onPress={cancel} /> : lastError && lastQuery.current ? <Button label="Retry" secondary onPress={() => {const last=lastQuery.current!;void run(last.query,last.cloud,true);}} /> : null}
+          {messages.length ? <Button label="Clear conversation" secondary onPress={() => {cancel();setMessages([]);setLastError('');lastQuery.current=null;}} /> : null}
+        </View>
+      </View>
       {/* Suggested Prompts (when few messages) */}
       {messages.length <= 4 && (
         <View style={{ paddingVertical: 4 }}>
@@ -291,6 +267,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
       <View style={[localStyles.inputBar, { paddingBottom: Math.max(12, insets.bottom + 6) }]}>
         <TextInput
           style={localStyles.textInput}
+          accessibilityLabel="Health question"
           placeholder="Ask anything about your health, macros, sleep..."
           placeholderTextColor={C.muted}
           value={input}
@@ -302,6 +279,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
         {/* Cloud Escalate Icon */}
         <Pressable
           onPress={handleEscalateCloud}
+          disabled={loading || preference === 'opt-out'}
           style={localStyles.cloudButton}
           accessibilityLabel="Ask Cloud AI with permission"
         >
@@ -310,6 +288,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
 
         {/* Send Button */}
         <Pressable
+          accessibilityLabel="Send local question"
           onPress={() => handleSend()}
           disabled={!input.trim() || loading}
           style={[
@@ -325,7 +304,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
       {contextModalOpen && (
         <Sheet title="What Local AI Sees" onClose={() => setContextModalOpen(false)}>
           <Text style={s.body}>
-            All of the following data is processed strictly in your phone&apos;s memory on the Apple Neural Engine. Nothing is ever uploaded to a server.
+            This is the health snapshot available to the assistant. A cloud request sends this snapshot and recent conversation only after your approval.
           </Text>
 
           <View style={{ gap: 14 }}>

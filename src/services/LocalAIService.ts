@@ -1,14 +1,7 @@
-/**
- * @file src/services/LocalAIService.ts
- * @description Pure, stateless on-device AI Ingredient Research Service.
- *
- * This class simulates a local on-device LLM (such as MediaPipe LLM Inference
- * with Gemma 2B or ONNX Runtime Mobile) by evaluating a list of ingredients
- * against the user's allergy profile and returning detailed structured insights
- * completely offline.
- */
+/** Offline dictionary and allergen cross-reference; this is not a language model. */
 
 import type { LocalAIAnalysisResult, IngredientInsight } from '../types';
+import { AllergenEngine } from './AllergenEngine';
 
 // ---------------------------------------------------------------------------
 // Local Ingredient Knowledge Base
@@ -124,25 +117,12 @@ export class LocalAIService {
   ): LocalAIAnalysisResult {
     const startTime = Date.now();
 
-    // Normalise allergen profiles
-    const normalizedAllergies = userAllergies.map((a) => a.toLowerCase().trim());
+    const ingredients = detectedIngredients.map(value => value.trim()).filter(Boolean);
+    const flaggedIngredients = [...AllergenEngine.analyzeIngredients(ingredients, userAllergies, itemName).flaggedIngredients];
     const insights: IngredientInsight[] = [];
-    const flaggedIngredients: string[] = [];
-
-    for (const rawIngredient of detectedIngredients) {
-      const cleanIngredient = rawIngredient.toLowerCase().trim();
-
-      // Step 1: Check for allergen intersection first (takes priority)
-      let isAllergen = false;
-      for (const allergy of normalizedAllergies) {
-        if (cleanIngredient.includes(allergy) || allergy.includes(cleanIngredient)) {
-          isAllergen = true;
-          if (!flaggedIngredients.includes(rawIngredient)) {
-            flaggedIngredients.push(rawIngredient);
-          }
-          break;
-        }
-      }
+    for (const rawIngredient of ingredients) {
+      const cleanIngredient = rawIngredient.toLowerCase();
+      const isAllergen = flaggedIngredients.includes(rawIngredient);
 
       // Step 2: Query the local dictionary weights
       let matchedKey = '';
@@ -161,17 +141,17 @@ export class LocalAIService {
           category: 'Allergen',
           riskLevel: 'High',
           description: detail?.description ?? `Flagged as an allergen matching user profile: "${userAllergies.find(a => cleanIngredient.includes(a.toLowerCase())) ?? 'allergy'}".`,
-          alternatives: detail?.alternatives ?? ['Avoid consumption of this product.'],
+          alternatives: [], // Ingredient matches cannot verify a substitute product's safety.
         });
       } else if (matchedKey !== '') {
         // Found safe/known ingredient in dictionary
         const detail = INGREDIENT_KNOWLEDGE_BASE[matchedKey];
         insights.push({
           name: rawIngredient,
-          category: 'Safe',
+          category: 'Unknown',
           riskLevel: detail.baseRiskLevel,
           description: detail.description,
-          alternatives: detail.alternatives,
+          alternatives: [],
         });
       } else {
         // Unknown/uncategorized ingredient
@@ -179,29 +159,18 @@ export class LocalAIService {
           name: rawIngredient,
           category: 'Unknown',
           riskLevel: 'Low',
-          description: `Analyzed locally. This ingredient is generally recognized as safe for non-allergic individuals.`,
+          description: 'No reliable entry is available in the offline dictionary. Check the full label and manufacturer information.',
           alternatives: [],
         });
       }
     }
 
-    // Step 3: Compute generative summary based on findings
-    let summary = '';
-    if (flaggedIngredients.length > 0) {
-      summary = `⚠️ Local AI analysis detected ${flaggedIngredients.length} ingredient(s) matching your allergen profile (${flaggedIngredients.join(', ')}). It is strongly advised to choose alternative products.`;
-    } else {
-      const highRiskCount = insights.filter((i) => i.riskLevel === 'High').length;
-      const medRiskCount = insights.filter((i) => i.riskLevel === 'Medium').length;
-
-      if (highRiskCount > 0 || medRiskCount > 0) {
-        summary = `✅ No allergens detected. However, local analysis flags components like sugar or sodium. Limit intake if tracking heart rate or daily stability.`;
-      } else {
-        summary = `✅ Local AI confirms all scanned ingredients are safe and match your allergen profile. This product has a clean safety index.`;
-      }
-    }
-
-    // Step 4: Calculate processing time to mimic LLM inference latency (120ms to 240ms)
-    const processingTimeMs = Math.max(120, Date.now() - startTime + Math.floor(Math.random() * 80));
+    const summary = flaggedIngredients.length > 0
+      ? `Possible allergy matches: ${flaggedIngredients.join(', ')}. Check the full label and avoid suspected allergens.`
+      : ingredients.length === 0
+        ? 'No ingredients were available to check. Safety cannot be assessed.'
+        : 'No matches found for your saved allergies in the provided text. This does not establish safety or rule out missing ingredients or cross-contact.';
+    const processingTimeMs = Date.now() - startTime;
 
     return {
       itemName,

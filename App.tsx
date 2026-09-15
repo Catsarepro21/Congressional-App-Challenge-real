@@ -1,3 +1,5 @@
+import { SecureHealthStorage, useStorageStatus } from './src/services/SecureHealthStorage';
+import { Button } from './src/components/care/UI';
 /**
  * @file App.tsx
  * @description Root application entry point for SafeScale Health.
@@ -10,7 +12,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from "react";
-import { View, StatusBar, ActivityIndicator, AppState } from "react-native";
+import { View, Text, StatusBar, ActivityIndicator, AppState } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import TimelineScreen from "./src/screens/TimelineScreen";
@@ -32,6 +34,8 @@ import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
 const BACKGROUND = "#F5F6F1";
 
 export default function App() {
+  const storageError = useStorageStatus(state => state.error);
+  const readFailed = useStorageStatus(state => state.readFailed);
   const hasCompletedOnboarding = useSafeScaleStore(
     (s) => s.hasCompletedOnboarding,
   );
@@ -68,6 +72,11 @@ export default function App() {
       clearInterval(timer);
     };
   }, [hydrated]);
+
+  if (storageError) return <SafeAreaProvider><View style={{flex:1, justifyContent:'center',padding:24,gap:20,backgroundColor:BACKGROUND}}>
+    <Text accessibilityRole="alert">{storageError}</Text>
+    <Button label="Retry storage" onPress={() => {if (readFailed) void useSafeScaleStore.persist.rehydrate(); else void SecureHealthStorage.retryWrite();}} />
+  </View></SafeAreaProvider>;
 
   if (!hydrated) {
     return (

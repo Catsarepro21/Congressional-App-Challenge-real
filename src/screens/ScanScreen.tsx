@@ -162,7 +162,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
   const addVitalLog = useSafeScaleStore((s) => s.addVitalLog);
   const profile = useSafeScaleStore((s) => s.profile);
   const apiKey = (profile.geminiApiKey && profile.geminiApiKey.trim())
-    || (process.env.EXPO_PUBLIC_GEMINI_API_KEY || '').trim();
+    || '';
 
   // Camera permissions hook
   const [permission, requestPermission] = useCameraPermissions();

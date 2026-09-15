@@ -10,10 +10,10 @@
  * Used in both OnboardingScreen (step 2) and SettingsScreen.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
 import { C, Icon, Heading, s as shared, type IconName } from './UI';
-import { AIIntelligenceService, getDeviceCapabilities } from '../../services/AIIntelligenceService';
+import { AIIntelligenceService, getDeviceCapabilities, refreshDeviceCapabilities } from '../../services/AIIntelligenceService';
 import type { AIIntelligenceProvider, AIDeviceCapabilities } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,8 @@ export default function AIProviderSelector({
   onChange: (next: AIIntelligenceProvider) => void;
   showHeading?: boolean;
 }) {
-  const caps: AIDeviceCapabilities = useMemo(() => getDeviceCapabilities(), []);
+  const [caps, setCaps] = useState<AIDeviceCapabilities>(getDeviceCapabilities);
+  useEffect(() => {let active = true; void refreshDeviceCapabilities().then(value => {if (active) setCaps(value);}); return () => {active = false;};}, []);
 
   // Compute the on-device badge dynamically
   const onDeviceBadge = caps.isOnDeviceSupported
@@ -138,11 +139,9 @@ export default function AIProviderSelector({
       })}
 
       <Text style={shared.body}>
-        {Platform.OS === 'ios'
-          ? 'On-device Apple Intelligence uses the Neural Engine and Core ML. These are standard iOS SDK features that work with a free Apple Developer account.'
-          : Platform.OS === 'android'
-            ? 'On-device Android AI uses Google AICore (Gemini Nano) or MediaPipe with Gemma. No paid developer account is required.'
-            : 'On-device AI is available when you install the native app on a compatible iPhone or Android device.'}
+        {caps.isOnDeviceSupported
+          ? `Photo recognition: ${caps.isVisionSupported ? 'available' : 'unavailable'}. Text generation: ${caps.isTextGenerationSupported ? 'available' : 'unavailable'}.`
+          : 'Availability is checked against the installed native app. Offline ingredient checks do not require an AI model.'}
       </Text>
     </View>
   );

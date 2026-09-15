@@ -7,7 +7,7 @@ function load(file, mocks = {}, globals = {}) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,
     {exports, Date, console, setTimeout, clearTimeout, AbortController, ...globals,
-      require: name => {if (name in mocks) return mocks[name]; throw Error(name);}});
+      require: name => {if (name in mocks) return mocks[name]; if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);}});
   return exports;
 }
 test('allergen aliases match without invented nutrition tags or substring matches', () => {
@@ -91,7 +91,7 @@ test('active workout persists, restores and finishes using timestamps rather tha
     '../services/FastingService':load('src/services/FastingService.ts'),
     '../services/CardioDiagnosticsService':load('src/services/CardioDiagnosticsService.ts'),
     zustand:require('zustand'),'zustand/middleware':require('zustand/middleware'),
-    '@react-native-async-storage/async-storage':storage,
+    '../services/SecureHealthStorage':{SecureHealthStorage:storage},
     '../services/HealthDataService':{HealthDataService:{saveWorkoutToHealthKit:async()=>false}},
     '../services/HealthSyncService':{syncHealthSource:async()=>null,readableData:d=>d},
     '../services/NotificationService':{NotificationService:{}},
@@ -101,9 +101,15 @@ test('active workout persists, restores and finishes using timestamps rather tha
   const id=first.getState().activeWorkout.id;
   first.getState().startLiveWorkout('Walking');assert.equal(first.getState().activeWorkout.id,id);
   const restored=make();await restored.persist.rehydrate();assert.equal(restored.getState().activeWorkout.id,id);
+  const ringsBefore=JSON.stringify(restored.getState().activityRings);
+  const caloriesBefore=restored.getState().biometricCore.activeCalories;
   const result=restored.getState().finishLiveWorkout();
   assert.ok(result.durationSeconds>=900 && result.durationSeconds<905);assert.ok(result.caloriesBurned>2);
   assert.equal(restored.getState().activeWorkout,null);
+  assert.equal(JSON.stringify(restored.getState().activityRings),ringsBefore);
+  assert.equal(restored.getState().biometricCore.activeCalories,caloriesBefore);
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(restored.getState().workouts[0].healthSyncStatus,'not-saved');
   assert.equal(JSON.parse(saved).state.activeWorkout,null);
   assert.throws(()=>restored.getState().addVitalLog({spo2:Infinity}),/valid/);
 });

@@ -108,19 +108,7 @@ export const NativeVisionService = {
       }
     }
 
-    // Heuristic fallback for testing, simulator, or when native module is uncompiled:
-    // Extract hints from filename (e.g. "file:///.../banana.jpg" or "ImagePicker/apple.png")
-    const filename = (imageUri.split('/').pop() || '').toLowerCase();
-    const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-
-    const results: VisionLabel[] = [];
-    for (const [key, mapped] of Object.entries(VISION_TAXONOMY_MAP)) {
-      if (cleanName.includes(key) || cleanName.includes(mapped)) {
-        results.push({ identifier: mapped, confidence: 0.92 });
-      }
-    }
-
-    return results;
+    return []; // A filename is not image evidence. Require a real native result.
   },
 
   /**

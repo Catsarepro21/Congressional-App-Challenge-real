@@ -40,7 +40,7 @@ Desktop.ini
 .Trashes
 
 # Environment files
-# .env
+.env
 .env.local
 .env.*.local
 

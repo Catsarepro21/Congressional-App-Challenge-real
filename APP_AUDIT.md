@@ -1,5 +1,26 @@
 # SafeScale Health audit
 
+## Remediation update — September 14, 2026
+
+The numbered findings below preserve the original audit evidence and line references, which may now be outdated. The following changes supersede their original status.
+
+- Native saved state now uses authenticated AES-GCM encryption with a device SecureStore key. Legacy JSON migrates only after successful encryption. Failed reads block replacement; failed writes show a retry screen. Web health records remain ordinary browser storage, while API/OAuth credentials are stripped from persistence.
+- The tracked `.env` is removed from the current tree, public Gemini-key fallbacks are removed, and Profile has a masked user-key form. The old key remains in Git history and MUST be revoked/rotated by its owner. A targeted credential-file/key-pattern check runs in CI; it is not comprehensive secret scanning. The existing Android debug signing fixture is exempt only by its exact hash; release Android signing still needs a private release key.
+- Chat preserves bounded session history across navigation, passes recent context to model requests, supports cancel/retry/clear, respects model opt-out, and cancels pending consent on abort. Network deadlines include response parsing. Stopping a native request stops waiting; it does not cancel Apple's underlying inference task.
+- Native model availability is queried from the bridge and distinguishes image Vision from text generation. Filename-based image guesses are removed. Ingredient checks are explicitly deterministic, share allergen aliases, and no longer certify unknown ingredients or recommend unchecked substitutes.
+- Local workouts no longer increment imported activity totals. Each record shows pending/saved/not-confirmed HealthKit status; saves time out, and sample mode does not write workouts to HealthKit. Deleting a local record does not delete an external HealthKit copy. Interrupted pending saves need reconciliation; automatic retries are intentionally absent until duplicate-safe native identifiers are implemented.
+- Imported vital context is labeled latest saved data with import time, not today's measurements. Individual sample freshness and daily rollover remain incomplete.
+- CI installs the lockfile, and the Git-based HealthKit package is pinned to a commit. Compatible audit fixes reduced the reported dependency entries to 18 (13 moderate, 5 high). Remaining image-size/Metro, XML/plist, and uuid/xcode chains need upstream-compatible remediation; no forced downgrade was applied.
+- Earlier fixes in `ae62f6a` address false health defaults, fasting certainty, barcode portions and unknown nutrients, request-bound consent, manual vitals validation, vaccine dates, and workout elapsed-time restoration.
+
+Validation: 91 automated tests pass; TypeScript passes; web and iOS JavaScript exports pass with environment loading disabled; targeted secret check passes. The exported web build was opened and an offline chat response and Profile privacy controls were verified. No real patient data was uploaded for validation.
+
+Native acceptance remains required: rebuild/install the IPA, verify legacy storage migration and relaunch, locked-device retry, Foundation Models availability/generation, real camera Vision, nested consent-sheet presentation, HealthKit save outcomes, and background/resume behavior. JavaScript export does not compile Swift or prove these device flows. The new secure-storage dependency requires a native rebuild, not just a JavaScript update. Preserve the existing installation and records while testing migration.
+
+Still open: per-reading timestamps/stale-data handling, complete privacy export/delete controls, duplicate-safe workout reconciliation, real GPS/step capture, some copied-logic tests, remaining dependency advisories, and on-device acceptance. This update is not a claim that all defects are fixed.
+
+## Original audit
+
 Reviewed September 13–14, 2026 against working tree based on `da6b4de`. Includes the pending native chat, vision registration, and nutrition fixes from the preceding task. This is an audit, not a claim that every possible defect has been found. No application fixes or credential changes were made during this audit.
 
 ## Verification performed

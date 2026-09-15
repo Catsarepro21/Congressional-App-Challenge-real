@@ -4,7 +4,7 @@ import { useSafeScaleStore } from "../store/useSafeScaleStore";
 import { validDate, localDate } from "../utils/daily";
 import HealthConnections from "../components/care/HealthConnections";
 import AIProviderSelector from "../components/care/AIProviderSelector";
-import { AIIntelligenceService, getDeviceCapabilities } from "../services/AIIntelligenceService";
+import { AIIntelligenceService, getDeviceCapabilities, refreshDeviceCapabilities } from "../services/AIIntelligenceService";
 import {
   Button,
   Card,
@@ -58,7 +58,7 @@ export default function SettingsScreen() {
   async function testLocalAI() {
     setLocalAiTesting(true);
     try {
-      const caps = getDeviceCapabilities();
+      const caps = await refreshDeviceCapabilities();
       const testIngredients = ["Wheat flour", "Skim milk powder", "Soy lecithin", "Cane sugar", "Cocoa butter"];
       const startTime = Date.now();
       const result = await AIIntelligenceService.analyzeIngredients(
@@ -72,7 +72,7 @@ export default function SettingsScreen() {
         .filter((i) => i.category === 'Allergen')
         .map((i) => i.name);
       const report = {
-        runtime: caps.runtime === 'apple-foundation' ? 'Apple Neural Engine / Core ML (iOS 18+)' : caps.runtime === 'android-aicore' ? 'Android AICore' : 'On-Device Heuristic Engine',
+        runtime: 'Offline ingredient checker',
         latencyMs: elapsed,
         summary: result.summary,
         flagged,
