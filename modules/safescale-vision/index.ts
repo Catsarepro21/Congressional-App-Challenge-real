@@ -16,6 +16,7 @@ export interface VisionClassificationResult {
 }
 
 interface SafeScaleVisionNativeModule {
+  saveWorkoutAsync(id: string, type: string, start: string, end: string, calories: number, distance: number): Promise<boolean>;
   isVisionSupportedAsync(): Promise<boolean>;
   classifyImageAsync(imageUri: string): Promise<VisionClassificationResult>;
   isFoundationModelSupportedAsync(): Promise<boolean>;
@@ -79,3 +80,8 @@ export default {
   generateTextAsync,
   classifyImageAsync,
 };
+
+export async function saveWorkoutAsync(id: string, type: string, start: string, end: string, calories: number, distance: number): Promise<boolean> {
+  if (Platform.OS !== 'ios' || !nativeModule?.saveWorkoutAsync) return false;
+  return nativeModule.saveWorkoutAsync(id,type,start,end,calories,distance);
+}

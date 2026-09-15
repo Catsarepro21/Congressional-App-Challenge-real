@@ -22,6 +22,7 @@ export interface HealthContextSnapshot {
   };
   vitals: {
     lastSyncedAt?: string;
+    readingMetadata?: Record<string, unknown>;
     heartRate: number;
     restingHeartRate: number;
     hrvSdnn?: number;
@@ -208,6 +209,7 @@ export const HealthContextAggregator = {
       },
       vitals: {
         lastSyncedAt: state.lastSyncedAt || undefined,
+        readingMetadata: vitals.readingMetadata,
         heartRate: vitals.heartRate,
         restingHeartRate: vitals.restingHeartRate,
         hrvSdnn: hrvVal,
@@ -269,6 +271,7 @@ export const HealthContextAggregator = {
     }
 
     lines.push(`LATEST SAVED VITALS (last import: ${s.vitals.lastSyncedAt || 'not recorded'}; individual sample times may differ; do not assume these are current):`);
+    lines.push(`Reading sources and sample times (missing timestamps mean unknown freshness): ${JSON.stringify(s.vitals.readingMetadata || {})}`);
     lines.push(`- Heart Rate: ${s.vitals.heartRate > 0 ? `${s.vitals.heartRate} bpm` : 'Not recorded'}, Resting HR: ${s.vitals.restingHeartRate > 0 ? `${s.vitals.restingHeartRate} bpm` : 'Not recorded'}`);
     if (s.vitals.hrvSdnn) lines.push(`- HRV (SDNN): ${s.vitals.hrvSdnn} ms (${s.vitals.hrvTone || 'Autonomic balance'})`);
     if (s.vitals.bloodPressure) lines.push(`- Blood Pressure: ${s.vitals.bloodPressure.systolic}/${s.vitals.bloodPressure.diastolic} mmHg (${s.vitals.bloodPressure.category})`);

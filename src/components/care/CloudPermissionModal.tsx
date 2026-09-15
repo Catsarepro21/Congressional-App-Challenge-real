@@ -6,8 +6,10 @@
  * Enforces per-request authorization: never caches permission, always asks before sending data.
  */
 
-import React from 'react';
+import React, {useEffect} from 'react';
 import {
+  Alert,
+  Platform,
   View,
   Text,
   Modal,
@@ -25,7 +27,19 @@ import { C, s } from './UI';
 export default function CloudPermissionModal() {
   const currentRequest = useCloudPermissionStore(s => s.currentRequest);
 
-  if (!currentRequest) return null;
+  useEffect(() => {
+    if (!currentRequest) return;
+    const request = currentRequest;
+    if (Platform.OS === 'ios') {
+      // A UIKit alert can be presented over an existing camera/result sheet.
+      Alert.alert('Cloud API Authorization', `${request.purpose}\n\nDestination: ${request.endpoint}\n\nData: ${request.dataPayloadSummary}\n\nIncludes: ${request.sensitiveFields?.join(', ') || 'See data description above'}`, [
+        {text:'Cancel Upload',style:'cancel',onPress:()=>CloudPermissionGuard.denyCurrentRequest(request.id)},
+        {text:'Allow This Single Request',onPress:()=>CloudPermissionGuard.approveCurrentRequest(request.id)},
+      ]);
+    }
+    return () => CloudPermissionGuard.denyCurrentRequest(request.id);
+  }, [currentRequest?.id]);
+  if (!currentRequest || Platform.OS === 'ios') return null;
 
   return (
     <Modal

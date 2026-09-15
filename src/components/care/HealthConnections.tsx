@@ -20,10 +20,11 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
   async function connect(source: HealthSource, reconnect = false) {
     if (lock.current || demo) return;
     lock.current = true; setBusy(source); onBusyChange?.(true); setMessage('');
+    const revision = useSafeScaleStore.getState().dataRevision;
     try {
       const p = useSafeScaleStore.getState().profile;
       const result = await syncHealthSource(source, reconnect ? undefined : p.healthConnections?.[source], p.googleOAuthClientId, true);
-      if (!mounted.current || useSafeScaleStore.getState().isTestMode) return;
+      if (!mounted.current || useSafeScaleStore.getState().isTestMode || useSafeScaleStore.getState().dataRevision !== revision) return;
       if (!result) { setMessage('Sign-in cancelled. Your saved information has been kept.'); return; }
       const current = useSafeScaleStore.getState();
       const profileUpdates: any = {

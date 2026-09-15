@@ -1,3 +1,4 @@
+import {useWorkoutSensors} from './src/hooks/useWorkoutSensors';
 import { SecureHealthStorage, useStorageStatus } from './src/services/SecureHealthStorage';
 import { Button } from './src/components/care/UI';
 /**
@@ -34,6 +35,7 @@ import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
 const BACKGROUND = "#F5F6F1";
 
 export default function App() {
+  const isDeletingData = useSafeScaleStore(state => state.isDeletingData);
   const storageError = useStorageStatus(state => state.error);
   const readFailed = useStorageStatus(state => state.readFailed);
   const hasCompletedOnboarding = useSafeScaleStore(
@@ -49,6 +51,7 @@ export default function App() {
   const [hydrated, setHydrated] = useState(
     useSafeScaleStore.persist.hasHydrated(),
   );
+  useWorkoutSensors(hydrated && !isDeletingData);
   useEffect(() => {
     const unsubscribe = useSafeScaleStore.persist.onFinishHydration(() =>
       setHydrated(true),
@@ -72,6 +75,8 @@ export default function App() {
       clearInterval(timer);
     };
   }, [hydrated]);
+
+  if (isDeletingData) return <SafeAreaProvider><View style={{flex:1,justifyContent:"center",padding:24}}><ActivityIndicator /><Text>Deleting local records…</Text></View></SafeAreaProvider>;
 
   if (storageError) return <SafeAreaProvider><View style={{flex:1, justifyContent:'center',padding:24,gap:20,backgroundColor:BACKGROUND}}>
     <Text accessibilityRole="alert">{storageError}</Text>

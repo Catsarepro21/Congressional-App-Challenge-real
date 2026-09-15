@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.swift_version = '5.9'
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
-  s.frameworks = 'Vision', 'Foundation'
+  s.frameworks = 'Vision', 'Foundation', 'HealthKit'
   s.weak_frameworks = 'FoundationModels'
   s.source_files = '**/*.swift'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }

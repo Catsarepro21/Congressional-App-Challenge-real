@@ -1,5 +1,20 @@
 # SafeScale Health audit
 
+## Follow-up implementation — September 15, 2026
+
+- Dependency overrides align all Metro copies on 0.84.5, the old Expo XML parser on 0.8.15, and xcode's UUID dependency on CommonJS-compatible 11.1.1. npm install/audit reports **0 known vulnerabilities**. Build exports and Expo config introspection pass with this resolved lockfile.
+- Profile offers a JSON health-record export excluding credentials and a typed-confirmation local deletion flow. Deletion cancels app notifications, removes the saved state, attempts to remove its device key, resets profile/chat/workouts, and invalidates outstanding sync completions. External HealthKit/Google records, photos, source attachments, and exported copies remain outside local deletion. No user records were deleted during UI verification.
+- Reading snapshots retain source/import metadata and Apple Health sample times where provided. Today's totals roll over at midnight; old samples remain labeled as saved readings. Live zones require a sample no older than five minutes. Missing provider sample times stay unknown. Android no longer substitutes minimum heart rate for resting heart rate, and overlapping Android sleep intervals are merged.
+- Optional GPS and pedometer subscriptions live at the app root and survive tab navigation. Users explicitly enable recording and grant permissions. This implements **foreground recording**; background/screen-lock sensor collection is not implemented. The timer continues, gaps add no inferred route distance, and the UI states the limitation. Routes retain the latest 10,000 points; accumulated distance remains separate. See [Expo pedometer behavior](https://docs.expo.dev/versions/v54.0.0/sdk/pedometer/).
+- New immutable workouts use the native HealthKit sync identifier/version metadata with stable local IDs. Retry is exposed only for records created with this mechanism; legacy uncertain saves cannot be safely retried automatically. Requests stop waiting after 15 seconds, and in-flight retries are deduplicated. Native verification remains required. See [Apple sync metadata](https://developer.apple.com/documentation/healthkit/hkmetadatakeysyncidentifier).
+- iOS cloud consent uses a native alert over the presenting sheet; stale request IDs cannot authorize another upload. Android/web retain the custom dialog.
+- Copied workout/device-parser tests now execute production functions. New tests cover export redaction, deletion while syncing, midnight rollover, stale readings, GPS outliers/gaps, and retry identity. The legacy workout path also no longer increments imported telemetry, and manual workout/strength fields reject invalid values instead of inventing defaults.
+
+Validation to date: **97/97 tests**, TypeScript, targeted secret checks, web/iOS JavaScript exports, and Expo config introspection pass. The web UI opens and exposes export and typed-delete controls; the destructive button is disabled without confirmation. Native Swift compilation/build status is recorded separately below when available.
+
+Still requires external acceptance: rotate the previously exposed Gemini key; sign/install the new native IPA; verify migration/relaunch, camera and Foundation Models, sensor permissions and actual movement, and repeat HealthKit saves on the phone. Native API calls cannot be validated from the Windows web preview. Full background GPS, recovery-model clinical validation, and complete historic sample timestamps from providers are outside this implemented foreground feature.
+
+
 ## Remediation update — September 14, 2026
 
 The numbered findings below preserve the original audit evidence and line references, which may now be outdated. The following changes supersede their original status.

@@ -347,6 +347,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   lastSyncedAt: null,
 
   isAutoSyncing: false,
+  dataRevision: 0,
+  isDeletingData: false,
 
   setAutoSyncEnabled: (enabled: boolean): void => {
     set((state) => ({
@@ -359,7 +361,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
   triggerAutoSync: (): void => {
     const state = useSafeScaleStore.getState();
-    if (state.isAutoSyncing || state.isTestMode) return;
+    if (state.isAutoSyncing || state.isTestMode || state.isDeletingData) return;
     if (state.profile.autoSyncEnabled === false) return;
     const connections = state.profile.healthConnections;
     const lastSource = state.profile.lastHealthSource;
@@ -375,6 +377,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       .then(result => {
         if (!result) return;
         const current = useSafeScaleStore.getState();
+        if (current.dataRevision !== state.dataRevision || current.isTestMode || current.isDeletingData || !current.profile.healthConnections?.[lastSource]) return;
         current.updateProfile({
           healthConnections: { ...current.profile.healthConnections, [lastSource]: result.connection },
         });
@@ -440,6 +443,18 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     if (state.medicationDay !== today) {
       updates.medicationSchedule = currentMedications(state.medicationSchedule, state.medicationDay, today);
       updates.medicationDay = today;
+    }
+    const importedDay = state.lastSyncedAt && Number.isFinite(Date.parse(state.lastSyncedAt)) ? localDate(new Date(state.lastSyncedAt)) : null;
+    if (!state.isTestMode && importedDay !== today) {
+      const metadata = {...state.biometricCore.readingMetadata};
+      delete metadata.steps; delete metadata.activeCalories;
+      if (state.biometricCore.steps || state.biometricCore.activeCalories || state.biometricCore.readingMetadata?.steps || state.biometricCore.readingMetadata?.activeCalories) {
+        updates.biometricCore = {...state.biometricCore, steps:0, activeCalories:0, readingMetadata:metadata};
+      }
+    }
+    const ringsDate = state.activityRings.lastSyncedAt;
+    if (!state.isTestMode && ringsDate && localDate(new Date(ringsDate)) !== today) {
+      updates.activityRings = {...state.activityRings,moveCalories:0,exerciseMinutes:0,standHours:0,lastSyncedAt:undefined};
     }
     // Auto-detect owner name from device if not yet set
     if (!state.profile.name || state.profile.name === 'Jane Doe') {
@@ -729,16 +744,18 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
   /** Toggles Test/Simulation Mode on/off. Seeding or clearing data. */
   toggleTestMode: (): void => {
+    if (useSafeScaleStore.getState().isDeletingData) return;
     set((state) => {
       if (state.isTestMode && demoSnapshot) {
         const restored = demoSnapshot;
         demoSnapshot = null;
-        return { ...restored, isTestMode: false };
+        return { ...restored, isTestMode: false, dataRevision: state.dataRevision + 1 };
       }
       demoSnapshot = { ...state };
       const nextTestMode = true;
       return {
         isTestMode: nextTestMode,
+        dataRevision: state.dataRevision + 1,
         connectedDevices: nextTestMode ? {
           fitbit: true,
           strava: true,
@@ -1280,47 +1297,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       path: state.trackingPath,
     };
 
-    const updatedBiometricCore = {
-      ...state.biometricCore,
-      steps: state.biometricCore.steps + newWorkout.steps,
-      activeCalories: state.biometricCore.activeCalories + newWorkout.calories,
-    };
-
-    const today = localDate();
-    const meds = state.medicationSchedule || [];
-    const completed = meds.filter(m => m.status === 'Completed').length;
-    const total = meds.length;
-    const medicationAdherence = total > 0 ? Math.round((completed / total) * 100) : 100;
-
-    let historyUpdated = false;
-    const newHistory = state.weeklyHistory.map((entry) => {
-      if (entry.date === today) {
-        historyUpdated = true;
-        return {
-          ...entry,
-          steps: updatedBiometricCore.steps,
-          activeCalories: updatedBiometricCore.activeCalories,
-        };
-      }
-      return entry;
-    });
-
-    if (!historyUpdated) {
-      newHistory.push({
-        date: today,
-        steps: updatedBiometricCore.steps,
-        activeCalories: updatedBiometricCore.activeCalories,
-        stabilityScore: updatedBiometricCore.dailyStabilityScore || 85,
-        sleepMinutes: updatedBiometricCore.sleepMinutes || 0,
-        heartRate: updatedBiometricCore.heartRate || 72,
-        medicationAdherence,
-      });
-    }
-
     return {
       appWorkouts: [...state.appWorkouts, newWorkout],
-      biometricCore: updatedBiometricCore,
-      weeklyHistory: newHistory.slice(-7),
       isTrackingActive: false,
       trackingType: null,
       trackingStartTime: null,
@@ -1333,8 +1311,9 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
   // ----- Complete Workout Hub Actions -----
   addWorkout: (workout: WorkoutSession) => {
-    set(state => ({workouts: [{...workout, healthSyncStatus: 'pending'}, ...state.workouts]}));
-    syncSavedWorkout(workout);
+    const saved: WorkoutSession = {...workout,healthSyncVersion:1,healthSyncStatus:'pending'};
+    set(state => ({workouts: [saved, ...state.workouts]}));
+    syncSavedWorkout(saved);
     useSafeScaleStore.getState().recalculateRecoveryScore();
   },
 
@@ -1390,6 +1369,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       durationSeconds,
       caloriesBurned,
       healthSyncStatus: 'pending',
+      healthSyncVersion: 1,
     };
 
     set((s) => ({
@@ -1707,13 +1687,43 @@ export const selectVitalsLogs = (
 ): VitalLogEntry[] => state.vitalsLogs;
 
 /** Imported rings remain authoritative; a local estimate never increments them. */
+const pendingWorkoutSaves = new Set<string>();
 function syncSavedWorkout(workout: WorkoutSession): void {
+  if (pendingWorkoutSaves.has(workout.id)) return;
+  pendingWorkoutSaves.add(workout.id);
   const demo = useSafeScaleStore.getState().isTestMode;
+  const revision = useSafeScaleStore.getState().dataRevision;
   const save = demo ? Promise.resolve(false) : Promise.resolve().then(() => HealthDataService.saveWorkoutToHealthKit(workout));
   void save.catch(() => false).then(saved => {
     // Ignore a completion from a different profile mode or a deleted record.
-    if (useSafeScaleStore.getState().isTestMode !== demo) return;
+    if (useSafeScaleStore.getState().isTestMode !== demo || useSafeScaleStore.getState().dataRevision !== revision) return;
     useSafeScaleStore.setState(state => ({workouts: state.workouts.map(item => item.id === workout.id
       ? {...item, healthSyncStatus: saved ? 'saved' as const : 'not-saved' as const} : item)}));
-  });
+  }).finally(() => pendingWorkoutSaves.delete(workout.id));
+}
+
+/** User-confirmed local deletion; external HealthKit/Google copies are untouched. */
+export async function deleteLocalHealthData(): Promise<void> {
+  const state = useSafeScaleStore.getState();
+  if (state.isTestMode || state.isDeletingData) throw new Error('Exit sample mode before deleting personal data.');
+  const revision = state.dataRevision + 1;
+  useSafeScaleStore.setState({isDeletingData:true, dataRevision:revision});
+  try {
+    await NotificationService.cancelAllReminders();
+    await SecureHealthStorage.clearSavedData();
+    demoSnapshot = null;
+    useSafeScaleStore.setState({...useSafeScaleStore.getInitialState(), dataRevision:revision}, true);
+    await SecureHealthStorage.retryWrite();
+  } catch (error) {
+    useSafeScaleStore.setState({isDeletingData:false});
+    throw error;
+  }
+}
+
+export function retryWorkoutSync(id: string): void {
+  const state = useSafeScaleStore.getState();
+  const workout = state.workouts.find(item => item.id === id);
+  if (!workout || workout.healthSyncVersion !== 1 || workout.healthSyncStatus === 'saved' || state.isTestMode || state.isDeletingData) return;
+  useSafeScaleStore.setState({workouts:state.workouts.map(item => item.id === id ? {...item,healthSyncStatus:'pending'} : item)});
+  syncSavedWorkout(workout);
 }

@@ -42,17 +42,23 @@ export function stripWebCredentials(value: string): string {
   return JSON.stringify(data);
 }
 export const useStorageStatus = create<{error: string | null; readFailed: boolean}>(() => ({error:null, readFailed:false}));
+let deleting = false;
 let pendingWrite: {name: string; value: string} | undefined;
+let webQueue: Promise<unknown> = Promise.resolve();
+function orderedWeb<T>(action: () => Promise<T>): Promise<T> {
+  const next = webQueue.then(action); webQueue = next.catch(() => {}); return next;
+}
 const backend = Platform.OS === 'web' ? {
   ...AsyncStorage,
-  getItem: async (name: string) => {
+  getItem: (name: string) => orderedWeb(async () => {
     const value = await AsyncStorage.getItem(name);
     if (value === null) return null;
     const clean = stripWebCredentials(value);
     if (clean !== value) await AsyncStorage.setItem(name, clean);
     return clean;
-  },
-  setItem: (name: string, value: string) => AsyncStorage.setItem(name, stripWebCredentials(value)),
+  }),
+  removeItem: (name: string) => orderedWeb(() => AsyncStorage.removeItem(name)),
+  setItem: (name: string, value: string) => orderedWeb(() => AsyncStorage.setItem(name, stripWebCredentials(value))),
 } : nativeStorage;
 
 export const SecureHealthStorage = {
@@ -66,7 +72,7 @@ export const SecureHealthStorage = {
     }
   },
   setItem: async (name: string, value: string) => {
-    if (useStorageStatus.getState().readFailed) return; // Never replace unreadable data.
+    if (deleting || useStorageStatus.getState().readFailed) return; // Never replace unreadable data.
     const write = {name, value}; pendingWrite = write;
     try {
       await backend.setItem(name, value);
@@ -76,5 +82,19 @@ export const SecureHealthStorage = {
     }
   },
   removeItem: (name: string) => backend.removeItem(name),
+  clearSavedData: async () => {
+    deleting = true;
+    try {
+      // Removal follows every queued encrypted write. No failed write may be retried afterward.
+      await backend.removeItem('safescale-storage');
+      pendingWrite = undefined;
+      if (Platform.OS !== 'web') {
+        // The records are already removed; key deletion failure must not restore them.
+        try { await SecureStore.deleteItemAsync(KEY_NAME, options); } catch { /* An unused key can remain if the OS denies deletion. */ }
+        keyPromise = undefined;
+      }
+      useStorageStatus.setState({error:null, readFailed:false});
+    } finally { deleting = false; }
+  },
   retryWrite: async () => {if (pendingWrite) await SecureHealthStorage.setItem(pendingWrite.name, pendingWrite.value);},
 };

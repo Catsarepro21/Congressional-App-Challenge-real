@@ -39,7 +39,7 @@ export default function AutonomicCardioCard() {
             <Text style={styles.metricNumber}>{sdnn}</Text>
             <Text style={styles.metricUnit}>ms (SDNN)</Text>
           </View>
-          <Text style={styles.metricSub}>Apple Watch optical sensor interval analysis</Text>
+          <Text style={styles.metricSub}>Last import: {hrvMetrics.lastSyncedAt ? new Date(hrvMetrics.lastSyncedAt).toLocaleString() : 'Unknown'}. Sample time may differ.</Text>
         </View>
 
         <View style={styles.rhrComparison}>
@@ -59,9 +59,9 @@ export default function AutonomicCardioCard() {
           <View style={[styles.gaugePin, { backgroundColor: toneColor }]} />
         </View>
         <View style={styles.gaugeLabels}>
-          <Text style={styles.gaugeLabel}>Low (&lt;35 ms)</Text>
-          <Text style={styles.gaugeLabel}>Normal (40–80 ms)</Text>
-          <Text style={styles.gaugeLabel}>High (&gt;80 ms)</Text>
+          <Text style={styles.gaugeLabel}>Below 38 ms</Text>
+          <Text style={styles.gaugeLabel}>38–75 ms</Text>
+          <Text style={styles.gaugeLabel}>Above 75 ms</Text>
         </View>
       </View>
 

@@ -1,3 +1,4 @@
+import {isFreshReading, readingCaption} from '../utils/readingFreshness';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -7,8 +8,9 @@ import {
   Alert,
   TextInput,
   ScrollView,
+  Switch,
 } from 'react-native';
-import { useSafeScaleStore } from '../store/useSafeScaleStore';
+import { retryWorkoutSync, useSafeScaleStore } from '../store/useSafeScaleStore';
 import { ActivityRings } from '../components/care/ActivityRings';
 import SleepArchitectureCard from '../components/care/SleepArchitectureCard';
 import AutonomicCardioCard from '../components/care/AutonomicCardioCard';
@@ -60,6 +62,7 @@ export default function ActivityScreen() {
   const addWorkout = useSafeScaleStore((state) => state.addWorkout);
 
   // Modals
+  const [recordSensors,setRecordSensors] = useState(false);
   const [startModalOpen, setStartModalOpen] = useState(false);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<WorkoutType>('Running');
@@ -68,13 +71,13 @@ export default function ActivityScreen() {
   // Quick manual log form
   const [logType, setLogType] = useState<WorkoutType>('Running');
   const [logDurationMin, setLogDurationMin] = useState('30');
-  const [logCalories, setLogCalories] = useState('250');
-  const [logDistanceKm, setLogDistanceKm] = useState('3.5');
+  const [logCalories, setLogCalories] = useState('');
+  const [logDistanceKm, setLogDistanceKm] = useState('');
 
   // Strength set logger in active workout
-  const [newExerciseName, setNewExerciseName] = useState('Bench Press');
-  const [newReps, setNewReps] = useState('10');
-  const [newWeightKg, setNewWeightKg] = useState('60');
+  const [newExerciseName, setNewExerciseName] = useState('');
+  const [newReps, setNewReps] = useState('');
+  const [newWeightKg, setNewWeightKg] = useState('');
 
   // Timer interval for active workout
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -94,8 +97,10 @@ export default function ActivityScreen() {
   }, [activeWorkout?.id, activeWorkout?.startedAt]);
 
   const handleStartWorkout = () => {
+    if (activeWorkout) return;
     const defaultName = `${selectedType} Session`;
     startLiveWorkout(selectedType, workoutCustomName.trim() || defaultName);
+    updateLiveWorkout({recordSensors:recordSensors && !demo});
     setStartModalOpen(false);
     setWorkoutCustomName('');
   };
@@ -132,8 +137,9 @@ export default function ActivityScreen() {
 
   const handleAddStrengthSet = () => {
     if (!activeWorkout) return;
-    const reps = parseInt(newReps, 10) || 10;
-    const weight = parseFloat(newWeightKg) || 0;
+    const reps = Number(newReps);
+    const weight = newWeightKg.trim() ? Number(newWeightKg) : 0;
+    if (!newExerciseName.trim() || !Number.isInteger(reps) || reps < 1 || reps > 1000 || !Number.isFinite(weight) || weight < 0 || weight > 2000) {Alert.alert('Check this set','Enter an exercise, whole-number reps from 1 to 1000, and a non-negative weight.');return;}
     const setItem: StrengthSet = {
       exercise: newExerciseName.trim() || 'Exercise',
       reps,
@@ -147,12 +153,14 @@ export default function ActivityScreen() {
   };
 
   const handleManualLog = () => {
-    const durationMin = parseInt(logDurationMin, 10) || 30;
+    const durationMin = Number(logDurationMin);
+    if (!Number.isFinite(durationMin) || durationMin <= 0 || durationMin > 10080) {Alert.alert('Check duration','Enter a duration greater than zero and no longer than seven days.');return;}
     const durationSeconds = durationMin * 60;
     const weight = profile.weight || 70;
     const estimatedCals = estimateCaloriesBurned(logType, durationSeconds, weight);
-    const calories = parseInt(logCalories, 10) || estimatedCals;
-    const distKm = parseFloat(logDistanceKm) || 0;
+    const calories = logCalories.trim() ? Number(logCalories) : estimatedCals;
+    const distKm = logDistanceKm.trim() ? Number(logDistanceKm) : 0;
+    if (!Number.isFinite(calories) || calories < 0 || !Number.isFinite(distKm) || distKm < 0) {Alert.alert('Check workout values','Calories and distance must be non-negative numbers. Leave calories blank to use an estimate.');return;}
 
     const newSession: WorkoutSession = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -182,7 +190,7 @@ export default function ActivityScreen() {
       : C.red;
 
   const maxHR = calculateMaxHeartRate(profile.dob ? (new Date().getFullYear() - new Date(profile.dob).getFullYear()) : 30);
-  const currentBpm = biometricCore.heartRate;
+  const currentBpm = demo || isFreshReading(biometricCore.readingMetadata?.heartRate, 5 * 60000) ? biometricCore.heartRate : 0;
   const currentZone = Number.isFinite(currentBpm) && currentBpm > 0 ? getHeartRateZone(currentBpm, maxHR) : null;
 
   return (
@@ -192,6 +200,7 @@ export default function ActivityScreen() {
       action={
         <Button
           label="Start Workout"
+          disabled={!!activeWorkout}
           icon="plus"
           onPress={() => setStartModalOpen(true)}
         />
@@ -214,6 +223,7 @@ export default function ActivityScreen() {
             <Text style={styles.activeWorkoutTitle}>{activeWorkout.name}</Text>
           </View>
 
+          {activeWorkout.recordSensors && <Text style={s.body}>{activeWorkout.sensorStatus || 'Starting sensors…'} · {activeWorkout.stepCount ?? 0} recorded steps · {((activeWorkout.distanceMeters || 0)/1000).toFixed(2)} km</Text>}
           {/* Big Digital Timer */}
           <Text style={styles.timerDisplay}>{formatTime(elapsedSeconds)}</Text>
 
@@ -230,7 +240,7 @@ export default function ActivityScreen() {
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>HEART RATE</Text>
               <Text style={styles.statValue}>
-                {biometricCore.heartRate || '--'}
+                {currentBpm || '--'}
                 <Text style={styles.statUnit}> bpm</Text>
               </Text>
             </View>
@@ -243,6 +253,7 @@ export default function ActivityScreen() {
             </View>
           </View>
 
+          <Text style={s.body}>{readingCaption(biometricCore.readingMetadata?.heartRate)}. Zones require a sample from the last five minutes.</Text>
           {/* Strength Set Tracker if Strength workout */}
           {activeWorkout.type === 'Strength' && (
             <View style={styles.strengthLogger}>
@@ -440,6 +451,7 @@ export default function ActivityScreen() {
                       {dateStr} · {timeStr} · {Math.round(w.durationSeconds / 60)} min · {w.caloriesBurned} kcal
                       {w.distanceMeters ? ` · ${(w.distanceMeters / 1000).toFixed(2)} km` : ''}
                     </Text>
+                    {w.source === 'app' && w.healthSyncVersion === 1 && w.healthSyncStatus !== 'saved' && <Button label="Retry Apple Health save" secondary disabled={demo} onPress={() => retryWorkoutSync(w.id)} />}
                     {w.source === 'app' && <Text style={styles.workoutMeta}>
                       {w.healthSyncStatus === 'saved' ? 'Saved to Apple Health' : w.healthSyncStatus === 'pending' ? 'Saving to Apple Health…' : 'Saved locally · Apple Health save not confirmed'}
                     </Text>}
@@ -479,6 +491,7 @@ export default function ActivityScreen() {
             Select your activity type. A timer and estimated calories will be recorded. Apple Health sync is attempted when you finish.
           </Text>
 
+          <View style={s.row}><Text style={[s.body,{flex:1}]}>Record GPS route and steps while SafeScale is open. Location and motion permissions are optional. Recording pauses on screen lock or background.</Text><Switch accessibilityLabel="Record GPS and steps" value={recordSensors} onValueChange={setRecordSensors} disabled={demo} /></View>
           <View style={styles.typeSelectorGrid}>
             {WORKOUT_TYPES.map((item) => (
               <Pressable
