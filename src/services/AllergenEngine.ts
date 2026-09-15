@@ -103,11 +103,23 @@ export class AllergenEngine {
     normalizedIngredient: string,
     normalizedAllergens: string[],
   ): boolean {
-    return normalizedAllergens.some(
-      (allergen) =>
-        normalizedIngredient.includes(allergen) ||
-        allergen.includes(normalizedIngredient),
-    );
+    const groups = [
+      ['milk', 'dairy', 'whey', 'casein', 'caseinate', 'butter', 'cheese', 'cream', 'yogurt'],
+      ['peanut', 'groundnut', 'arachis'],
+      ['tree nut', 'almond', 'walnut', 'cashew', 'pistachio', 'pecan', 'hazelnut', 'macadamia', 'brazil nut'],
+      ['soy', 'soya', 'soybean'], ['egg', 'albumen', 'ovalbumin'],
+      ['gluten', 'wheat', 'barley', 'rye', 'spelt'],
+      ['shellfish', 'shrimp', 'prawn', 'crab', 'lobster', 'clam', 'mussel', 'oyster', 'scallop'],
+      ['fish', 'salmon', 'tuna', 'cod', 'anchovy'], ['sesame', 'tahini'],
+    ];
+    const normalize = (value: string) => value.toLowerCase().trim().replace(/s$/, '');
+    const ingredient = normalizedIngredient.split(/[^a-z]+/).map(normalize).filter(Boolean).join(' ');
+    return normalizedAllergens.some(raw => {
+      const allergen = normalize(raw);
+      if (!allergen || !ingredient) return false;
+      const terms = groups.find(group => group.includes(allergen)) || [allergen];
+      return terms.some(term => (` ${ingredient} `).includes(` ${term} `));
+    });
   }
 
   /**
@@ -118,7 +130,7 @@ export class AllergenEngine {
    * @param count - Number of tags to return (default: 3).
    */
   private static buildSafeMacroTags(count: number = 3): string[] {
-    return [...SAFE_MACRO_TAGS].slice(0, count);
+    return []; // Missing matches do not establish nutrition or allergen-free claims.
   }
 
   // -------------------------------------------------------------------------

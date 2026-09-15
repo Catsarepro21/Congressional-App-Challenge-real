@@ -42,6 +42,7 @@ interface OpenFoodFactsProduct {
   product_name?: string;
   product_name_en?: string;
   serving_size?: string;
+  serving_quantity?: number;
   nutriments?: OpenFoodFactsNutriments;
   ingredients_text?: string;
   ingredients_tags?: string[];
@@ -115,11 +116,18 @@ export const BarcodeLookupService = {
     // ─────────────────────────────────────────────────────────────────────────
     // Tier 2: Open Food Facts Free API
     // ─────────────────────────────────────────────────────────────────────────
+    // A local miss is not permission to contact a third-party database.
+    const { CloudPermissionGuard } = await import('./CloudPermissionGuard');
+    const allowed = await CloudPermissionGuard.requestPermission({
+      purpose: 'Look up this barcode in Open Food Facts', endpoint: 'https://world.openfoodfacts.org',
+      dataPayloadSummary: `Barcode ${cleanBarcode}; your health profile is not sent.`, sensitiveFields: ['Product barcode'],
+    });
+    if (!allowed) throw new Error('Online lookup canceled. Search the offline database or enter the food manually.');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 7000);
 
     try {
-      const url = `${OPEN_FOOD_FACTS_BASE}/${cleanBarcode}.json?fields=product_name,product_name_en,serving_size,nutriments,ingredients_text,ingredients_tags,allergens_tags`;
+      const url = `${OPEN_FOOD_FACTS_BASE}/${cleanBarcode}.json?fields=product_name,product_name_en,serving_size,serving_quantity,nutriments,ingredients_text,ingredients_tags,allergens_tags`;
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
@@ -139,33 +147,32 @@ export const BarcodeLookupService = {
         const n = p.nutriments || {};
 
         const name = p.product_name_en || p.product_name || `Scanned Product (${cleanBarcode})`;
-        const serving = p.serving_size || '1 serving (estimated 100g)';
-
-        // Calories extraction (prioritize serving, then 100g)
-        let calories = n['energy-kcal_serving'] ?? n['energy-kcal_100g'] ?? n['energy-kcal'];
-        if (calories === undefined && n.energy_100g) {
-          calories = Math.round(n.energy_100g / 4.184); // kJ to kcal
-        }
-        calories = Math.max(0, Math.round(calories ?? 0));
-
-        const protein = Math.max(0, Math.round((n.proteins_serving ?? n.proteins_100g ?? n.proteins ?? 0) * 10) / 10);
-        const carbs = Math.max(0, Math.round((n.carbohydrates_serving ?? n.carbohydrates_100g ?? n.carbohydrates ?? 0) * 10) / 10);
-        const fat = Math.max(0, Math.round((n.fat_serving ?? n.fat_100g ?? n.fat ?? 0) * 10) / 10);
-        const fiber = Math.max(0, Math.round((n.fiber_serving ?? n.fiber_100g ?? n.fiber ?? 0) * 10) / 10);
-        const sugar = Math.max(0, Math.round((n.sugars_serving ?? n.sugars_100g ?? n.sugars ?? 0) * 10) / 10);
-
-        // Sodium extraction (mg)
-        let sodiumMg = 0;
-        if (n.sodium_serving !== undefined) {
-          sodiumMg = n.sodium_serving * 1000;
-        } else if (n.sodium_100g !== undefined) {
-          sodiumMg = n.sodium_100g * 1000;
-        } else if (n.sodium !== undefined) {
-          sodiumMg = n.sodium * 1000;
-        } else if (n.salt_100g !== undefined) {
-          sodiumMg = (n.salt_100g / 2.5) * 1000;
-        }
-        sodiumMg = Math.max(0, Math.round(sodiumMg));
+        const nValues = n as Record<string, number | undefined>;
+        const valid = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+        // Use explicit gram weights only: volume servings need density, which we do not know.
+        const grams = p.serving_size?.match(/(?:^|[ (])(\d+(?:\.\d+)?)\s*g(?:\b|\))/i);
+        const weight = grams ? Number(grams[1]) : undefined;
+        const hasWeight = weight !== undefined && weight > 0;
+        const hasServing = !!p.serving_size?.trim() && Object.keys(nValues).some(key => key.endsWith('_serving') && valid(nValues[key]));
+        const useServing = hasWeight || hasServing;
+        const serving = useServing ? p.serving_size! : '100 g (reference amount; adjust your portion)';
+        const nutrient = (key: string): number | undefined => {
+          const direct = nValues[`${key}_serving`]; const per100 = nValues[`${key}_100g`];
+          if (useServing && valid(direct)) return direct;
+          if (valid(per100) && (!useServing || hasWeight)) return per100 * (hasWeight ? weight! / 100 : 1);
+          return undefined;
+        };
+        const rounded = (value: number | undefined, factor = 1) => value === undefined ? undefined : Math.round(value * factor * 10) / 10;
+        const energy = nutrient('energy-kcal');
+        const kj = nutrient('energy');
+        const calories = rounded(energy ?? (kj === undefined ? undefined : kj / 4.184));
+        const protein = rounded(nutrient('proteins'));
+        const carbs = rounded(nutrient('carbohydrates'));
+        const fat = rounded(nutrient('fat'));
+        const fiber = rounded(nutrient('fiber'));
+        const sugar = rounded(nutrient('sugars'));
+        const sodium = nutrient('sodium'); const salt = nutrient('salt');
+        const sodiumMg = rounded(sodium ?? (salt === undefined ? undefined : salt / 2.5), 1000);
 
         const ingredients = parseIngredients(p);
 
@@ -179,7 +186,7 @@ export const BarcodeLookupService = {
           fiber,
           sugar,
           sodium: sodiumMg,
-          confidence: 'high',
+          confidence: 'low',
           ingredients,
           source: 'openfoodfacts',
           barcode: cleanBarcode,
@@ -187,9 +194,10 @@ export const BarcodeLookupService = {
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      if (errorMsg.includes('AbortError')) {
+      if (err instanceof Error && err.name === 'AbortError') {
         throw new Error('Barcode lookup timed out. Check your network or enter manually.');
       }
+      throw new Error(errorMsg || 'Online lookup failed. Please try again.');
     } finally {
       clearTimeout(timeoutId);
     }

@@ -48,10 +48,10 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
     {
       id: 'welcome_1',
       sender: 'assistant',
-      text: `Hello ${profile.name ? profile.name.split(' ')[0] : 'there'}! I am your private on-device Health Assistant. I have direct local access to your biometrics, diet, sleep, fasting, and medications. Everything stays 100% on your device. How can I help you today?`,
+      text: `Hello ${profile.name ? profile.name.split(' ')[0] : 'there'}! I am your private on-device Health Assistant. I have direct local access to your biometrics, diet, sleep, fasting, and medications. Cloud requests require your approval. How can I help you today?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       source: 'local-engine',
-      dataPointsReferenced: ['100% On-Device Foundation Engine'],
+      dataPointsReferenced: ['Local assistant · Provider shown per reply'],
     },
   ]);
 
@@ -108,7 +108,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
       return;
     }
 
-    const query = input.trim() || messages[messages.length - 1].text;
+    const query = input.trim() || [...messages].reverse().find(m => m.sender === 'user')?.text || '';
     if (!apiKey) {
       Alert.alert('Gemini API Key Needed', 'Add a Gemini API key in Profile to use cloud AI.');
       return;
@@ -147,7 +147,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
             <Text style={localStyles.headerTitle}>AI Health Assistant</Text>
             <View style={localStyles.privacyBadge}>
               <MaterialCommunityIcons name="shield-lock" size={12} color={C.green} />
-              <Text style={localStyles.privacyBadgeText}>100% On-Device · Zero Cloud Data</Text>
+              <Text style={localStyles.privacyBadgeText}>Local replies · Cloud requires approval</Text>
             </View>
           </View>
         </View>
@@ -225,7 +225,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
                           ? '☁️ Cloud Gemini (Approved)'
                           : msg.source === 'apple-foundation'
                           ? '🍏 Apple Foundation Model'
-                          : '⚡ SafeScale On-Device Engine'}
+                          : '⚡ SafeScale local rules'}
                       </Text>
                     </View>
                     <Text style={localStyles.timeText}>{msg.timestamp}</Text>
@@ -332,7 +332,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
             <View style={localStyles.inspectorCard}>
               <Text style={localStyles.inspectorHeader}>🍎 TODAY NUTRITION</Text>
               <Text style={localStyles.inspectorContent}>
-                {contextSnapshot.nutrition.todayCalories} kcal · {contextSnapshot.nutrition.proteinGrams}g Protein · {contextSnapshot.nutrition.carbsGrams}g Carbs · {contextSnapshot.nutrition.fatGrams}g Fat
+                {contextSnapshot.nutrition.todayCalories === null ? 'Not recorded' : `${contextSnapshot.nutrition.todayCalories} kcal`} · {contextSnapshot.nutrition.proteinGrams === null ? 'Not recorded' : `${contextSnapshot.nutrition.proteinGrams}g`} Protein · {contextSnapshot.nutrition.carbsGrams === null ? 'Not recorded' : `${contextSnapshot.nutrition.carbsGrams}g`} Carbs · {contextSnapshot.nutrition.fatGrams === null ? 'Not recorded' : `${contextSnapshot.nutrition.fatGrams}g`} Fat
               </Text>
             </View>
 

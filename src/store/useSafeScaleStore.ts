@@ -20,7 +20,7 @@
  *    values so the UI renders correctly before any live telemetry sync.
  */
 
-import { localDate, validDate, currentMedications, changeDose } from '../utils/daily';
+import { localDate, validDate, validateVitalReadings, currentMedications, changeDose } from '../utils/daily';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -62,6 +62,7 @@ import type { HealthSource } from '../types';
 import { getSuggestedOwnerName } from '../utils/deviceName';
 import {
   estimateCaloriesBurned,
+  workoutElapsedSeconds,
   computeRecoveryScore,
 } from '../services/WorkoutService';
 import { calculateSleepDebt } from '../services/SleepAnalysisService';
@@ -1145,6 +1146,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   },
 
   addVitalLog: (entry: Omit<VitalLogEntry, 'id' | 'timestamp'>): void => {
+    const error = validateVitalReadings(entry);
+    if (error) throw new Error(error);
     set((state) => {
       const newEntry: VitalLogEntry = {
         ...entry,
@@ -1354,6 +1357,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   },
 
   startLiveWorkout: (type: WorkoutType, name?: string) => {
+    if (useSafeScaleStore.getState().activeWorkout) return;
     const session: WorkoutSession = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type,
@@ -1394,13 +1398,9 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     if (!active) return null;
 
     const endedAt = new Date().toISOString();
-    const durationSeconds = active.durationSeconds || Math.max(1, Math.round((Date.parse(endedAt) - Date.parse(active.startedAt)) / 1000));
+    const durationSeconds = workoutElapsedSeconds(active.startedAt, Date.parse(endedAt));
     
-    let caloriesBurned = active.caloriesBurned;
-    if (!caloriesBurned || caloriesBurned <= 0) {
-      const weight = state.profile.weight || 70;
-      caloriesBurned = estimateCaloriesBurned(active.type, durationSeconds, weight);
-    }
+    const caloriesBurned = estimateCaloriesBurned(active.type, durationSeconds, state.profile.weight || 70);
 
     const finishedWorkout: WorkoutSession = {
       ...active,
@@ -1613,6 +1613,10 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         moodLogs: state.moodLogs,
         vitalsLogs: state.vitalsLogs,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
+        activeWorkout: state.activeWorkout,
+        isTrackingActive: state.isTrackingActive,
+        trackingStartTime: state.trackingStartTime,
+        trackingType: state.trackingType,
         appWorkouts: state.appWorkouts,
         workouts: state.workouts,
         activityRings: state.activityRings,

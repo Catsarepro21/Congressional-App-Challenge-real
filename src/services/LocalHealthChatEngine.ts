@@ -53,20 +53,22 @@ function generateLocalClinicalResponse(
   if (q.includes('calorie') || q.includes('macro') || q.includes('food') || q.includes('eat') || q.includes('protein') || q.includes('carb') || q.includes('diet') || q.includes('dinner') || q.includes('lunch') || q.includes('breakfast')) {
     dataPoints.push('Nutrition & Macros');
     const n = snapshot.nutrition;
-    let text = `Here is your nutrition breakdown for today:\n\n`;
-    text += `• Calories: ${n.todayCalories} kcal logged across ${n.mealCount} meals.\n`;
-    text += `• Protein: ${n.proteinGrams}g\n`;
-    text += `• Carbohydrates: ${n.carbsGrams}g\n`;
-    text += `• Fat: ${n.fatGrams}g\n`;
-    text += `• Dietary Fiber: ${n.fiberGrams}g\n`;
-    text += `• Sodium: ${n.sodiumMg}mg\n`;
+    let text = `Here are your recorded nutrition subtotals for today (missing nutrients are not zero):\n\n`;
+    text += `• Calories: ${n.todayCalories === null ? 'Not recorded' : `${n.todayCalories} kcal`} logged across ${n.mealCount} meals.\n`;
+    text += `• Protein: ${n.proteinGrams === null ? 'Not recorded' : `${n.proteinGrams}g`}\n`;
+    text += `• Carbohydrates: ${n.carbsGrams === null ? 'Not recorded' : `${n.carbsGrams}g`}\n`;
+    text += `• Fat: ${n.fatGrams === null ? 'Not recorded' : `${n.fatGrams}g`}\n`;
+    text += `• Dietary Fiber: ${n.fiberGrams === null ? 'Not recorded' : `${n.fiberGrams}g`}\n`;
+    text += `• Sodium: ${n.sodiumMg === null ? 'Not recorded' : `${n.sodiumMg}mg`}\n`;
+    const count = n.recordedCounts || {};
+    text += `Coverage: calories ${count.todayCalories || 0}/${n.mealCount} meals; protein ${count.proteinGrams || 0}/${n.mealCount}; carbs ${count.carbsGrams || 0}/${n.mealCount}; fat ${count.fatGrams || 0}/${n.mealCount}. Partial logs are not complete daily intake.\n`;
     if (n.todayWaterMl > 0) {
       text += `• Hydration: ${n.todayWaterMl} ml of water recorded.\n`;
       dataPoints.push('Water Hydration');
     }
 
     if (n.meals.length > 0) {
-      text += `\nYour meals today include: ${n.meals.map(m => `${m.name} (${m.calories} kcal)`).join(', ')}.`;
+      text += `\nYour meals today include: ${n.meals.map(m => `${m.name} (${m.calories === null ? 'Calories not recorded' : `${m.calories} kcal`})`).join(', ')}.`;
     } else {
       text += `\nNo meals have been logged yet today. You can log one with the "Search food", "Scan barcode", or "Snap meal photo" buttons on Today!`;
     }
@@ -117,17 +119,7 @@ function generateLocalClinicalResponse(
     let text = `Your active fasting status:\n\n`;
     text += `• Protocol: ${f.protocol}\n`;
     text += `• Elapsed Time: ${f.elapsedHours} hours\n`;
-    text += `• Current Metabolic Stage: ${f.metabolicStage}\n\n`;
-
-    if (f.metabolicStage?.includes('Ketosis')) {
-      text += `🔥 You are currently in Ketosis! Liver glycogen stores have depleted, and your body is actively burning fatty acids into ketones for fuel.`;
-    } else if (f.metabolicStage?.includes('Autophagy')) {
-      text += `✨ You have reached Autophagy! Cellular renewal, organelle recycling, and intracellular cleaning are actively occurring.`;
-    } else if (f.metabolicStage?.includes('Glycogen')) {
-      text += `⏳ Glycogen Depletion phase: Blood glucose and insulin levels are steadily lowering as your liver utilizes stored energy.`;
-    } else {
-      text += `🍽️ Digestion phase: Your body is actively absorbing nutrients from your last meal.`;
-    }
+    text += `\nThis is an elapsed-time tracker. It cannot determine ketosis, insulin or glycogen levels, or autophagy. Longer fasting is not a target to pursue for a stage label.`;
 
     return { text, dataPoints };
   }
@@ -212,7 +204,7 @@ function generateLocalClinicalResponse(
   const m = snapshot.medications;
 
   let text = `Hello ${snapshot.user.name}, here is your holistic on-device health summary:\n\n`;
-  text += `🍎 **Nutrition**: ${n.todayCalories} kcal logged (${n.proteinGrams}g protein, ${n.carbsGrams}g carbs, ${n.fatGrams}g fat). `;
+  text += `🍎 **Nutrition**: ${n.todayCalories === null ? 'Not recorded' : `${n.todayCalories} kcal`} logged (${n.proteinGrams === null ? 'Not recorded' : `${n.proteinGrams}g`} protein, ${n.carbsGrams === null ? 'Not recorded' : `${n.carbsGrams}g`} carbs, ${n.fatGrams === null ? 'Not recorded' : `${n.fatGrams}g`} fat). `;
   text += n.todayWaterMl > 0 ? `Hydrated with ${n.todayWaterMl} ml water.\n` : `Remember to log hydration.\n`;
 
   text += `🌙 **Rest**: ${s.totalMinutes > 0 ? `${s.formatted} of sleep recorded` : 'No sleep logged yet'}. `;
@@ -292,7 +284,7 @@ export const LocalHealthChatEngine = {
         purpose: 'Deep clinical health reasoning query via Google Gemini Cloud AI',
         endpoint: 'https://generativelanguage.googleapis.com (Gemini 2.5 Flash)',
         dataPayloadSummary: `Question: "${userMessage.slice(0, 60)}..." + Health snapshot`,
-        sensitiveFields: ['Biometric vitals', 'Nutrition summary', 'Medication names'],
+        sensitiveFields: ['Name and age', 'Allergies and conditions', 'Biometric vitals', 'Meals and nutrition', 'Medication names, doses and times', 'Sleep and fasting'],
       },
       async (): Promise<ChatMessage> => {
         // Cloud Action: User granted explicit permission

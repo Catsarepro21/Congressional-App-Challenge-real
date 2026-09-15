@@ -37,15 +37,16 @@ export interface HealthContextSnapshot {
     recoveryScore?: number;
   };
   nutrition: {
-    todayCalories: number;
+    todayCalories: number | null;
     todayWaterMl: number;
-    proteinGrams: number;
-    carbsGrams: number;
-    fatGrams: number;
-    fiberGrams: number;
-    sodiumMg: number;
+    proteinGrams: number | null;
+    carbsGrams: number | null;
+    fatGrams: number | null;
+    fiberGrams: number | null;
+    sodiumMg: number | null;
+    recordedCounts: Record<string, number>;
     mealCount: number;
-    meals: { name: string; calories: number; portion?: string }[];
+    meals: { name: string; calories: number | null; portion?: string }[];
   };
   medications: {
     total: number;
@@ -118,36 +119,32 @@ export const HealthContextAggregator = {
     }
 
     // 3. Nutrition (Today's logged items)
-    const todayItems = state.loggedItems.filter(item => !item.date || item.date === today);
-    let todayCalories = 0;
+    const todayItems = state.loggedItems.filter(item => item.date === today);
     let todayWaterMl = 0;
-    let protein = 0;
-    let carbs = 0;
-    let fat = 0;
-    let fiber = 0;
-    let sodium = 0;
-    const meals: { name: string; calories: number; portion?: string }[] = [];
-
+    const totals: Record<string, number> = {};
+    const recordedCounts: Record<string, number> = {};
+    const add = (key: string, value: unknown) => {
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+        totals[key] = (totals[key] || 0) + value;
+        recordedCounts[key] = (recordedCounts[key] || 0) + 1;
+      }
+    };
+    const meals: HealthContextSnapshot['nutrition']['meals'] = [];
     for (const item of todayItems) {
       if (item.type === 'Water') {
-        const ml = parseInt(item.value.replace(/[^0-9]/g, ''), 10) || 250;
-        todayWaterMl += ml;
+        const match = item.value.match(/^(\d+(?:\.\d+)?)\s*ml$/i);
+        if (match) todayWaterMl += Number(match[1]);
       } else if (item.type === 'Meal') {
-        todayCalories += item.calories || 0;
-        if (item.macros) {
-          protein += item.macros.protein || 0;
-          carbs += item.macros.carbs || 0;
-          fat += item.macros.fat || 0;
-          fiber += item.macros.fiber || 0;
-          sodium += item.macros.sodium || 0;
-        }
-        meals.push({
-          name: item.name,
-          calories: item.calories || 0,
-          portion: item.portion,
-        });
+        add('todayCalories', item.calories);
+        add('proteinGrams', item.macros?.protein);
+        add('carbsGrams', item.macros?.carbs);
+        add('fatGrams', item.macros?.fat);
+        add('fiberGrams', item.macros?.fiber);
+        add('sodiumMg', item.macros?.sodium);
+        meals.push({ name: item.name, calories: typeof item.calories === 'number' && Number.isFinite(item.calories) && item.calories >= 0 ? item.calories : null, portion: item.portion });
       }
     }
+    const total = (key: string) => recordedCounts[key] ? Math.round(totals[key] * 10) / 10 : null;
 
     // 4. Medications
     const meds = state.medicationSchedule;
@@ -169,9 +166,9 @@ export const HealthContextAggregator = {
       let stageName = 'Digestion';
       if (typeof FastingService !== 'undefined' && FastingService.getMetabolicStage) {
         const stageObj = FastingService.getMetabolicStage(elapsedHours);
-        stageName = typeof stageObj === 'object' && stageObj && 'name' in stageObj ? (stageObj as any).name : String(stageObj);
+        stageName = stageObj.label;
       } else {
-        stageName = getFastingStage(elapsedHours);
+        stageName = `${elapsedHours} hours elapsed`;
       }
       fastingInfo = {
         isFasting: true,
@@ -227,13 +224,14 @@ export const HealthContextAggregator = {
         recoveryScore,
       },
       nutrition: {
-        todayCalories,
+        todayCalories: total('todayCalories'),
+        recordedCounts,
         todayWaterMl,
-        proteinGrams: Math.round(protein * 10) / 10,
-        carbsGrams: Math.round(carbs * 10) / 10,
-        fatGrams: Math.round(fat * 10) / 10,
-        fiberGrams: Math.round(fiber * 10) / 10,
-        sodiumMg: Math.round(sodium),
+        proteinGrams: total('proteinGrams'),
+        carbsGrams: total('carbsGrams'),
+        fatGrams: total('fatGrams'),
+        fiberGrams: total('fiberGrams'),
+        sodiumMg: total('sodiumMg'),
         mealCount: meals.length,
         meals,
       },
@@ -275,12 +273,13 @@ export const HealthContextAggregator = {
     lines.push(`- Activity: ${s.vitals.steps.toLocaleString()} steps, ${s.vitals.activeCalories} active kcal burned`);
     if (s.vitals.recoveryScore) lines.push(`- Recovery Score: ${s.vitals.recoveryScore}%`);
 
-    lines.push(`TODAY NUTRITION:`);
-    lines.push(`- Calories: ${s.nutrition.todayCalories} kcal across ${s.nutrition.mealCount} logged meals`);
-    lines.push(`- Macros: ${s.nutrition.proteinGrams}g protein, ${s.nutrition.carbsGrams}g carbs, ${s.nutrition.fatGrams}g fat, ${s.nutrition.fiberGrams}g fiber, ${s.nutrition.sodiumMg}mg sodium`);
+    lines.push('TODAY NUTRITION (recorded subtotals only; missing values are unknown):');
+    lines.push(`Nutrient coverage: ${JSON.stringify(s.nutrition.recordedCounts)} out of ${s.nutrition.mealCount} meals. Do not treat partial nutrient totals as a complete daily intake.`);
+    lines.push(`- Calories: ${s.nutrition.todayCalories === null ? 'Not recorded' : `${s.nutrition.todayCalories} kcal`} across ${s.nutrition.mealCount} logged meals`);
+    lines.push(`- Macros: ${s.nutrition.proteinGrams === null ? 'Not recorded' : `${s.nutrition.proteinGrams}g`} protein, ${s.nutrition.carbsGrams === null ? 'Not recorded' : `${s.nutrition.carbsGrams}g`} carbs, ${s.nutrition.fatGrams === null ? 'Not recorded' : `${s.nutrition.fatGrams}g`} fat, ${s.nutrition.fiberGrams === null ? 'Not recorded' : `${s.nutrition.fiberGrams}g`} fiber, ${s.nutrition.sodiumMg === null ? 'Not recorded' : `${s.nutrition.sodiumMg}mg`} sodium`);
     if (s.nutrition.todayWaterMl > 0) lines.push(`- Hydration: ${s.nutrition.todayWaterMl} ml water`);
     if (s.nutrition.meals.length > 0) {
-      lines.push(`- Meals: ${s.nutrition.meals.map(m => `${m.name} (${m.calories} kcal)`).join('; ')}`);
+      lines.push(`- Meals: ${s.nutrition.meals.map(m => `${m.name} (${m.calories === null ? 'Calories not recorded' : `${m.calories} kcal`})`).join('; ')}`);
     }
 
     lines.push(`MEDICATIONS:`);
@@ -292,7 +291,7 @@ export const HealthContextAggregator = {
     lines.push(`SLEEP & FASTING:`);
     lines.push(`- Sleep: ${s.sleep.totalMinutes > 0 ? s.sleep.formatted : 'No sleep logged'}`);
     if (s.fasting.isFasting) {
-      lines.push(`- Fasting: Active ${s.fasting.protocol} fast, ${s.fasting.elapsedHours}h elapsed (Stage: ${s.fasting.metabolicStage})`);
+      lines.push(`- Fasting: Active ${s.fasting.protocol} fast, ${s.fasting.elapsedHours}h elapsed (Elapsed-time band: ${s.fasting.metabolicStage}; not a measured metabolic state)`);
     }
 
     return lines.join('\n');
@@ -305,7 +304,7 @@ export const HealthContextAggregator = {
     const s = HealthContextAggregator.getSnapshot();
     const pills: string[] = [];
 
-    pills.push(`🍎 ${s.nutrition.todayCalories} kcal`);
+    pills.push(`🍎 ${s.nutrition.todayCalories === null ? 'Not recorded' : `${s.nutrition.todayCalories} kcal`}`);
     if (s.sleep.totalMinutes > 0) pills.push(`🌙 ${s.sleep.formatted}`);
     if (s.vitals.steps > 0) pills.push(`👟 ${s.vitals.steps.toLocaleString()} steps`);
     if (s.medications.total > 0) pills.push(`💊 ${s.medications.taken}/${s.medications.total} Meds`);

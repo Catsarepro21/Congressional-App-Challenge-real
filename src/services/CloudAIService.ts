@@ -151,7 +151,7 @@ export const CloudAIService = {
       );
     }
 
-    return await action();
+    throw new Error('Cloud consent is unavailable. No data was sent.');
   },
 
   /**
@@ -194,13 +194,13 @@ export const CloudAIService = {
         {
           purpose: 'Scan clinical medical document with Google Gemini Vision Cloud API',
           endpoint: 'https://generativelanguage.googleapis.com (Gemini 2.5 Flash Vision)',
-          dataPayloadSummary: 'Medical document image (PII auto-redacted)',
+          dataPayloadSummary: 'Original medical document image. Personal details are sent to Google; they are not redacted before upload.',
           sensitiveFields: ['Medical document image'],
         },
         action,
       );
     }
 
-    return await action();
+    throw new Error('Cloud consent is unavailable. No data was sent.');
   },
 };

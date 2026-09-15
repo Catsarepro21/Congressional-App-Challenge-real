@@ -190,7 +190,7 @@ const analyzeWithGemini = async (
     );
   }
 
-  return await performGeminiCall();
+  throw new Error('Cloud consent is unavailable. No data was sent.');
 };
 
 // ---------------------------------------------------------------------------

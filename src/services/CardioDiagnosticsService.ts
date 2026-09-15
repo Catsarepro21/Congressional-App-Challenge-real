@@ -38,7 +38,7 @@ export function classifyBloodPressure(
   }
 
   // 3. Stage 1 Hypertension: 130-139 or 80-89
-  if ((systolic >= 130 && systolic <= 139) || (diastolic >= 80 && diastolic <= 89)) {
+  if (systolic >= 130 || diastolic >= 80) {
     return {
       category: 'Stage 1',
       label: 'Stage 1 Hypertension',
@@ -48,7 +48,7 @@ export function classifyBloodPressure(
   }
 
   // 4. Elevated: 120-129 and < 80
-  if (systolic >= 120 && systolic <= 129 && diastolic < 80) {
+  if (systolic >= 120 && diastolic < 80) {
     return {
       category: 'Elevated',
       label: 'Elevated',

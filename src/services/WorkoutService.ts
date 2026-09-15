@@ -234,3 +234,9 @@ export function computeRecoveryScore({
     recommendation,
   };
 }
+
+/** Wall-clock duration survives screen unmounts and suspended JS timers. */
+export function workoutElapsedSeconds(startedAt: string, now = Date.now()): number {
+  const start = Date.parse(startedAt);
+  return Number.isFinite(start) ? Math.max(0, Math.floor((now - start) / 1000)) : 0;
+}

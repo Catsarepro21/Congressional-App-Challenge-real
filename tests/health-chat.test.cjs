@@ -66,6 +66,7 @@ const mockStoreState = {
     {
       id: "meal_1",
       type: "Meal",
+      date: new Date().toISOString().slice(0, 10),
       name: "Grilled Salmon Bowl",
       value: "550 kcal",
       calories: 550,
@@ -74,6 +75,7 @@ const mockStoreState = {
     {
       id: "water_1",
       type: "Water",
+      date: new Date().toISOString().slice(0, 10),
       name: "Water",
       value: "500 ml",
     },
@@ -121,14 +123,7 @@ const mockStore = {
 const contextAggregator = load("src/services/HealthContextAggregator.ts", {
   "../store/useSafeScaleStore": { useSafeScaleStore: mockStore },
   "../utils/daily": { localDate: () => new Date().toISOString().slice(0, 10) },
-  "./FastingService": {
-    FastingService: {
-      getMetabolicStage: (hours) => {
-        if (hours >= 12) return { name: "Ketosis", description: "Fat burning active" };
-        return { name: "Glycogen Depletion", description: "Insulin lowering" };
-      },
-    },
-  },
+  "./FastingService": load("src/services/FastingService.ts"),
   "./CardioDiagnosticsService": {
     CardioDiagnosticsService: {
       classifyBloodPressure: (sys, dia) => ({ label: "Normal Blood Pressure", category: "Normal" }),
@@ -176,12 +171,12 @@ test("HealthContextAggregator: gathers complete real-time health snapshot", () =
 
   // Fasting
   assert.equal(snapshot.fasting.isFasting, true);
-  assert.equal(snapshot.fasting.metabolicStage, "Ketosis");
+  assert.equal(snapshot.fasting.metabolicStage, "12–18 hours");
 
   // Quick pills
   const pills = contextAggregator.HealthContextAggregator.getQuickPillSummary();
   assert.ok(pills.some(p => p.includes("550 kcal")));
-  assert.ok(pills.some(p => p.includes("Ketosis")));
+  assert.ok(pills.some(p => p.includes("12–18 hours")));
   assert.ok(pills.some(p => p.includes("88% Recovery")));
 });
 
@@ -209,12 +204,12 @@ test("LocalHealthChatEngine: sleep & recovery query answers using user sleep and
   assert.ok(reply.dataPointsReferenced.includes("Sleep & Recovery"));
 });
 
-test("LocalHealthChatEngine: fasting query identifies active ketosis milestone", async () => {
+test("LocalHealthChatEngine: fasting query explains elapsed time without claiming a metabolic state", async () => {
   const engine = chatEngine.LocalHealthChatEngine;
   const reply = await engine.sendMessage("Am I in ketosis right now?");
 
   assert.ok(reply);
-  assert.match(reply.text, /Ketosis/);
+  assert.match(reply.text, /cannot determine ketosis/);
   assert.match(reply.text, /16:8/);
   assert.ok(reply.dataPointsReferenced.includes("Intermittent Fasting"));
 });
@@ -246,7 +241,7 @@ test("CloudPermissionGuard: interactive permission flow enforces user choice eve
   assert.equal(storeState.currentRequest.purpose, "Analyze food photo");
 
   // User taps "Allow"
-  guard.approveCurrentRequest();
+  guard.approveCurrentRequest(guardModule.useCloudPermissionStore.getState().currentRequest.id);
   const granted = await requestPromise;
   assert.equal(granted, true);
   assert.equal(guardModule.useCloudPermissionStore.getState().currentRequest, null);
@@ -261,7 +256,7 @@ test("CloudPermissionGuard: interactive permission flow enforces user choice eve
   assert.ok(guardModule.useCloudPermissionStore.getState().currentRequest);
 
   // User taps "Deny"
-  guard.denyCurrentRequest();
+  guard.denyCurrentRequest(guardModule.useCloudPermissionStore.getState().currentRequest.id);
   const secondResult = await secondPromise;
   assert.equal(secondResult, false);
   assert.equal(guardModule.useCloudPermissionStore.getState().currentRequest, null);
@@ -290,10 +285,43 @@ test("CloudPermissionGuard: executeWithPermission executes local fallback when u
   );
 
   // Simulate user denying interactive prompt
-  guard.denyCurrentRequest();
+  guard.denyCurrentRequest(guardModule.useCloudPermissionStore.getState().currentRequest.id);
 
   const result = await actionPromise;
   assert.equal(result, "local-result");
   assert.equal(cloudCalled, false);
   assert.equal(localCalled, true);
+});
+
+test('nutrition context and chat distinguish missing, zero, partial and legacy values', async () => {
+  const original = mockStoreState.loggedItems;
+  try {
+    const date = new Date().toISOString().slice(0,10);
+    mockStoreState.loggedItems = [{id:'a',type:'Meal',name:'Calories only',date,calories:420}];
+    let n = contextAggregator.HealthContextAggregator.getSnapshot().nutrition;
+    assert.equal(n.proteinGrams,null);
+    assert.equal(n.todayCalories,420);
+    let reply = await chatEngine.LocalHealthChatEngine.sendMessage('What are my macros?');
+    assert.match(reply.text,/Protein: Not recorded/);
+    assert.doesNotMatch(reply.text,/Protein: 0g/);
+    mockStoreState.loggedItems.push({id:'b',type:'Meal',name:'Recorded zero',date,macros:{protein:0,carbs:2,fat:0}});
+    mockStoreState.loggedItems.push({id:'old',type:'Meal',name:'Undated',calories:999});
+    n = contextAggregator.HealthContextAggregator.getSnapshot().nutrition;
+    assert.equal(n.proteinGrams,0); assert.equal(n.mealCount,2);
+    assert.equal(n.recordedCounts.proteinGrams,1); assert.equal(n.fiberGrams,null);
+    assert.match(contextAggregator.HealthContextAggregator.getAsPromptContext(),/Not recorded/);
+  } finally { mockStoreState.loggedItems = original; }
+});
+
+test('native chat returns actual model output and falls back locally on model errors', async () => {
+  const engine = (native) => load('src/services/LocalHealthChatEngine.ts', {
+    './HealthContextAggregator':contextAggregator,'./CloudPermissionGuard':guardModule,
+    '../../modules/safescale-vision':native,
+  }).LocalHealthChatEngine;
+  let actualPrompt;
+  const response = await engine({isFoundationModelSupportedAsync:async()=>true,generateTextAsync:async(p,c)=>{actualPrompt=p;assert.match(c,/NUTRITION/);return {text:'Model answer for this question',isLocal:true,provider:'apple-foundation'};}}).sendMessage('Summarize my records');
+  assert.equal(actualPrompt,'Summarize my records'); assert.equal(response.source,'apple-foundation');
+  assert.equal(response.text,'Model answer for this question');
+  const fallback = await engine({isFoundationModelSupportedAsync:async()=>true,generateTextAsync:async()=>{throw Error('Model not ready');}}).sendMessage('What are my macros?');
+  assert.equal(fallback.source,'local-engine'); assert.match(fallback.text,/Protein/);
 });

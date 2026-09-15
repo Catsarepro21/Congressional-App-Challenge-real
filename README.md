@@ -123,3 +123,13 @@ Remaining product risks: daily medication status rollover and daily log date bou
 - Sideloadly: https://sideloadly.io/faq
 - AltStore Windows: https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows
 - Gemini lifecycle: https://ai.google.dev/gemini-api/docs/deprecations
+
+## September 13: native AI repair
+
+SafeScaleVision now has an Apple module configuration and CocoaPods specification; Expo autolinking resolves the Swift module. Image classification accepts local files only and reads orientation metadata through Vision's URL handler.
+
+The fixed-response chat stub has been replaced with FoundationModels LanguageModelSession generation. Runtime availability is checked on iOS 26+; unavailable devices and model errors use the existing local rules without an automatic cloud request. The model receives instructions to preserve unknown data and avoid diagnoses or medication changes. See Apple's API: https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel
+
+Nutrition context now distinguishes missing nutrients (null) from recorded zero, counts the meals contributing each nutrient, and excludes undated legacy meals from today's totals. Local chat and its data inspector label unknowns explicitly.
+
+Validation: 72 tests passed, TypeScript passed, web/iOS JavaScript exports passed, and Expo Apple autolinking includes SafeScaleVision. Swift compilation and real inference have NOT been verified on Windows. Rebuild the unsigned IPA using the existing macOS/Xcode workflow and re-sign/install it; an older IPA cannot gain a native module through JavaScript changes. On a supported phone, enable Apple Intelligence and allow the model to download. Verify two different prompts yield relevant different answers, unavailable-model fallback works, and rotated camera/library photos classify correctly. No signing credentials or provisioning settings were changed.

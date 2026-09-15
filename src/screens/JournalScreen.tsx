@@ -1,3 +1,4 @@
+import { validateVitalReadings } from '../utils/daily';
 import React, { useState } from "react";
 import { View, Text, Alert, Image, StyleSheet } from "react-native";
 import { useSafeScaleStore } from "../store/useSafeScaleStore";
@@ -245,13 +246,13 @@ export default function JournalScreen() {
                   </View>
                 ) : null}
                 <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#1E40AF" }}>{entry.macros.protein}g protein</Text>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#1E40AF" }}>{entry.macros.protein ?? '—'}g protein</Text>
                 </View>
                 <View style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#92400E" }}>{entry.macros.carbs}g carbs</Text>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#92400E" }}>{entry.macros.carbs ?? '—'}g carbs</Text>
                 </View>
                 <View style={{ backgroundColor: "#FEE2E2", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#991B1B" }}>{entry.macros.fat}g fat</Text>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#991B1B" }}>{entry.macros.fat ?? '—'}g fat</Text>
                 </View>
               </View>
             ) : null}
@@ -295,8 +296,8 @@ function JournalForm({
   const [severity, setSeverity] = useState("3");
 
   // Vitals state
-  const [systolic, setSystolic] = useState("120");
-  const [diastolic, setDiastolic] = useState("80");
+  const [systolic, setSystolic] = useState("");
+  const [diastolic, setDiastolic] = useState("");
   const [bloodGlucose, setBloodGlucose] = useState("");
   const [glucoseContext, setGlucoseContext] = useState<"Fasting" | "Post-Meal" | "General">("General");
   const [spo2, setSpo2] = useState("");
@@ -329,13 +330,11 @@ function JournalForm({
       const gNum = bloodGlucose ? Number(bloodGlucose) : undefined;
       const oNum = spo2 ? Number(spo2) : undefined;
 
-      store.addVitalLog({
-        systolicBP: sNum || undefined,
-        diastolicBP: dNum || undefined,
-        bloodGlucose: gNum,
-        glucoseContext: gNum ? glucoseContext : undefined,
-        spo2: oNum,
-      });
+      const entry = {systolicBP: systolic.trim() ? sNum : undefined, diastolicBP: diastolic.trim() ? dNum : undefined,
+        bloodGlucose: gNum, glucoseContext: gNum !== undefined ? glucoseContext : undefined, spo2: oNum};
+      const validation = validateVitalReadings(entry);
+      if (validation) return setError(validation);
+      store.addVitalLog(entry);
     } else {
       store.addMoodLog({
         rating: (

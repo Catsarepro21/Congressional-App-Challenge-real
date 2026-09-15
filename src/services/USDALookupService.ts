@@ -231,7 +231,7 @@ export const USDALookupService = {
   toFoodAnalysisResult: (
     entry: USDAFoodEntry,
     multiplier: number = 1,
-  ): FoodAnalysisResult => {
+  ): FoodAnalysisResult & Required<Pick<FoodAnalysisResult, 'calories' | 'carbs' | 'protein' | 'fat' | 'fiber' | 'sugar' | 'sodium'>> => {
     const safeMult = Math.max(0.1, Number.isFinite(multiplier) ? multiplier : 1);
     const round = (n: number) => Math.round(n * safeMult * 10) / 10;
 
