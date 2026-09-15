@@ -14,7 +14,7 @@
  */
 
 import { Platform } from 'react-native';
-import { readAppleHealth } from './NativeHealthReader';
+import { readAppleHealth, sleepMinutesFromSamples } from './NativeHealthReader';
 import type { BiometricSummary, WorkoutSession } from '../types';
 
 export function getAppleHealthKit(): any {
@@ -625,54 +625,17 @@ export class HealthDataService {
   /**
    * Saves a completed workout session to Apple Health.
    */
-  public static saveWorkoutToHealthKit(workout: WorkoutSession): Promise<boolean> {
-    if (Platform.OS !== 'ios') return Promise.resolve(false);
-    const hk = getAppleHealthKit();
-    if (!hk || typeof hk.saveWorkout !== 'function') return Promise.resolve(false);
-
-    const typeMap: Record<string, string> = {
-      Running: 'Running',
-      Walking: 'Walking',
-      Cycling: 'Cycling',
-      Strength: 'TraditionalStrengthTraining',
-      HIIT: 'HighIntensityIntervalTraining',
-      Yoga: 'Yoga',
-      Other: 'Other',
-    };
-
-    const startDate = workout.startedAt || new Date().toISOString();
-    const endDate = workout.endedAt || new Date(Date.parse(startDate) + workout.durationSeconds * 1000).toISOString();
-
-    const options: any = {
-      type: typeMap[workout.type] || 'Other',
-      startDate,
-      endDate,
-      energyBurned: workout.caloriesBurned || 0,
-      energyBurnedUnit: 'calorie',
-    };
-
-    if (workout.distanceMeters && workout.distanceMeters > 0) {
-      options.distance = Math.round(workout.distanceMeters);
-      options.distanceUnit = 'meter';
-    }
-
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => resolve(false), 15000);
-      try {
-        hk.saveWorkout(options, (err: any) => {
-          clearTimeout(timeout);
-          if (err) {
-            console.warn('[HealthDataService] Failed to save workout to HealthKit:', err);
-            resolve(false);
-          } else {
-            resolve(true);
-          }
-        });
-      } catch (err) {
-        clearTimeout(timeout);
-        resolve(false);
-      }
-    });
+  public static async saveWorkoutToHealthKit(workout: WorkoutSession): Promise<boolean> {
+    if (Platform.OS !== 'ios' || workout.healthSyncVersion !== 1) return false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const native = require('../../modules/safescale-vision');
+      const end = workout.endedAt || new Date(Date.parse(workout.startedAt) + workout.durationSeconds * 1000).toISOString();
+      return await Promise.race([
+        native.saveWorkoutAsync(workout.id,workout.type,workout.startedAt,end,workout.caloriesBurned,workout.distanceMeters || 0),
+        new Promise<boolean>(resolve => {timer = setTimeout(() => resolve(false),15000);}),
+      ]);
+    } catch { return false; } finally { clearTimeout(timer); }
   }
 
   /**
@@ -804,24 +767,6 @@ export class HealthDataService {
           if (typeof lastRecord.beatsPerMinute === 'number') {
             results.restingHeartRate = Math.round(lastRecord.beatsPerMinute);
           }
-        } else {
-          // fallback to minimum of heart rate samples
-          const hrRes = await HealthConnect.readRecords('HeartRate', { timeRangeFilter: timeFilter24h });
-          if (hrRes && Array.isArray(hrRes.records)) {
-            const bpms: number[] = [];
-            for (const rec of hrRes.records) {
-              if (Array.isArray(rec.samples)) {
-                for (const sample of rec.samples) {
-                  if (typeof sample.beatsPerMinute === 'number') {
-                    bpms.push(sample.beatsPerMinute);
-                  }
-                }
-              }
-            }
-            if (bpms.length > 0) {
-              results.restingHeartRate = Math.min(...bpms);
-            }
-          }
         }
       } catch (e) {
         console.warn('[HealthConnect] Failed to read RestingHeartRate:', e);
@@ -831,17 +776,7 @@ export class HealthDataService {
       try {
         const sleepRes = await HealthConnect.readRecords('SleepSession', { timeRangeFilter: timeFilter24h });
         if (sleepRes && Array.isArray(sleepRes.records) && sleepRes.records.length > 0) {
-          let totalSleepMs = 0;
-          for (const rec of sleepRes.records) {
-            const start = new Date(rec.startTime).getTime();
-            const end = new Date(rec.endTime).getTime();
-            if (end > start) {
-              totalSleepMs += (end - start);
-            }
-          }
-          if (totalSleepMs > 0) {
-            results.sleepMinutes = Math.round(totalSleepMs / 60000);
-          }
+          results.sleepMinutes = sleepMinutesFromSamples(sleepRes.records.map((record: any) => ({value:'ASLEEP',startDate:record.startTime,endDate:record.endTime})), oneDayAgo.getTime(), Date.now());
         }
       } catch (e) {
         console.warn('[HealthConnect] Failed to read SleepSession:', e);

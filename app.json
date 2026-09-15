@@ -20,9 +20,10 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "SafeScale Health requires access to the camera to scan food barcodes and medical document records.",
-        "NSLocationWhenInUseUsageDescription": "SafeScale Health requires location access to find nearby pharmacies and clinics.",
+        "NSLocationWhenInUseUsageDescription": "SafeScale uses location for optional foreground workout routes and nearby care search.",
         "NSHealthShareUsageDescription": "SafeScale Health requires access to read your biometric health data to compute your health stability score.",
-        "NSHealthUpdateUsageDescription": "SafeScale Health requires access to write health data for tracking purposes."
+        "NSHealthUpdateUsageDescription": "SafeScale Health requires access to write health data for tracking purposes.",
+        "NSMotionUsageDescription": "SafeScale uses motion access to count steps during workouts you choose to record."
       }
     },
     "android": {
@@ -39,7 +40,8 @@
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
         "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_SLEEP",
-        "android.permission.health.READ_RESTING_HEART_RATE"
+        "android.permission.health.READ_RESTING_HEART_RATE",
+        "android.permission.ACTIVITY_RECOGNITION"
       ]
     },
     "web": {
@@ -61,7 +63,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "SafeScale Health requires location access to find nearby pharmacies and clinics."
+          "locationWhenInUsePermission": "SafeScale uses location for optional foreground workout routes and nearby care search."
         }
       ],
       "react-native-health-connect",

@@ -45,6 +45,7 @@ export function readableData(data: Partial<BiometricSummary> | null): Partial<Bi
     restingHeartRate: Number.isFinite(data.restingHeartRate) ? Math.max(0, data.restingHeartRate!) : 0,
     sleepMinutes: Number.isFinite(data.sleepMinutes) ? Math.max(0, data.sleepMinutes!) : 0,
     dailyStabilityScore: 0, sleepConsistency: 0, historicalRHR: [],
+    readingMetadata: data.readingMetadata || {},
   };
 }
 
@@ -74,6 +75,7 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
     const rawData = await bounded(source === 'apple' ? HealthDataService.fetchHealthData() : HealthDataService.fetchHealthConnectData());
     const wearable = (rawData as any)?.wearable ?? previous?.wearable;
     const readings = readableData(rawData);
+    annotateImport(readings, HEALTH_SOURCE_NAMES[source]);
     let profile: ProfileSuggestion | undefined;
     if (source === 'apple' && includeProfile) {
       const bridge = typeof (HealthDataService as any).getAppleHealthKit === 'function'
@@ -128,6 +130,16 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
     data = await read(tokens.accessToken);
   }
   const readings = readableData(data);
+  annotateImport(readings, HEALTH_SOURCE_NAMES[source]);
   return { readings, profile: includeProfile ? await googleProfile(tokens.accessToken) : undefined,
     connection: { ...previous, ...tokens, connectedAt: previous?.connectedAt || new Date().toISOString(), ...(readings ? { lastSyncedAt: new Date().toISOString() } : {}) } };
+}
+
+function annotateImport(data: Partial<BiometricSummary> | null, source: string): void {
+  if (!data) return;
+  const importedAt = new Date().toISOString();
+  data.readingMetadata = {...data.readingMetadata};
+  for (const name of ['steps','activeCalories','heartRate','restingHeartRate','sleepMinutes'] as const) {
+    if (!data.readingMetadata[name] && Number(data[name]) > 0) data.readingMetadata[name] = {source, importedAt};
+  }
 }

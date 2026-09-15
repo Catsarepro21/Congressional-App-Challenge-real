@@ -13,6 +13,10 @@ public class SafeScaleVisionModule: Module {
   public func definition() -> ModuleDefinition {
     Name("SafeScaleVision")
 
+    AsyncFunction("saveWorkoutAsync") { (id: String, type: String, start: String, end: String, calories: Double, distance: Double) async throws -> Bool in
+      return try await SafeScaleWorkoutSync.save(id: id, type: type, startISO: start, endISO: end, calories: calories, distance: distance)
+    }
+
     AsyncFunction("isVisionSupportedAsync") { () -> Bool in
       if #available(iOS 15.0, *) { return true }
       return false

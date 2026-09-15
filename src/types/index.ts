@@ -83,7 +83,15 @@ export interface MedicationItem {
  * Represents a snapshot of the user's normalized biometric data.
  * All numeric values are stored in SI-adjacent units documented inline.
  */
+export type MeasuredVital = 'heartRate' | 'restingHeartRate' | 'sleepMinutes' | 'steps' | 'activeCalories';
+export interface ReadingMetadata {
+  source: string;
+  importedAt: string;
+  sampledAt?: string;
+  periodDate?: string;
+}
 export interface BiometricSummary {
+  readingMetadata?: Partial<Record<MeasuredVital, ReadingMetadata>>;
   /** Current or most recently polled heart rate in beats-per-minute. */
   heartRate: number;
   /** Resting heart rate in beats-per-minute, derived from the lowest
@@ -314,6 +322,8 @@ export interface SafeScaleState {
 
   /** Whether a background auto-sync is currently in progress. */
   isAutoSyncing: boolean;
+  dataRevision: number;
+  isDeletingData: boolean;
 
   /** Toggle background health auto-sync on app open / active state. */
   setAutoSyncEnabled: (enabled: boolean) => void;
@@ -810,6 +820,11 @@ export interface WorkoutSession {
   routeCoordinates?: WorkoutCoordinate[];
   strengthSets?: StrengthSet[];
   source: 'app' | 'apple-health' | 'google-fit';
+  recordSensors?: boolean;
+  sensorStatus?: string;
+  sensorGapAt?: number;
+  stepCount?: number;
+  healthSyncVersion?: 1;
   healthSyncStatus?: 'pending' | 'saved' | 'not-saved';
   notes?: string;
 }

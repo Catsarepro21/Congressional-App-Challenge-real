@@ -12,6 +12,7 @@ import { Button, Card, Heading, Page, Sheet, C, s } from '../components/care/UI'
 import { localDate } from '../utils/daily';
 import { normalizeTodayCards, TODAY_CARDS, DEFAULT_TODAY_CARDS } from '../utils/timeline';
 import { promptMealPhoto } from '../utils/mealPhotoPicker';
+import { readingCaption } from '../utils/readingFreshness';
 import type { TodayCardId } from '../types';
 
 export default function HomeScreen({ onNavigate }: { onNavigate: (index: number) => void }) {
@@ -48,7 +49,12 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
       case 'journal': return <Card><Heading title={checkedIn ? 'Your check-in is saved' : 'How are you feeling?'} detail="Capture symptoms, mood, and questions while they are fresh." /><View style={s.wrap}><Button label={checkedIn ? 'View journal' : 'Add a check-in'} secondary onPress={() => onNavigate(2)} /><Button label="View timeline" secondary onPress={() => onNavigate(9)} /></View></Card>;
       case 'readings': return <Card><Heading title="Latest health readings" detail={lastSync ? `Last sync ${new Date(lastSync).toLocaleString()}` : 'No sync yet. Connect Apple Health when you are ready.'} />
         <Text style={s.body}>Latest imported snapshot; individual readings may be older than the sync time.</Text>
-        {[['Heart rate', vitals.heartRate > 0 ? `${Math.round(vitals.heartRate)} bpm` : 'No reading'], ['Sleep', vitals.sleepMinutes > 0 ? `${Math.floor(vitals.sleepMinutes / 60)}h ${Math.round(vitals.sleepMinutes % 60)}m` : 'No reading'], ['Steps', lastSync ? Math.round(vitals.steps).toLocaleString() : 'No reading']].map(([label, value]) => <View key={label} style={[s.row, { justifyContent: 'space-between' }]}><Text style={s.body}>{label}</Text><Text style={s.heading}>{value}</Text></View>)}
+        {(['heartRate','sleepMinutes','steps'] as const).map(key => {
+          const labels = {heartRate:'Heart rate',sleepMinutes:'Sleep (minutes)',steps:'Steps'};
+          const value = vitals[key];
+          const known = !!vitals.readingMetadata?.[key] || value > 0;
+          return <View key={key} style={{gap:4}}><View style={[s.row,{justifyContent:'space-between'}]}><Text style={s.body}>{labels[key]}</Text><Text style={s.heading}>{known ? Math.round(value).toLocaleString() : 'Not recorded'}</Text></View><Text style={s.body}>{readingCaption(vitals.readingMetadata?.[key])}</Text></View>;
+        })}
         <Button label="Sync health readings" secondary icon="sync" onPress={() => setConnectionsOpen(true)} /></Card>;
     }
   };

@@ -12,7 +12,14 @@ Notifications.setNotificationHandler({
   }),
 });
 
+let notificationGeneration = 0;
 export const NotificationService = {
+  cancelAllReminders: async (): Promise<void> => {
+    notificationGeneration++;
+    if (Platform.OS === 'web') return;
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    await Notifications.dismissAllNotificationsAsync();
+  },
   /**
    * Request notification permissions from the user.
    * Returns true if granted.
@@ -55,9 +62,10 @@ export const NotificationService = {
     dosage: string,
     time: string
   ): Promise<string | null> => {
+    const generation = notificationGeneration;
     try {
       const hasPermission = await NotificationService.requestPermissions();
-      if (!hasPermission) return null;
+      if (!hasPermission || generation !== notificationGeneration) return null;
 
       const [hourStr, minuteStr] = time.split(':');
       const hour = parseInt(hourStr, 10);
@@ -85,6 +93,10 @@ export const NotificationService = {
         trigger,
       });
 
+      if (generation !== notificationGeneration) {
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+        return null;
+      }
       return identifier;
     } catch (e) {
       console.warn('Error scheduling notification:', e);
@@ -111,9 +123,10 @@ export const NotificationService = {
    * Test/schedule a quick notification that fires in 5 seconds.
    */
   scheduleQuickTest: async (): Promise<string | null> => {
+    const generation = notificationGeneration;
     try {
       const hasPermission = await NotificationService.requestPermissions();
-      if (!hasPermission) return null;
+      if (!hasPermission || generation !== notificationGeneration) return null;
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
@@ -127,6 +140,10 @@ export const NotificationService = {
           repeats: false,
         },
       });
+      if (generation !== notificationGeneration) {
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+        return null;
+      }
       return identifier;
     } catch (e) {
       console.warn('Error scheduling test notification:', e);
@@ -138,9 +155,10 @@ export const NotificationService = {
    * Schedule a recurring notification for hydration reminder at custom intervals.
    */
   scheduleHydrationReminder: async (intervalHours: number): Promise<string | null> => {
+    const generation = notificationGeneration;
     try {
       const hasPermission = await NotificationService.requestPermissions();
-      if (!hasPermission) return null;
+      if (!hasPermission || generation !== notificationGeneration) return null;
 
       // Cancel previous hydration reminders first
       await NotificationService.cancelHydrationReminder();
@@ -162,6 +180,10 @@ export const NotificationService = {
         },
       });
 
+      if (generation !== notificationGeneration) {
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+        return null;
+      }
       return identifier;
     } catch (e) {
       console.warn('Error scheduling hydration reminder:', e);
@@ -188,9 +210,10 @@ export const NotificationService = {
    * Schedule/Trigger a low stock alert immediately.
    */
   scheduleLowStockAlert: async (name: string, remaining: number): Promise<string | null> => {
+    const generation = notificationGeneration;
     try {
       const hasPermission = await NotificationService.requestPermissions();
-      if (!hasPermission) return null;
+      if (!hasPermission || generation !== notificationGeneration) return null;
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
@@ -203,6 +226,10 @@ export const NotificationService = {
         trigger: null, // null trigger immediately fires
       });
 
+      if (generation !== notificationGeneration) {
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+        return null;
+      }
       return identifier;
     } catch (e) {
       console.warn('Error scheduling low stock alert:', e);
@@ -218,9 +245,10 @@ export const NotificationService = {
     name: string,
     dueDate: string
   ): Promise<string | null> => {
+    const generation = notificationGeneration;
     try {
       const hasPermission = await NotificationService.requestPermissions();
-      if (!hasPermission) return null;
+      if (!hasPermission || generation !== notificationGeneration) return null;
 
       await NotificationService.cancelVaccineReminder(milestoneId);
 
@@ -243,6 +271,10 @@ export const NotificationService = {
         trigger,
       });
 
+      if (generation !== notificationGeneration) {
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+        return null;
+      }
       return identifier;
     } catch (e) {
       console.warn('Error scheduling vaccine reminder:', e);

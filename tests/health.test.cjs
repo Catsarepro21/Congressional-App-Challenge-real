@@ -69,7 +69,7 @@ test('sleep stages overlap, awake periods and invalid dates are handled', () => 
 test('partial readings preserve measured values without guessed RHR or sleep', async () => {
   const bridge = { initHealthKit() {}, getStepCount(_o, cb) { cb(null, {value: 123}); }, getHeartRateSamples(_o, cb) { cb(null, [{value:80},{value:100}]); } };
   const data = await reader.readAppleHealth(bridge);
-  assert.equal(data.steps, 123); assert.equal(data.heartRate,90);
+  assert.equal(data.steps, 123); assert.equal(data.heartRate,80);
   assert.equal(data.restingHeartRate,0); assert.equal(data.sleepMinutes,0);
 });
 test('CommonJS HealthKit export initializes permissions', async () => {

@@ -31,7 +31,7 @@ import { HealthContextAggregator } from '../services/HealthContextAggregator';
 import { Button, Sheet, C, s } from '../components/care/UI';
 
 useSafeScaleStore.subscribe((state, previous) => {
-  if (state.isTestMode !== previous.isTestMode) useChatStore.getState().setMessages([]);
+  if (state.isTestMode !== previous.isTestMode || state.dataRevision !== previous.dataRevision) useChatStore.getState().setMessages([]);
 });
 
 const SUGGESTED_PROMPTS = [

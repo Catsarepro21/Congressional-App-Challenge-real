@@ -87,7 +87,7 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
     queryHealth(bridge, 'getHeartRateVariabilitySamples', recent),
   ]);
   const values = (samples: any) => Array.isArray(samples) ? samples.filter(s => Number.isFinite(s.value) && s.value >= 0) : [];
-  const hrValues = values(hr).filter(s => s.value > 0);
+  const hrValues = values(hr).filter(s => s.value > 0).sort((a,b) => Date.parse(b.endDate || b.startDate) - Date.parse(a.endDate || a.startDate));
   const rhrValues = values(rhr).filter(s => s.value > 0).sort((a,b) => Date.parse(b.startDate) - Date.parse(a.startDate));
   const rawSleep = Array.isArray(sleep) ? sleep : [];
   const sleepMinutes = sleepMinutesFromSamples(rawSleep, dayStart, now.getTime());
@@ -115,11 +115,23 @@ export async function readAppleHealth(bridge: any, now = new Date()) {
   const exerciseMins = Number.isFinite(exercise?.value) && exercise.value >= 0 ? Math.round(exercise.value) : 0;
   const standH = Number.isFinite(stand?.value) && stand.value >= 0 ? Math.min(24, Math.round(stand.value / 60) || Math.round(stand.value)) : 0;
 
+  const periodDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const metadata = (sample?: any, daily = false) => ({source:'Apple Health', importedAt:now.toISOString(),
+    ...(sample && Number.isFinite(Date.parse(sample.endDate || sample.startDate)) ? {sampledAt:sample.endDate || sample.startDate} : {}),
+    ...(daily ? {periodDate} : {})});
+  const latestSleep = [...rawSleep].sort((a,b) => Date.parse(b.endDate) - Date.parse(a.endDate))[0];
   // Zero means unavailable in the current dashboard schema; never substitute normal vitals.
   return {
+    readingMetadata: {
+      ...(Number.isFinite(steps?.value) ? {steps:metadata(undefined,true)} : {}),
+      ...(values(energy).length ? {activeCalories:metadata(undefined,true)} : {}),
+      ...(hrValues.length ? {heartRate:metadata(hrValues[0])} : {}),
+      ...(rhrValues.length ? {restingHeartRate:metadata(rhrValues[0])} : {}),
+      ...(sleepMinutes > 0 ? {sleepMinutes:metadata(latestSleep)} : {}),
+    },
     steps: Number.isFinite(steps?.value) && steps.value >= 0 ? Math.round(steps.value) : 0,
     activeCalories,
-    heartRate: hrValues.length ? Math.round(hrValues.reduce((sum,s) => sum + s.value, 0) / hrValues.length) : 0,
+    heartRate: hrValues.length ? Math.round(hrValues[0].value) : 0,
     restingHeartRate: rhrValues.length ? Math.round(rhrValues[0].value) : 0,
     sleepMinutes,
     sleepStages,
