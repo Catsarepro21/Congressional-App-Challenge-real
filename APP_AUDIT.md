@@ -4,7 +4,8 @@
 
 - Workout location and motion permission checks now share a queue across recording restarts. Existing grants and permanent denials do not open new prompts, cancelled setup skips queued prompts, and an OS failure does not block later permission checks.
 - Delayed cumulative step events cannot reduce the workout's saved step count. Cleanup ignores late callbacks and immediately removes GPS subscriptions that finish starting after recording stops.
-- Five regression tests exercise production permission and hook code with mocked native APIs. All **102 tests**, TypeScript, targeted secret checks, and web/iOS JavaScript exports pass. Real permission dialogs and movement still require native device verification; these checks do not compile Swift or validate HealthKit.
+- Sample-mode transitions clear obsolete sync flags. A request started before a mode change or data deletion cannot clear the busy flag for a newer sync. Two regression tests cover discarded completions and ensure concurrent syncs stay blocked.
+- Five sensor regression tests exercise production permission and hook code with mocked native APIs. All **104 tests**, TypeScript, targeted secret checks, and web/iOS JavaScript exports pass. Real permission dialogs and movement still require native device verification; these checks do not compile Swift or validate HealthKit.
 
 
 ## Follow-up implementation — September 15, 2026

@@ -67,3 +67,31 @@ test('workout retries retain a stable ID and old records without sync metadata a
   assert.equal(calls.length,2);assert.equal(calls[0].id,calls[1].id);assert.equal(calls[0].healthSyncVersion,1);
   s.setState({workouts:[{...calls[0],id:'legacy',healthSyncVersion:undefined}]});f.retryWorkoutSync('legacy');await new Promise(r=>setTimeout(r,0));assert.equal(calls.length,2);
 });
+
+test('sample mode never restores an orphaned sync lock or accepts an old completion',async()=>{
+  const completions=[];
+  const fixture=storeFixture({'../services/HealthSyncService':{syncHealthSource:()=>new Promise(r=>completions.push(r)),readableData:d=>d}});
+  const store=fixture.useSafeScaleStore;await store.persist.rehydrate();
+  store.getState().updateProfile({lastHealthSource:'apple',healthConnections:{apple:{connectedAt:'now'}}});
+  store.getState().triggerAutoSync();assert.equal(store.getState().isAutoSyncing,true);
+  store.getState().toggleTestMode();assert.equal(store.getState().isAutoSyncing,false);
+  store.getState().toggleTestMode();assert.equal(store.getState().isAutoSyncing,false);
+  store.getState().triggerAutoSync();assert.equal(completions.length,2);
+  completions[0]({readings:{heartRate:99},connection:{connectedAt:'old'}});
+  await new Promise(r=>setTimeout(r,0));
+  assert.equal(store.getState().isAutoSyncing,true);assert.equal(store.getState().biometricCore.heartRate,0);
+  store.getState().triggerAutoSync();assert.equal(completions.length,2);
+  completions[1](null);await new Promise(r=>setTimeout(r,0));assert.equal(store.getState().isAutoSyncing,false);
+});
+
+test('pre-deletion sync completion cannot release a new sync lock',async()=>{
+  const completions=[];
+  const fixture=storeFixture({'../services/HealthSyncService':{syncHealthSource:()=>new Promise(r=>completions.push(r)),readableData:d=>d}});
+  const store=fixture.useSafeScaleStore;await store.persist.rehydrate();
+  const connect=()=>store.getState().updateProfile({lastHealthSource:'apple',healthConnections:{apple:{connectedAt:'now'}}});
+  connect();store.getState().triggerAutoSync();await fixture.deleteLocalHealthData();
+  connect();store.getState().triggerAutoSync();assert.equal(completions.length,2);
+  completions[0](null);await new Promise(r=>setTimeout(r,0));assert.equal(store.getState().isAutoSyncing,true);
+  store.getState().triggerAutoSync();assert.equal(completions.length,2);
+  completions[1](null);await new Promise(r=>setTimeout(r,0));assert.equal(store.getState().isAutoSyncing,false);
+});

@@ -397,7 +397,12 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         }
       })
       .catch(() => { /* silent */ })
-      .finally(() => set({ isAutoSyncing: false }));
+      .finally(() => {
+        // A discarded request must not release a newer session's sync lock.
+        if (useSafeScaleStore.getState().dataRevision === state.dataRevision) {
+          set({ isAutoSyncing: false });
+        }
+      });
   },
 
   weeklyHistory: [],
@@ -749,12 +754,13 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       if (state.isTestMode && demoSnapshot) {
         const restored = demoSnapshot;
         demoSnapshot = null;
-        return { ...restored, isTestMode: false, dataRevision: state.dataRevision + 1 };
+        return { ...restored, isTestMode: false, isAutoSyncing: false, dataRevision: state.dataRevision + 1 };
       }
       demoSnapshot = { ...state };
       const nextTestMode = true;
       return {
         isTestMode: nextTestMode,
+        isAutoSyncing: false,
         dataRevision: state.dataRevision + 1,
         connectedDevices: nextTestMode ? {
           fitbit: true,
