@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import {Pedometer} from 'expo-sensors';
 import {useSafeScaleStore} from '../store/useSafeScaleStore';
 import {appendWorkoutLocation} from '../services/WorkoutSensors';
+import {requestSensorPermission} from '../services/SensorPermissions';
 
 /** Lives at the app root, so changing tabs never stops foreground recording. */
 export function useWorkoutSensors(enabled: boolean): void {
@@ -30,8 +31,8 @@ export function useWorkoutSensors(enabled: boolean): void {
     const report=()=>{if(!disposed)update({sensorStatus:`GPS: ${gpsStatus} · Steps: ${stepsStatus}. Foreground recording only.`});};
     void (async()=>{
       try {
-        const permission=await Location.requestForegroundPermissionsAsync();
-        if (disposed) return;
+        const permission=await requestSensorPermission(Location.getForegroundPermissionsAsync, Location.requestForegroundPermissionsAsync, () => disposed);
+        if (disposed || !permission) return;
         if (!permission.granted) {gpsStatus='permission denied';report();return;}
         const subscription=await Location.watchPositionAsync({accuracy:Location.Accuracy.High,timeInterval:5000,distanceInterval:5},position=>{
           if(disposed)return;
@@ -45,12 +46,16 @@ export function useWorkoutSensors(enabled: boolean): void {
     })();
     void (async()=>{
       try {
-        const permission=await Pedometer.requestPermissionsAsync();
+        const permission=await requestSensorPermission(Pedometer.getPermissionsAsync, Pedometer.requestPermissionsAsync, () => disposed);
+        if (disposed || !permission) return;
         const available=permission.granted && await Pedometer.isAvailableAsync();
         if(disposed)return;
         if(!available){stepsStatus='unavailable or denied';report();return;}
         steps=Pedometer.watchStepCount(result=>{
-          if(!disposed && Number.isFinite(result.steps) && result.steps>=0)update({stepCount:baseSteps+Math.floor(result.steps)});
+          if(disposed || !Number.isFinite(result.steps) || result.steps<0)return;
+          const current=useSafeScaleStore.getState().activeWorkout;
+          // Native counts are cumulative for this subscription; delayed events must not undo progress.
+          if(current?.id===id)update({stepCount:Math.max(current.stepCount || 0,baseSteps+Math.floor(result.steps))});
         });
         stepsStatus='recording';report();
       } catch {stepsStatus='unavailable';report();}

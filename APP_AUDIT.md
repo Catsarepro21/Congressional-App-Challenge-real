@@ -1,5 +1,12 @@
 # SafeScale Health audit
 
+## Focused reliability follow-up — September 16, 2026
+
+- Workout location and motion permission checks now share a queue across recording restarts. Existing grants and permanent denials do not open new prompts, cancelled setup skips queued prompts, and an OS failure does not block later permission checks.
+- Delayed cumulative step events cannot reduce the workout's saved step count. Cleanup ignores late callbacks and immediately removes GPS subscriptions that finish starting after recording stops.
+- Five regression tests exercise production permission and hook code with mocked native APIs. All **102 tests**, TypeScript, targeted secret checks, and web/iOS JavaScript exports pass. Real permission dialogs and movement still require native device verification; these checks do not compile Swift or validate HealthKit.
+
+
 ## Follow-up implementation — September 15, 2026
 
 - Dependency overrides align all Metro copies on 0.84.5, the old Expo XML parser on 0.8.15, and xcode's UUID dependency on CommonJS-compatible 11.1.1. npm install/audit reports **0 known vulnerabilities**. Build exports and Expo config introspection pass with this resolved lockfile.
