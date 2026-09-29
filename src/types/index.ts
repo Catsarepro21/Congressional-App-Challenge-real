@@ -94,8 +94,7 @@ export interface BiometricSummary {
   readingMetadata?: Partial<Record<MeasuredVital, ReadingMetadata>>;
   /** Current or most recently polled heart rate in beats-per-minute. */
   heartRate: number;
-  /** Resting heart rate in beats-per-minute, derived from the lowest
-   *  observed reading in the current telemetry window. */
+  /** Measured resting heart rate in beats per minute, or 0 when unavailable. */
   restingHeartRate: number;
   /** Total sleep duration for the most recent sleep session in minutes. */
   sleepMinutes: number;
