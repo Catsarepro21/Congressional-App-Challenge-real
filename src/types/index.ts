@@ -116,7 +116,7 @@ export interface BiometricSummary {
   /**
    * Computed composite score from 1 to 100.
    * Calculated by HealthDataService.calculateHealthStabilityScore().
-   * Returns 85 (neutral baseline) when historicalRHR.length < 3.
+   * Returns 0 (unavailable) until at least three historical RHR readings exist.
    */
   dailyStabilityScore: number;
   /**
