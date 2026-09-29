@@ -235,7 +235,7 @@ export const GoogleHealthService = {
     const dd = String(localDate.getDate()).padStart(2, '0');
     const todayDateStr = `${yyyy}-${mm}-${dd}`;
 
-    const tomorrowDate = new Date(localDate.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowDate = new Date(yyyy, localDate.getMonth(), localDate.getDate() + 1);
     const tomorrowYyyy = tomorrowDate.getFullYear();
     const tomorrowMm = String(tomorrowDate.getMonth() + 1).padStart(2, '0');
     const tomorrowDd = String(tomorrowDate.getDate()).padStart(2, '0');
@@ -284,7 +284,7 @@ export const GoogleHealthService = {
       results.steps = Math.round(stepsSum);
     } catch (e) {
       console.warn('[GoogleHealth] Steps fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     // 2. Active Calories (bounded by civil calendar day OR last sync time)
@@ -320,7 +320,7 @@ export const GoogleHealthService = {
       results.activeCalories = Math.round(caloriesSum);
     } catch (e) {
       console.warn('[GoogleHealth] Calories fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     // 3. Heart Rate & Resting Heart Rate
@@ -376,7 +376,7 @@ export const GoogleHealthService = {
       }
     } catch (e) {
       console.warn('[GoogleHealth] Heart rate fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     // 4. Sleep
@@ -409,7 +409,7 @@ export const GoogleHealthService = {
       }
     } catch (e) {
       console.warn('[GoogleHealth] Sleep fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     return results;
