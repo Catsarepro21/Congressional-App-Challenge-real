@@ -95,27 +95,30 @@ async function fetchHealthDataPoints(
   filterExpression: string,
   pageSize = 1000
 ): Promise<any[]> {
-  const url = `https://health.googleapis.com/v4/users/me/dataTypes/${dataType}/dataPoints:reconcile?filter=${encodeURIComponent(filterExpression)}&pageSize=${pageSize}`;
-  
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  const baseUrl = `https://health.googleapis.com/v4/users/me/dataTypes/${dataType}/dataPoints:reconcile`;
+  const points: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({ filter: filterExpression, pageSize: String(pageSize) });
+    if (pageToken) params.set('pageToken', pageToken);
+    const response = await fetch(`${baseUrl}?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-  if (!response.ok) {
-    const err = await response.text();
-    console.warn(`[GoogleHealth] API error for ${dataType}: ${err}`);
-    if (response.status === 401) {
-      throw new Error('UNAUTHENTICATED');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('UNAUTHENTICATED');
+      throw new Error(`Google Health ${dataType} request failed (HTTP ${response.status}).`);
     }
-    return [];
-  }
 
-  const data = await response.json() as { dataPoints?: any[] };
-  return data.dataPoints || [];
+    const data = await response.json() as { dataPoints?: any[]; nextPageToken?: string };
+    points.push(...(data.dataPoints || []));
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken);
+  return points;
 }
 
 // ---------------------------------------------------------------------------
