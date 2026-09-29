@@ -4,7 +4,7 @@ import { useSafeScaleStore } from "../store/useSafeScaleStore";
 import { validDate, localDate } from "../utils/daily";
 import HealthConnections from "../components/care/HealthConnections";
 import AIProviderSelector from "../components/care/AIProviderSelector";
-import { AIIntelligenceService, getDeviceCapabilities, refreshDeviceCapabilities } from "../services/AIIntelligenceService";
+import { AIIntelligenceService } from "../services/AIIntelligenceService";
 import {
   Button,
   Card,
@@ -52,13 +52,11 @@ export default function SettingsScreen() {
     latencyMs: number;
     summary: string;
     flagged: string[];
-    supported: boolean;
   } | null>(null);
 
   async function testLocalAI() {
     setLocalAiTesting(true);
     try {
-      const caps = await refreshDeviceCapabilities();
       const testIngredients = ["Wheat flour", "Skim milk powder", "Soy lecithin", "Cane sugar", "Cocoa butter"];
       const startTime = Date.now();
       const result = await AIIntelligenceService.analyzeIngredients(
@@ -76,15 +74,14 @@ export default function SettingsScreen() {
         latencyMs: elapsed,
         summary: result.summary,
         flagged,
-        supported: caps.isOnDeviceSupported,
       };
       setLocalAiResult(report);
       Alert.alert(
-        "🧠 Local AI Test Result",
+        "Offline Ingredient Checker Result",
         `Engine: ${report.runtime}\nExecution: 100% On-Device (Zero network bytes)\nLatency: ${report.latencyMs} ms\nResult: ${report.summary}\nDetected Allergens: ${report.flagged.join(', ') || 'None'}`
       );
     } catch (err: any) {
-      Alert.alert("Local AI Test Error", err?.message || "Inference failed.");
+      Alert.alert("Ingredient Check Error", err?.message || "Inference failed.");
     } finally {
       setLocalAiTesting(false);
     }
@@ -111,10 +108,10 @@ export default function SettingsScreen() {
       <Card>
         <AIProviderSelector value={useSafeScaleStore.getState().aiPreference} onChange={(pref) => useSafeScaleStore.getState().setAIPreference(pref)} showHeading />
         <View style={{ marginTop: 12, gap: 10, borderTopWidth: 1, borderColor: C.line, paddingTop: 12 }}>
-          <Text style={s.label}>On-Device Model Verification</Text>
-          <Text style={s.body}>Test running real-time on-device intelligence directly on your device's processor without sending any data over the network.</Text>
+          <Text style={s.label}>Offline Ingredient Checker</Text>
+          <Text style={s.body}>Check sample ingredients against saved allergies using the offline rules. This does not test Apple Foundation Models.</Text>
           <Button
-            label={localAiTesting ? "Running Local AI Inference…" : "🧪 Test On-Device AI"}
+            label={localAiTesting ? "Checking Ingredients…" : "Test Offline Ingredient Checker"}
             secondary
             onPress={testLocalAI}
             disabled={localAiTesting}
@@ -241,7 +238,7 @@ export default function SettingsScreen() {
       <Card>
         <Heading
           title="Your data"
-          detail="Records are saved on this device in app storage. The app does not encrypt this storage. Clearing app or browser data removes the records."
+          detail="Native app records are encrypted on this device. The web preview saves records in browser storage. Clearing app or browser data removes those records."
         />
         <Text style={s.body}>
           Use Records → Prepare visit summary to review and export your notes.
