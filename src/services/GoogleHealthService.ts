@@ -340,10 +340,10 @@ export const GoogleHealthService = {
 
       if (bpms.length > 0) {
         results.heartRate = Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length);
-        results.restingHeartRate = Math.round(Math.min(...bpms));
       }
 
-      // Try to query daily-resting-heart-rate for a more accurate resting HR if available
+      // A minimum sampled heart rate is not a measured resting heart rate.
+      // Only use Google's dedicated daily resting-heart-rate data when available.
       try {
         const yesterday = new Date(now - 24 * 60 * 60 * 1000);
         const yesterdayDateStr = yesterday.toISOString().split('T')[0];
@@ -371,7 +371,7 @@ export const GoogleHealthService = {
           }
         }
       } catch (rErr) {
-        console.warn('[GoogleHealth] Fetching daily resting HR failed, using calculated min:', rErr);
+        console.warn('[GoogleHealth] Fetching daily resting HR failed:', rErr);
         if (rErr instanceof Error && rErr.message === 'UNAUTHENTICATED') throw rErr;
       }
     } catch (e) {

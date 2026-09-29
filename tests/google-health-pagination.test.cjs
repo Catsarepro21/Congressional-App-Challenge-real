@@ -74,3 +74,15 @@ test('Google Health uses the next calendar date across daylight saving time', as
     else process.env.TZ = priorTZ;
   }
 });
+
+test('sampled heart rate is not misreported as resting heart rate', async () => {
+  const fetch = async url => ({
+    ok: true,
+    json: async () => new URL(url).pathname.endsWith('/heart-rate/dataPoints:reconcile')
+      ? { dataPoints: [{ heartRate: { beatsPerMinute: '72' } }, { heartRate: { beatsPerMinute: '84' } }] }
+      : { dataPoints: [] },
+  });
+  const result = await service(fetch).fetchFitnessData('test-token');
+  assert.equal(result.heartRate, 78);
+  assert.equal(result.restingHeartRate, 0);
+});
