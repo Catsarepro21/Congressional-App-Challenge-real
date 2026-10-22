@@ -446,12 +446,12 @@ export default function ProfileScreen() {
       {/* SAMPLE MODE & RESTART */}
       <Card>
         <Heading
-          title="App Simulation & Sample Data"
-          detail="Toggle realistic sample data for testing without live health sensors."
+          title="Competition demo"
+          detail="Explore fictional records with cloud AI uploads disabled. Your real records return when you exit; demo edits are discarded."
         />
         <View style={s.wrap}>
           <Button
-            label={demo ? 'Exit Sample Mode' : 'Enter Sample Mode'}
+            label={demo ? 'Exit Competition Demo' : 'Enter Competition Demo'}
             secondary
             onPress={toggleTest}
           />

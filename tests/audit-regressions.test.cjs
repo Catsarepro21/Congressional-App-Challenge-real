@@ -20,7 +20,7 @@ test('allergen aliases match without invented nutrition tags or substring matche
   assert.equal(a.analyzeIngredients(['Wheat'],['Milk']).alternativeSafeMacros.length,0);
 });
 test('consent rejects concurrent requests and stale approval IDs', async () => {
-  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{zustand:require('zustand')});
+  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{zustand:require('zustand'),'../store/useSafeScaleStore':{useSafeScaleStore:{getState:()=>({isTestMode:false})}}});
   const details={purpose:'A',endpoint:'test',dataPayloadSummary:'synthetic'};
   const first=g.requestPermission(details); const id=s.getState().currentRequest.id;
   assert.equal(await g.requestPermission({...details,purpose:'B'}),false);
