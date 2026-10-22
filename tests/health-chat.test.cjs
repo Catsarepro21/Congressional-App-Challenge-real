@@ -38,6 +38,7 @@ function load(path, mocks = {}) {
 
 // 1. Load CloudPermissionGuard
 const guardModule = load("src/services/CloudPermissionGuard.ts", {
+  "../store/useSafeScaleStore": {useSafeScaleStore:{getState:()=>({isTestMode:false})}},
   zustand: require("zustand"),
 });
 

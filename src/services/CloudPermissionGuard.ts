@@ -32,6 +32,14 @@ export const useCloudPermissionStore = create<CloudPermissionState>(set => ({
   setCurrentRequest: req => set({ currentRequest: req }),
 }));
 
+// Resolve lazily to avoid importing the health store during service initialization.
+function cloudBlocked(): boolean {
+  try {
+    const state = require('../store/useSafeScaleStore').useSafeScaleStore.getState();
+    return state.isTestMode || state.isDeletingData;
+  } catch { return true; }
+}
+
 let activeResolver: ((allowed: boolean) => void) | null = null;
 
 export const CloudPermissionGuard = {
@@ -47,7 +55,7 @@ export const CloudPermissionGuard = {
     signal?: AbortSignal,
   ): Promise<boolean> => {
     // If a request is already active, reject new concurrent requests for safety
-    if (signal?.aborted || activeResolver) {
+    if (cloudBlocked() || signal?.aborted || activeResolver) {
       return false;
     }
 
@@ -70,7 +78,7 @@ export const CloudPermissionGuard = {
   approveCurrentRequest: (id: string) => {
     if (useCloudPermissionStore.getState().currentRequest?.id !== id) return;
     if (activeResolver) {
-      activeResolver(true);
+      activeResolver(!cloudBlocked());
       activeResolver = null;
     }
     useCloudPermissionStore.getState().setCurrentRequest(null);
@@ -100,7 +108,7 @@ export const CloudPermissionGuard = {
   ): Promise<T> => {
     const granted = await CloudPermissionGuard.requestPermission(details, signal);
     if (signal?.aborted) throw new Error('Request canceled.');
-    if (granted) {
+    if (granted && !cloudBlocked()) {
       return await cloudAction();
     }
 
@@ -109,7 +117,7 @@ export const CloudPermissionGuard = {
     }
 
     throw new Error(
-      `Cloud API transmission declined by user. Request canceled to keep your health data 100% on-device.`,
+      `Cloud AI request blocked or declined. No data was uploaded by this request.`,
     );
   },
 };

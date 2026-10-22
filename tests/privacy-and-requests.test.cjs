@@ -68,7 +68,7 @@ test('offline ingredient checker shares aliases and never certifies unknown ingr
   assert.match(a.analyzeIngredients([],[]).summary,/cannot be assessed/);
 });
 test('canceling the consent dialog prevents execution and clears its pending request',async()=>{
-  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{zustand:require('zustand')});
+  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{zustand:require('zustand'),'../store/useSafeScaleStore':{useSafeScaleStore:{getState:()=>({isTestMode:false})}}});
   const controller=new AbortController();let calls=0;
   const work=g.executeWithPermission({purpose:'test',endpoint:'test',dataPayloadSummary:'synthetic'},async()=>{calls++;},async()=>{calls++;},controller.signal);
   controller.abort();await assert.rejects(work,/cancel/i);assert.equal(calls,0);assert.equal(s.getState().currentRequest,null);

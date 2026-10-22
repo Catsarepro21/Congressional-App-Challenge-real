@@ -95,3 +95,35 @@ test('pre-deletion sync completion cannot release a new sync lock',async()=>{
   store.getState().triggerAutoSync();assert.equal(completions.length,2);
   completions[1](null);await new Promise(r=>setTimeout(r,0));assert.equal(store.getState().isAutoSyncing,false);
 });
+
+test('competition demo hides all personal slices and restores real records without persisting demo edits',async()=>{
+  const f=storeFixture();const store=f.useSafeScaleStore;await store.persist.rehydrate();
+  store.setState({hasCompletedOnboarding:true,loggedItems:[{id:'private-meal',type:'Meal',name:'Private meal',value:'1 bowl'}],medicalRecords:[{id:'private-document',documentImage:'private://photo'}],activeWorkout:{id:'private-workout',recordSensors:true},trackingPath:[{latitude:1,longitude:2}],scanState:{isCameraActive:false,isProcessing:false,currentPayloadMetrics:{private:'scan'},lastMatchResult:null},aiPreference:'cloud'});
+  store.getState().updateProfile({geminiApiKey:'private-key'});
+  store.getState().toggleTestMode();
+  const demo=store.getState();assert.equal(demo.activeWorkout,null);assert.equal(demo.trackingPath.length,0);
+  assert.equal(demo.scanState.currentPayloadMetrics,null);assert.equal(demo.profile.geminiApiKey,'');
+  assert.equal(demo.aiPreference,'on-device');assert.equal(demo.hasCompletedOnboarding,true);
+  assert.ok(demo.loggedItems.length>0);assert.ok(demo.medicalRecords.length>0);
+  assert.ok(!JSON.stringify({meals:demo.loggedItems,records:demo.medicalRecords}).includes('private'));
+  store.getState().updateProfile({name:'Demo edit'});
+  assert.ok(f.saved().includes('private-document'));assert.ok(!f.saved().includes('Demo edit'));
+  store.getState().toggleTestMode();assert.equal(store.getState().activeWorkout.id,'private-workout');
+  assert.equal(store.getState().medicalRecords[0].id,'private-document');assert.equal(store.getState().aiPreference,'cloud');
+});
+
+test('competition demo blocks cloud actions even with a key and rejects approval after switching modes',async()=>{
+  let demo=true;let uploads=0;
+  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{
+    zustand:require('zustand'),'../store/useSafeScaleStore':{useSafeScaleStore:{getState:()=>({isTestMode:demo})}},
+  });
+  const details={purpose:'Synthetic demo',endpoint:'https://example.invalid',dataPayloadSummary:'fictional'};
+  const cloud=async()=>{uploads++;return 'cloud';};
+  assert.equal(await g.executeWithPermission(details,cloud,async()=>'offline'),'offline');assert.equal(s.getState().currentRequest,null);
+  demo=false;const pending=g.executeWithPermission(details,cloud,async()=>'offline');
+  const id=s.getState().currentRequest.id;demo=true;g.approveCurrentRequest(id);
+  assert.equal(await pending,'offline');assert.equal(uploads,0);
+  demo=false;const race=g.executeWithPermission(details,cloud,async()=>'offline');
+  g.approveCurrentRequest(s.getState().currentRequest.id);demo=true;
+  assert.equal(await race,'offline');assert.equal(uploads,0);
+});

@@ -759,6 +759,10 @@ export const useSafeScaleStore = create<SafeScaleState>()(
       demoSnapshot = { ...state };
       const nextTestMode = true;
       return {
+        // Start with empty slices so personal documents, photos and live sessions never enter the demo.
+        ...useSafeScaleStore.getInitialState(),
+        hasCompletedOnboarding: true,
+        aiPreference: 'on-device' as AIIntelligenceProvider,
         isTestMode: nextTestMode,
         isAutoSyncing: false,
         dataRevision: state.dataRevision + 1,
@@ -780,7 +784,12 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         lastSyncedAt: nextTestMode ? new Date().toISOString() : null,
         medicationDay: localDate(),
         doseEvents: [],
-        profile: { ...DEFAULT_USER_PROFILE, name: 'Sample Profile' },
+        profile: { ...DEFAULT_USER_PROFILE, name: 'Demo Alex', geminiApiKey: '', healthConnections: {} },
+        loggedItems: [
+          {id:'demo-breakfast',type:'Meal',value:'320 kcal',name:'Sample oatmeal and berries',date:localDate(),timestamp:'08:00',calories:320,macros:{protein:12,carbs:52,fat:8},portion:'1 bowl',source:'manual'},
+          {id:'demo-lunch',type:'Meal',value:'540 kcal',name:'Sample rice and chicken bowl',date:localDate(),timestamp:'12:30',calories:540,macros:{protein:35,carbs:64,fat:16},portion:'1 bowl',source:'manual'},
+        ],
+        medicalRecords: [{id:'demo-record',type:'LabResult',title:'Fictional demonstration record',value:'Example record only; no clinical interpretation.',date:localDate(),provider:'Demo clinic (fictional)',status:'Sample'}],
         emergencyContacts: nextTestMode ? [
           { id: 'e1', name: 'Dr. Sarah Jenkins (Allergist)', phone: '555-0199' },
           { id: 'e2', name: 'Emergency Contact (Mom)', phone: '555-0144' }
@@ -824,7 +833,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
             type: 'Strength',
             name: 'Upper Body Hypertrophy',
             startedAt: new Date(Date.now() - 28 * 3600 * 1000).toISOString(),
-            endedAt: new Date(Date.now() - 25 * 3600 * 1000).toISOString(),
+            endedAt: new Date(Date.now() - 28 * 3600 * 1000 + 3000 * 1000).toISOString(),
             durationSeconds: 3000,
             caloriesBurned: 280,
             source: 'app',

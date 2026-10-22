@@ -30,7 +30,7 @@ export default function PrivacySettings() {
     } catch { Alert.alert('Export failed', 'Your records are unchanged. Please try again.'); }
   };
   return <Card>
-    <Heading title="Cloud AI & privacy" detail="Cloud requests require your approval before sending data to Google." />
+    <Heading title="Cloud AI & privacy" detail={demo ? "Cloud AI uploads are blocked in competition demo. Use local responses and fictional records." : "Cloud requests require your approval before sending data to Google."} />
     <Text style={s.body}>{Platform.OS === 'web'
       ? 'The web preview stores health entries in browser storage. API keys are kept only in this running session; use the native app for encrypted storage.'
       : 'Saved health data and credentials are encrypted on this device. The encryption key is kept in device secure storage and cannot transfer to another device through backup.'}</Text>

@@ -35,6 +35,8 @@ import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
 const BACKGROUND = "#F5F6F1";
 
 export default function App() {
+  const demo = useSafeScaleStore(state => state.isTestMode);
+  const revision = useSafeScaleStore(state => state.dataRevision);
   const isDeletingData = useSafeScaleStore(state => state.isDeletingData);
   const storageError = useStorageStatus(state => state.error);
   const readFailed = useStorageStatus(state => state.readFailed);
@@ -143,7 +145,11 @@ export default function App() {
       <CloudPermissionModal />
       <StatusBar barStyle="dark-content" backgroundColor={BACKGROUND} />
       <View style={{ flex: 1, backgroundColor: BACKGROUND }}>
-        {renderScreen()}
+        <View key={revision} style={{flex:1}}>{renderScreen()}</View>
+        {demo && <View style={{backgroundColor:'#FFF3CD',paddingHorizontal:16,paddingVertical:8}}>
+          <Text accessibilityRole="header" style={{color:'#493B08',fontWeight:'700'}}>Competition demo · Fictional data</Text>
+          <Text style={{color:'#493B08',fontSize:12}}>Cloud AI uploads disabled. Prototype for wellness tracking, not medical advice. Exit in Profile.</Text>
+        </View>}
         <BottomNavBar activeIndex={activeTab} onTabPress={handleTabPress} />
       </View>
     </SafeAreaProvider>
