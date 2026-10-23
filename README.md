@@ -13,7 +13,7 @@
 
 Validation: 47 tests passed; TypeScript passed; web and iOS JavaScript exports passed. Browser checks covered card hide/reorder persistence after reload, manual meal save into the timeline, filtering, and Medical ID navigation. Today was visually inspected at desktop and 390-pixel phone width.
 
-This changes source code only: no native IPA was rebuilt or re-signed, and signing files were not modified. Live HealthKit, cloud inference, and native camera behavior require device validation. Sleep history retains the existing seven-day storage limit; the timeline does not reconstruct older sleep records. App data still uses the existing unencrypted local storage.
+This changes source code only: no native IPA was rebuilt or re-signed, and signing files were not modified. Live HealthKit, cloud inference, and native camera behavior require device validation. Sleep history retains the existing seven-day storage limit; the timeline does not reconstruct older sleep records. Native saved records now use encrypted app storage; the web preview uses browser storage.
 
 
 ## September 10, 2026: focused daily-care redesign
@@ -36,7 +36,7 @@ The experimental scanner, fitness and analytics screens are no longer routed fro
 - Expo web and iOS JavaScript exports.
 - Local Chromium layout and interaction checks with fictional entries. Native HealthKit/Health Connect, iOS compilation/signing, actual notification delivery and phone calls still require device testing.
 
-App data remains in local unencrypted app/browser storage. Health sync retains the existing native adapters, including their remaining data-provenance limitations. A native JavaScript export is not an Xcode build or proof of device integration.
+Native saved records use encrypted app storage; the web preview uses browser storage. Health sync retains the existing native adapters, including their remaining data-provenance limitations. A native JavaScript export is not an Xcode build or proof of device integration.
 
 ---
 
@@ -111,7 +111,7 @@ Passed: TypeScript check; SDK dependency compatibility check; nine regression te
 
 Not verified: native Xcode compile/IPA, device signing, actual HealthKit/Health Connect reads, real notification delivery, camera scanning, GPS tracking, Google OAuth and Gemini responses. Those need the corresponding hardware/accounts or macOS build run.
 
-Remaining product risks: daily medication status rollover and daily log date boundaries need a dedicated audit; Android/cloud aggregation and data provenance need further work; experimental stability scores, drug-interaction rules, triage, vaccine schedules, and allergen recommendations are not clinically validated. Local storage is not encrypted by the app. A public EXPO_PUBLIC API key is bundled into clients, so a shared production key requires a server-side design. Cloud document extraction sends the original photo to Google; output redaction is not upload redaction. The current app should not yet be described as a reliable replacement for all health apps.
+Remaining product risks: daily medication status rollover and daily log date boundaries need a dedicated audit; Android/cloud aggregation and data provenance need further work; experimental stability scores, drug-interaction rules, triage, vaccine schedules, and allergen recommendations are not clinically validated. Native saved records are encrypted; browser preview storage is not app-encrypted. A public EXPO_PUBLIC API key is bundled into clients, so a shared production key requires a server-side design. Cloud document extraction sends the original photo to Google; output redaction is not upload redaction. The current app should not yet be described as a reliable replacement for all health apps.
 
 ## Sources
 

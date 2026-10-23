@@ -79,15 +79,9 @@ const MAX_VARIANCE_PENALTY = 15;
 /**
  * Minimum number of historical RHR data points required before the
  * variance-based scoring formula is activated.
- * If fewer points are available the function returns INITIAL_SETUP_SCORE.
+ * If fewer points are available the score is unavailable (0).
  */
 const MIN_HISTORY_LENGTH = 3;
-
-/**
- * Neutral baseline score returned during the initial setup period when
- * insufficient historical RHR data has been collected.
- */
-const INITIAL_SETUP_SCORE = 85;
 
 /**
  * Rolling window size for the historical RHR array.
@@ -288,9 +282,9 @@ export class HealthDataService {
    *
    * DATASET SIZE GUARD:
    *   If `historicalRHR.length < MIN_HISTORY_LENGTH (3)`, the function returns
-   *   INITIAL_SETUP_SCORE (85) immediately. This prevents artificially perfect
-   *   or meaningless scores during the initial onboarding period when only one
-   *   or two days of baseline data have been recorded.
+   *   0 (unavailable) immediately. This avoids a fabricated score
+   *   during initial setup when only one
+   *   or two resting heart rate readings have been recorded.
    *
    * FORMULA (when history is sufficient):
    *
