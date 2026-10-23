@@ -1,7 +1,5 @@
 import { Platform, NativeModules } from 'react-native';
 import { HealthDataService } from './HealthDataService';
-import { GoogleFitService } from './GoogleFitService';
-import { GoogleHealthService } from './GoogleHealthService';
 import { queryHealth } from './NativeHealthReader';
 import type { BiometricSummary, HealthConnection, HealthSource } from '../types';
 
@@ -49,24 +47,8 @@ export function readableData(data: Partial<BiometricSummary> | null): Partial<Bi
   };
 }
 
-async function googleProfile(token: string): Promise<ProfileSuggestion> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch('https://people.googleapis.com/v1/people/me?personFields=names,birthdays', {
-      headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
-    });
-    if (!response.ok) return {};
-    const data = await response.json();
-    const date = data.birthdays?.find((entry: { date?: { year?: number } }) => entry.date?.year)?.date;
-    return {
-      name: data.names?.[0]?.displayName,
-      dob: date?.year && date?.month && date?.day ? `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}` : undefined,
-    };
-  } catch { return {}; } finally { clearTimeout(timer); }
-}
-
 export async function syncHealthSource(source: HealthSource, previous?: HealthConnection, customClientId?: string, includeProfile = false): Promise<HealthSyncResult | null> {
+  if (source !== 'apple' && source !== 'health-connect') throw new Error('External health services are disabled. Use Apple Health or Android Health Connect on this device.');
   if (source === 'apple' || source === 'health-connect') {
     const expected = source === 'apple' ? 'ios' : 'android';
     if (Platform.OS !== expected) throw new Error(`${HEALTH_SOURCE_NAMES[source]} requires the native ${expected === 'ios' ? 'iPhone' : 'Android'} app.`);
@@ -113,26 +95,7 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
     };
   }
 
-  if (Platform.OS !== 'ios') throw new Error('Google account sign-in is currently configured for the native iPhone app. On Android, use Health Connect.');
-  const service = source === 'google-fit' ? GoogleFitService : GoogleHealthService;
-  let tokens = previous?.accessToken ? { accessToken: previous.accessToken, refreshToken: previous.refreshToken } : await service.authorize(customClientId);
-  if (!tokens) return null;
-  const read = (token: string) => bounded(source === 'google-fit' ? GoogleFitService.fetchFitnessData(token) : GoogleHealthService.fetchFitnessData(token, null));
-  let data: Partial<BiometricSummary>;
-  try { data = await read(tokens.accessToken); }
-  catch (error) {
-    if (!(error instanceof Error) || error.message !== 'UNAUTHENTICATED') throw error;
-    if (tokens.refreshToken) {
-      try { tokens = { ...tokens, accessToken: await bounded(service.refreshAccessToken(tokens.refreshToken, customClientId)) }; }
-      catch { tokens = await service.authorize(customClientId); }
-    } else tokens = await service.authorize(customClientId);
-    if (!tokens) return null;
-    data = await read(tokens.accessToken);
-  }
-  const readings = readableData(data);
-  annotateImport(readings, HEALTH_SOURCE_NAMES[source]);
-  return { readings, profile: includeProfile ? await googleProfile(tokens.accessToken) : undefined,
-    connection: { ...previous, ...tokens, connectedAt: previous?.connectedAt || new Date().toISOString(), ...(readings ? { lastSyncedAt: new Date().toISOString() } : {}) } };
+  return null;
 }
 
 function annotateImport(data: Partial<BiometricSummary> | null, source: string): void {

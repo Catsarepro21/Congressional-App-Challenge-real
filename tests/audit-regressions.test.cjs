@@ -7,7 +7,7 @@ function load(file, mocks = {}, globals = {}) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,
     {exports, Date, console, setTimeout, clearTimeout, AbortController, ...globals,
-      require: name => {if (name in mocks) return mocks[name]; if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);}});
+      require: name => {if (name in mocks) return mocks[name]; if (name === './OfflinePolicy') return load('src/services/OfflinePolicy.ts'); if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);}});
   return exports;
 }
 test('allergen aliases match without invented nutrition tags or substring matches', () => {
@@ -19,17 +19,14 @@ test('allergen aliases match without invented nutrition tags or substring matche
   assert.equal(a.analyzeIngredients([],['Milk']).alternativeSafeMacros.length,0);
   assert.equal(a.analyzeIngredients(['Wheat'],['Milk']).alternativeSafeMacros.length,0);
 });
-test('consent rejects concurrent requests and stale approval IDs', async () => {
-  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{zustand:require('zustand'),'../store/useSafeScaleStore':{useSafeScaleStore:{getState:()=>({isTestMode:false})}}});
+test('cloud remains disabled even if stale approvals are presented', async () => {
+  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{zustand:require('zustand')});
   const details={purpose:'A',endpoint:'test',dataPayloadSummary:'synthetic'};
-  const first=g.requestPermission(details); const id=s.getState().currentRequest.id;
-  assert.equal(await g.requestPermission({...details,purpose:'B'}),false);
-  g.approveCurrentRequest('stale'); assert.equal(s.getState().currentRequest.id,id);
-  g.denyCurrentRequest(id); assert.equal(await first,false);
-  const second=g.requestPermission(details); g.approveCurrentRequest(id);
-  assert.ok(s.getState().currentRequest);
-  g.approveCurrentRequest(s.getState().currentRequest.id); assert.equal(await second,true);
+  assert.equal(await g.requestPermission(details),false);g.approveCurrentRequest('stale');
+  assert.equal(s.getState().currentRequest,null);
+  let uploads=0;assert.equal(await g.executeWithPermission(details,async()=>{uploads++;},async()=>'local'),'local');assert.equal(uploads,0);
 });
+
 test('missing consent guard never reads or uploads a photo', async () => {
   let calls=0;
   const files={'expo-file-system/legacy':{readAsStringAsync:async()=>{calls++;return 'synthetic';},EncodingType:{Base64:'base64'}}};
@@ -37,12 +34,13 @@ test('missing consent guard never reads or uploads a photo', async () => {
   await assert.rejects(cloud.analyzeDocumentOCR('file:///test.jpg','test'),/consent is unavailable/);
   await assert.rejects(cloud.analyzeIngredientsOCR('file:///test.jpg','test'),/consent is unavailable/);
   const photo=load('src/services/FoodVisionService.ts',files,{fetch:async()=>{calls++;}}).FoodVisionService;
-  await assert.rejects(photo.analyzeImage('file:///test.jpg','cloud','test'),/consent is unavailable/);
+  await assert.rejects(photo.analyzeImage('file:///test.jpg','cloud','test'),/disabled/);
   assert.equal(calls,0);
 });
 function barcode(product, allowed=true) {
   let calls=0;
   const service=load('src/services/BarcodeLookupService.ts',{
+    './OfflinePolicy':{offlineFetch:async()=>{calls++;return {ok:true,json:async()=>({status:1,product})};}},
     './USDALookupService':{USDALookupService:{getFoodByBarcode:()=>null}},
     './CloudPermissionGuard':{CloudPermissionGuard:{requestPermission:async()=>allowed}},
   },{fetch:async()=>{calls++;return {ok:true,json:async()=>({status:1,product})};}}).BarcodeLookupService;

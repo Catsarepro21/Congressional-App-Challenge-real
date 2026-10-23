@@ -115,7 +115,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
             <Text style={localStyles.headerTitle}>AI Health Assistant</Text>
             <View style={localStyles.privacyBadge}>
               <MaterialCommunityIcons name="shield-lock" size={12} color={C.green} />
-              <Text style={localStyles.privacyBadgeText}>Local replies · Cloud requires approval</Text>
+              <Text style={localStyles.privacyBadgeText}>Local processing · Cloud disabled</Text>
             </View>
           </View>
         </View>
@@ -276,16 +276,6 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
           maxLength={500}
         />
 
-        {/* Cloud Escalate Icon */}
-        <Pressable
-          onPress={handleEscalateCloud}
-          disabled={loading || preference === 'opt-out'}
-          style={localStyles.cloudButton}
-          accessibilityLabel="Ask Cloud AI with permission"
-        >
-          <MaterialCommunityIcons name="cloud-sync-outline" size={20} color={C.muted} />
-        </Pressable>
-
         {/* Send Button */}
         <Pressable
           accessibilityLabel="Send local question"
@@ -304,7 +294,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
       {contextModalOpen && (
         <Sheet title="What Local AI Sees" onClose={() => setContextModalOpen(false)}>
           <Text style={s.body}>
-            This is the health snapshot available to the assistant. A cloud request sends this snapshot and recent conversation only after your approval.
+            This is the health snapshot available to the assistant on this device. Cloud requests are disabled.
           </Text>
 
           <View style={{ gap: 14 }}>

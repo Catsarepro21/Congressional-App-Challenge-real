@@ -1,3 +1,4 @@
+import { offlineFetch as fetch } from './OfflinePolicy';
 /**
  * @file src/services/BarcodeLookupService.ts
  * @description Multi-tier barcode resolution service for SafeScale Health.

@@ -6,6 +6,8 @@ import { validDate, localDate } from '../utils/daily';
 import HealthConnections from '../components/care/HealthConnections';
 import AIProviderSelector from '../components/care/AIProviderSelector';
 import { AIIntelligenceService, getDeviceCapabilities, refreshDeviceCapabilities } from '../services/AIIntelligenceService';
+import {isFoundationModelSupportedAsync, generateTextAsync} from '../../modules/safescale-vision';
+import {controlledRequest} from '../services/RequestControl';
 import { getSuggestedOwnerName } from '../utils/deviceName';
 import {
   Button,
@@ -66,6 +68,18 @@ export default function ProfileScreen() {
 
   // Local AI Benchmark
   const [localAiTesting, setLocalAiTesting] = useState(false);
+  const [modelTesting, setModelTesting] = useState(false);
+  const [modelResult, setModelResult] = useState('');
+  async function testLocalModel() {
+    setModelTesting(true); setModelResult('');
+    try {
+      if (!await controlledRequest(() => isFoundationModelSupportedAsync(), 5000)) throw new Error('Apple text model unavailable. Enable Apple Intelligence, allow the model download to finish, and install the current native build.');
+      const reply = await controlledRequest(() => generateTextAsync('What food did the sample person log?', 'FICTIONAL TEST RECORD: Alex logged an apple for breakfast. No other meals are recorded.'), 45000);
+      if (!reply.isLocal || reply.provider !== 'apple-foundation' || !reply.text?.trim()) throw new Error('The local model did not return a valid result.');
+      setModelResult(`Apple on-device model responded: ${reply.text}`);
+    } catch (err) {setModelResult(err instanceof Error ? err.message : 'The local model test failed.');}
+    finally {setModelTesting(false);}
+  }
   const [localAiResult, setLocalAiResult] = useState<{
     runtime: string;
     latencyMs: number;
@@ -396,7 +410,7 @@ export default function ProfileScreen() {
           <Icon name="sync" size={24} color={C.green} />
           <Heading
             title="Health & Wearable Connections"
-            detail="Two-way sync with Apple Health, Apple Watch, and Google Health"
+            detail="Import readings from Apple Health or Android Health Connect on this device."
           />
         </View>
         <HealthConnections />
@@ -418,6 +432,8 @@ export default function ProfileScreen() {
           onChange={setAIPreference}
           showHeading={false}
         />
+        <Button label={modelTesting ? 'Testing local text model…' : 'Test on-device text model'} secondary disabled={modelTesting} onPress={testLocalModel} />
+        {modelResult ? <Text accessibilityLiveRegion="polite" style={s.body}>{modelResult}</Text> : null}
 
         <View style={[styles.aiBenchmarkCard, { marginTop: 12 }]}>
           <View style={{ flex: 1, gap: 4 }}>

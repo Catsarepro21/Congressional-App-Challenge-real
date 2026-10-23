@@ -16,7 +16,7 @@ function load(path, mocks = {}) {
       require: (name) => {
         if (name in mocks) return mocks[name];
         if (name === './AllergenEngine') return load('src/services/AllergenEngine.ts');
-        if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);
+        if (name === './OfflinePolicy') return load('src/services/OfflinePolicy.ts'); if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);
       },
     },
   );
@@ -345,7 +345,7 @@ test("food nutrition AI routes correctly based on user aiPreference", async () =
 
   await assert.rejects(fv.FoodVisionService.analyzeImage("file:///burger.jpg", "opt-out"), /not available offline/);
   await assert.rejects(fv.FoodVisionService.analyzeImage("file:///salmon.jpg", "on-device"), /not available offline/);
-  await assert.rejects(fv.FoodVisionService.analyzeImage("file:///random.jpg", "cloud"), /API key/);
+  await assert.rejects(fv.FoodVisionService.analyzeImage("file:///random.jpg", "cloud"), /disabled/);
 
 });
 

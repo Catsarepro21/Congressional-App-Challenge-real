@@ -1,3 +1,5 @@
+import { localImageUri } from '../services/OfflinePolicy';
+import { offlineFetch as fetch } from '../services/OfflinePolicy';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -756,7 +758,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
             <View style={{ flex: 1, backgroundColor: '#000000', justifyContent: 'center', alignItems: 'center' }}>
               {capturedPhoto && (
                 <Image
-                  source={{ uri: capturedPhoto }}
+                  source={{ uri: localImageUri(capturedPhoto) }}
                   style={{ width: '100%', height: '100%', position: 'absolute', opacity: 0.6 }}
                 />
               )}
@@ -785,7 +787,7 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
           ) : capturedPhoto ? (
             /* Scanned image preview and reset */
             <View style={{ flex: 1 }}>
-              <Image source={{ uri: capturedPhoto }} style={{ width: '100%', height: '100%' }} />
+              <Image source={{ uri: localImageUri(capturedPhoto) }} style={{ width: '100%', height: '100%' }} />
               <Pressable
                 onPress={handleResetScanner}
                 style={({ pressed }) => ({

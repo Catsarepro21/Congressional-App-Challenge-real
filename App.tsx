@@ -1,5 +1,6 @@
 import {useWorkoutSensors} from './src/hooks/useWorkoutSensors';
-import { SecureHealthStorage, useStorageStatus } from './src/services/SecureHealthStorage';
+import { SecureHealthStorage, useStorageStatus, useWebVaultStatus } from './src/services/SecureHealthStorage';
+import WebVaultUnlock from './src/components/care/WebVaultUnlock';
 import { Button } from './src/components/care/UI';
 /**
  * @file App.tsx
@@ -13,7 +14,7 @@ import { Button } from './src/components/care/UI';
  */
 
 import React, { useState, useCallback, useEffect } from "react";
-import { View, Text, StatusBar, ActivityIndicator, AppState } from "react-native";
+import { View, Text, StatusBar, ActivityIndicator, AppState, Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import TimelineScreen from "./src/screens/TimelineScreen";
@@ -35,6 +36,13 @@ import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
 const BACKGROUND = "#F5F6F1";
 
 export default function App() {
+  const [privacyCover, setPrivacyCover] = useState(Platform.OS !== 'web' && AppState.currentState !== 'active');
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const subscription = AppState.addEventListener('change', state => setPrivacyCover(state !== 'active'));
+    return () => subscription.remove();
+  }, []);
+  const vaultLocked = useWebVaultStatus(state => state.locked);
   const demo = useSafeScaleStore(state => state.isTestMode);
   const revision = useSafeScaleStore(state => state.dataRevision);
   const isDeletingData = useSafeScaleStore(state => state.isDeletingData);
@@ -78,7 +86,11 @@ export default function App() {
     };
   }, [hydrated]);
 
+  if (privacyCover) return <SafeAreaProvider><View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:BACKGROUND}}><Text>SafeScale Health</Text></View></SafeAreaProvider>;
+
   if (isDeletingData) return <SafeAreaProvider><View style={{flex:1,justifyContent:"center",padding:24}}><ActivityIndicator /><Text>Deleting local records…</Text></View></SafeAreaProvider>;
+
+  if (vaultLocked && !storageError) return <SafeAreaProvider><WebVaultUnlock /></SafeAreaProvider>;
 
   if (storageError) return <SafeAreaProvider><View style={{flex:1, justifyContent:'center',padding:24,gap:20,backgroundColor:BACKGROUND}}>
     <Text accessibilityRole="alert">{storageError}</Text>
