@@ -6,7 +6,7 @@ import { controlledRequest } from './RequestControl';
  *
  * Provides:
  *   - analyzeIngredientsOCR: extracts product name, brand, and clean ingredients list.
- *   - analyzeDocumentOCR: reads medical records (prescriptions, labs, vaccines) with strict PII removal.
+ *   - analyzeDocumentOCR: sends an unredacted medical image after explicit consent and requests structured output.
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
@@ -28,7 +28,7 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
 Base ingredients on the printed panel. Convert all text to standard title casing and remove accidental symbols.
 Strict privacy guideline: Do NOT include any person's name or other identifying details.`;
 
-// Prompt to parse medical documents with strict PII removal
+// Prompt requests omission of personal identifiers from the response; the uploaded image is not redacted.
 const DOCUMENT_OCR_PROMPT = `You are an expert clinical records parser.
 Analyze this medical document image (such as a prescription, lab report, or vaccination card).
 Identify the document type and extract the structured clinical details.
@@ -151,7 +151,7 @@ export const CloudAIService = {
   },
 
   /**
-   * Scans a medical document photo and extracts clinical info with PII redacted.
+   * Sends an original medical document photo after explicit approval. The prompt requests omission of identifiers from the response, but cannot guarantee it.
    */
   analyzeDocumentOCR: async (
     imageUri: string,
@@ -189,10 +189,10 @@ export const CloudAIService = {
     if (guard) {
       return await guard.executeWithPermission(
         {
-          purpose: 'Scan clinical medical document with Google Gemini Vision Cloud API',
+          purpose: 'Send an original medical document photo to Google Gemini for text extraction',
           endpoint: 'https://generativelanguage.googleapis.com (Gemini 2.5 Flash Vision)',
-          dataPayloadSummary: 'Original medical document image. Personal details are sent to Google; they are not redacted before upload.',
-          sensitiveFields: ['Medical document image'],
+          dataPayloadSummary: 'The full, unredacted photo is sent to Google. It may show your name, birth date, contact details, and medical information. A prompt to omit these from the answer does not remove them from the upload.',
+          sensitiveFields: ['Unredacted medical document', 'Possible personal identifiers and health data'],
         },
         action,
       );
