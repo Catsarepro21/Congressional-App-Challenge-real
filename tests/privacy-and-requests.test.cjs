@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const vm=require('node:vm');const ts=require('typescript');const crypto=require('node:crypto');
 function load(path,mocks={},globals={}) {
   const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,
-    {exports,Date,console,TextEncoder,TextDecoder,setTimeout,clearTimeout,AbortController,...globals,require:n=>{if(n in mocks)return mocks[n];if(n==='./OfflinePolicy')return load('src/services/OfflinePolicy.ts');if(n==='./LocalPhotoStorage')return load('src/services/LocalPhotoStorage.ts',{'expo-file-system/legacy':{}},globals);if(n==='./WebVaultCore')return load('src/services/WebVaultCore.ts',{'./ProtectedStorageCore':load('src/services/ProtectedStorageCore.ts')},globals);throw Error(n);}});return exports;
+    {exports,Date,console,TextEncoder,TextDecoder,setTimeout,clearTimeout,AbortController,...globals,require:n=>{if(n in mocks)return mocks[n];if(n==='./PhotoRecordStorage')return load('src/services/PhotoRecordStorage.ts');if(n==='./OfflinePolicy')return load('src/services/OfflinePolicy.ts');if(n==='./LocalPhotoStorage')return load('src/services/LocalPhotoStorage.ts',{'expo-file-system/legacy':{}},globals);if(n==='./WebVaultCore')return load('src/services/WebVaultCore.ts',{'./ProtectedStorageCore':load('src/services/ProtectedStorageCore.ts')},globals);throw Error(n);}});return exports;
 }
 const {createProtectedStorage}=load('src/services/ProtectedStorageCore.ts');
 function fixture() {
@@ -80,10 +80,10 @@ test('native storage read failure blocks replacement and allows recovery after u
   let locked=true;let writes=0;
   const status=load('src/services/SecureHealthStorage.ts',{
     '@react-native-async-storage/async-storage':{},'react-native':{Platform:{OS:'ios'}},'expo-secure-store':{},'expo-crypto':{},zustand:require('zustand'),
-    './ProtectedStorageCore':{createProtectedStorage:()=>({getItem:async()=>{if(locked)throw Error('locked');return '{}';},setItem:async()=>{writes++;},removeItem:async()=>{}})},
+    './ProtectedStorageCore':{createProtectedStorage:()=>({getItem:async name=>{if(locked)throw Error('locked');return name === 'health' ? '{}' : null;},setItem:async()=>{writes++;},removeItem:async()=>{}})},
   });
   await assert.rejects(status.SecureHealthStorage.getItem('health'));
   await status.SecureHealthStorage.setItem('health','replacement');assert.equal(writes,0);
   assert.equal(status.useStorageStatus.getState().readFailed,true);locked=false;
-  await status.SecureHealthStorage.getItem('health');await status.SecureHealthStorage.setItem('health','{}');assert.equal(writes,1);
+  await status.SecureHealthStorage.getItem('health');await status.SecureHealthStorage.setItem('health','{}');assert.equal(writes,2);
 });

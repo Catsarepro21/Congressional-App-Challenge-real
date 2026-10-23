@@ -150,10 +150,10 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   weight: 0,
   organDonor: false,
   unitPreference: 'metric',
-  useGeminiFoodVision: true,
+  useGeminiFoodVision: false,
   geminiApiKey: '',
-  useGeminiWeeklyReport: true,
-  useCloudAIDocuments: true,
+  useGeminiWeeklyReport: false,
+  useCloudAIDocuments: false,
   deviceNameSuggestedName: '',
 };
 
@@ -1725,10 +1725,10 @@ export async function deleteLocalHealthData(): Promise<void> {
   useSafeScaleStore.setState({isDeletingData:true, dataRevision:revision});
   try {
     await NotificationService.cancelAllReminders();
-    await SecureHealthStorage.clearSavedData();
-    demoSnapshot = null;
-    useSafeScaleStore.setState({...useSafeScaleStore.getInitialState(), dataRevision:revision}, true);
-    await SecureHealthStorage.retryWrite();
+    await SecureHealthStorage.clearSavedData(() => {
+      demoSnapshot = null;
+      useSafeScaleStore.setState({...useSafeScaleStore.getInitialState(), dataRevision:revision}, true);
+    });
   } catch (error) {
     useSafeScaleStore.setState({isDeletingData:false});
     throw error;

@@ -45,7 +45,7 @@ export function promptMealPhoto(onPhotoSelected: (uri: string) => void): void {
             const result = await ImagePicker.launchCameraAsync({
               mediaTypes: ['images'],
               quality: 0.7,
-              base64: true,
+              base64: Platform.OS === 'web',
             });
             if (!result.canceled && result.assets?.[0]?.uri) {
               await selectPhoto(result.assets[0].uri, onPhotoSelected, result.assets[0].base64);
@@ -70,7 +70,7 @@ export function promptMealPhoto(onPhotoSelected: (uri: string) => void): void {
             const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ['images'],
               quality: 0.7,
-              base64: true,
+              base64: Platform.OS === 'web',
             });
             if (!result.canceled && result.assets?.[0]?.uri) {
               await selectPhoto(result.assets[0].uri, onPhotoSelected, result.assets[0].base64);

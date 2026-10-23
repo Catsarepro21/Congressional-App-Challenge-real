@@ -12,7 +12,7 @@ export const offlineFetch: typeof fetch = async (..._args) => blockExternalServi
 /** Remote images can make network requests without using fetch. */
 export function localImageUri(uri?: string): string | undefined {
   if (!uri) return undefined;
-  if (/^(file:\/\/|content:\/\/|blob:)/i.test(uri) || /^\/(?!\/)/.test(uri)) return uri;
+  if (/^(file:\/\/|content:\/\/|blob:)/i.test(uri)) return uri;
   if (/^data:image\/(png|jpeg|jpg|webp|heic|heif);base64,/i.test(uri)) return uri;
   return undefined;
 }

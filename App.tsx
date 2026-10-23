@@ -28,7 +28,7 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import HealthChatScreen from "./src/screens/HealthChatScreen";
 import { BottomNavBar } from "./src/components/BottomNavBar";
-import { useSafeScaleStore } from "./src/store/useSafeScaleStore";
+import { deleteLocalHealthData, useSafeScaleStore } from "./src/store/useSafeScaleStore";
 
 import WebAlertHost from "./src/components/WebAlertHost";
 import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
@@ -36,6 +36,7 @@ import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
 const BACKGROUND = "#F5F6F1";
 
 export default function App() {
+  const [confirmStorageReset, setConfirmStorageReset] = useState(false);
   const [privacyCover, setPrivacyCover] = useState(Platform.OS !== 'web' && AppState.currentState !== 'active');
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -70,8 +71,9 @@ export default function App() {
     return unsubscribe;
   }, []);
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || isDeletingData) return;
     const refresh = () => {
+      if (useSafeScaleStore.getState().isDeletingData) return;
       useSafeScaleStore.getState().ensureCurrentDay();
       useSafeScaleStore.getState().triggerAutoSync();
     };
@@ -84,7 +86,7 @@ export default function App() {
       listener.remove();
       clearInterval(timer);
     };
-  }, [hydrated]);
+  }, [hydrated, isDeletingData]);
 
   if (privacyCover) return <SafeAreaProvider><View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:BACKGROUND}}><Text>SafeScale Health</Text></View></SafeAreaProvider>;
 
@@ -92,10 +94,23 @@ export default function App() {
 
   if (vaultLocked && !storageError) return <SafeAreaProvider><WebVaultUnlock /></SafeAreaProvider>;
 
-  if (storageError) return <SafeAreaProvider><View style={{flex:1, justifyContent:'center',padding:24,gap:20,backgroundColor:BACKGROUND}}>
+  if (storageError && readFailed) return <SafeAreaProvider><View style={{flex:1, justifyContent:'center',padding:24,gap:20,backgroundColor:BACKGROUND}}>
     <Text accessibilityRole="alert">{storageError}</Text>
     <Button label="Retry storage" onPress={() => {if (readFailed) void useSafeScaleStore.persist.rehydrate(); else void SecureHealthStorage.retryWrite();}} />
+    {readFailed && <>
+      {confirmStorageReset && <Text>This permanently deletes SafeScale records and attachments on this device. Apple Health and your photo library are unchanged.</Text>}
+      <Button label={confirmStorageReset ? 'Permanently delete saved records' : 'Reset saved records…'} secondary onPress={async () => {
+        if (!confirmStorageReset) {setConfirmStorageReset(true); return;}
+        try {await deleteLocalHealthData(); setConfirmStorageReset(false);} catch {setConfirmStorageReset(false);}
+      }} />
+      {confirmStorageReset && <Button label="Cancel" secondary onPress={() => setConfirmStorageReset(false)} />}
+    </>}
   </View></SafeAreaProvider>;
+
+  const storageNotice = storageError ? <View style={{padding:12,backgroundColor:'#FFF3CD'}}>
+    <Text accessibilityRole="alert">{storageError}</Text>
+    <Button label="Retry saving" secondary onPress={() => {void SecureHealthStorage.retryWrite();}} />
+  </View> : null;
 
   if (!hydrated) {
     return (
@@ -119,7 +134,7 @@ export default function App() {
       <SafeAreaProvider>
         <WebAlertHost />
         <StatusBar barStyle="dark-content" backgroundColor={BACKGROUND} />
-        <OnboardingScreen onDone={() => {}} />
+        <View style={{flex:1}}><OnboardingScreen onDone={() => {}} />{storageNotice}</View>
       </SafeAreaProvider>
     );
   }
@@ -157,6 +172,7 @@ export default function App() {
       <CloudPermissionModal />
       <StatusBar barStyle="dark-content" backgroundColor={BACKGROUND} />
       <View style={{ flex: 1, backgroundColor: BACKGROUND }}>
+        {storageNotice}
         <View key={revision} style={{flex:1}}>{renderScreen()}</View>
         {demo && <View style={{backgroundColor:'#FFF3CD',paddingHorizontal:16,paddingVertical:8}}>
           <Text accessibilityRole="header" style={{color:'#493B08',fontWeight:'700'}}>Competition demo · Fictional data</Text>

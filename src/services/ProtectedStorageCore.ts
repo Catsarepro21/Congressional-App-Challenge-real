@@ -8,7 +8,7 @@ export interface StorageCipher {
   encrypt(value: string): Promise<string>;
   decrypt(value: string): Promise<string>;
 }
-export function createProtectedStorage(io: StorageIO, cipher: StorageCipher) {
+export function createProtectedStorage(io: StorageIO, cipher: StorageCipher, transformLegacy: (value: string) => string = value => value, migrateLegacy = true) {
   let queue: Promise<unknown> = Promise.resolve();
   const serialize = <T>(action: () => Promise<T>): Promise<T> => {
     const next = queue.then(action); queue = next.catch(() => {}); return next;
@@ -20,9 +20,11 @@ export function createProtectedStorage(io: StorageIO, cipher: StorageCipher) {
       if (raw === null) return null;
       if (raw.startsWith(prefix)) return cipher.decrypt(raw.slice(prefix.length));
       JSON.parse(raw); // Reject corrupt legacy state; never overwrite it with defaults.
-      const sealed = await cipher.encrypt(raw);
+      const clean = transformLegacy(raw);
+      if (!migrateLegacy) return clean; // The photo-record layer commits the sanitized, split migration.
+      const sealed = await cipher.encrypt(clean);
       await io.setItem(name, prefix + sealed);
-      return raw;
+      return clean;
     }),
     setItem: (name: string, value: string) => serialize(async () => {
       const sealed = await cipher.encrypt(value);

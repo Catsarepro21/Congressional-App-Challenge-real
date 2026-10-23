@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import Vision
 import Foundation
+import ImageIO
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
@@ -47,8 +48,11 @@ public class SafeScaleVisionModule: Module {
           Do not diagnose, prescribe, change medication doses, or infer ketosis or autophagy from elapsed time.
           Explain uncertainty and keep answers concise. If the records cannot answer the question, say so.
           """)
+        guard prompt.utf8.count <= 4_000, context.utf8.count <= 16_000 else {
+          throw self.failure("Shorten the question or recorded context and retry.")
+        }
         let input = "Recorded context (may be incomplete):\n" + context + "\nUser question:\n" + prompt
-        let response = try await session.respond(to: input)
+        let response = try await session.respond(to: input, options: GenerationOptions(maximumResponseTokens: 512))
         let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw self.failure("The on-device model returned no text.") }
         return ["text": text, "provider": "apple-foundation", "isLocal": true]
@@ -60,24 +64,36 @@ public class SafeScaleVisionModule: Module {
     AsyncFunction("classifyImageAsync") { (imageUri: String) throws -> [String: Any] in
       guard #available(iOS 15.0, *) else { throw self.failure("Apple Vision requires iOS 15 or newer.") }
       let request = VNClassifyImageRequest()
+      let source: CGImageSource
       if imageUri.hasPrefix("data:image/") {
         guard imageUri.utf8.count <= 15_000_000,
               let separator = imageUri.range(of: ";base64,"),
-              let bytes = Data(base64Encoded: String(imageUri[separator.upperBound...])) else {
+              let bytes = Data(base64Encoded: String(imageUri[separator.upperBound...])),
+              bytes.count <= 10 * 1024 * 1024,
+              let imageSource = CGImageSourceCreateWithData(bytes as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
           throw self.failure("Select a valid local image smaller than 10 MB.")
         }
-        try VNImageRequestHandler(data: bytes, options: [:]).perform([request])
-        let results = (request.results ?? []).prefix(20).map { observation in
-          ["identifier": observation.identifier, "confidence": Double(observation.confidence)] as [String: Any]
-        }
-        return ["classifications": results, "totalObservations": results.count]
-      }
+        source = imageSource
+      } else {
       // Only local files are accepted: classification must never download an image.
       let url = imageUri.hasPrefix("/") ? URL(fileURLWithPath: imageUri) : URL(string: imageUri)
       guard let url, url.isFileURL else { throw self.failure("Select a local photo to classify.") }
       guard FileManager.default.fileExists(atPath: url.path) else { throw self.failure("The selected photo is no longer available.") }
-      // The URL handler reads image orientation metadata instead of forcing every photo upright.
-      let handler = VNImageRequestHandler(url: url, options: [:])
+      let properties = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+      guard properties.isRegularFile == true, let size = properties.fileSize,
+            size <= 10 * 1024 * 1024,
+            let imageSource = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+        throw self.failure("Select a regular image file smaller than 10 MB.")
+      }
+      source = imageSource
+      }
+      // Bound decoded pixels as well as compressed bytes, preserving EXIF orientation.
+      let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 2048]
+      guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+        throw self.failure("The selected file is not a supported image.")
+      }
+      let handler = VNImageRequestHandler(cgImage: image, options: [:])
       try handler.perform([request])
       let results = (request.results ?? []).prefix(20).map { observation in
         ["identifier": observation.identifier, "confidence": Double(observation.confidence)] as [String: Any]
