@@ -1,3 +1,4 @@
+import { localImageUri } from '../services/OfflinePolicy';
 import { validateVitalReadings } from '../utils/daily';
 import React, { useState } from "react";
 import { View, Text, Alert, Image, StyleSheet } from "react-native";
@@ -232,7 +233,7 @@ export default function JournalScreen() {
 
             {entry.photoUri ? (
               <Image
-                source={{ uri: entry.photoUri }}
+                source={{ uri: localImageUri(entry.photoUri) }}
                 style={{ width: "100%", height: 140, borderRadius: 12, marginVertical: 8 }}
                 resizeMode="cover"
               />

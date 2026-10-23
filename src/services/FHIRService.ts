@@ -1,3 +1,4 @@
+import { offlineFetch as fetch } from './OfflinePolicy';
 /**
  * @file src/services/FHIRService.ts
  * @description SMART on FHIR client service to query patients and sync clinical records.

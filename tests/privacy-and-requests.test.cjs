@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');const vm=require('node:vm');const ts=require('typescript');const crypto=require('node:crypto');
 function load(path,mocks={},globals={}) {
   const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,
-    {exports,Date,console,TextEncoder,TextDecoder,setTimeout,clearTimeout,AbortController,...globals,require:n=>{if(n in mocks)return mocks[n];throw Error(n);}});return exports;
+    {exports,Date,console,TextEncoder,TextDecoder,setTimeout,clearTimeout,AbortController,...globals,require:n=>{if(n in mocks)return mocks[n];if(n==='./OfflinePolicy')return load('src/services/OfflinePolicy.ts');if(n==='./LocalPhotoStorage')return load('src/services/LocalPhotoStorage.ts',{'expo-file-system/legacy':{}},globals);if(n==='./WebVaultCore')return load('src/services/WebVaultCore.ts',{'./ProtectedStorageCore':load('src/services/ProtectedStorageCore.ts')},globals);throw Error(n);}});return exports;
 }
 const {createProtectedStorage}=load('src/services/ProtectedStorageCore.ts');
 function fixture() {
@@ -31,16 +31,19 @@ test('protected writes are ordered and deletion follows pending writes',async()=
   const f=fixture();await Promise.all([f.store.setItem('x','1'),f.store.setItem('x','2')]);assert.equal(await f.store.getItem('x'),'2');
   await Promise.all([f.store.setItem('x','3'),f.store.removeItem('x')]);assert.equal(await f.store.getItem('x'),null);
 });
-test('web storage strips credentials, including legacy tokens',async()=>{
-  const f=fixture();const {SecureHealthStorage:store}=load('src/services/SecureHealthStorage.ts',{
+test('web vault migrates legacy records with credentials removed and encrypted',async()=>{
+  const f=fixture();const mod=load('src/services/SecureHealthStorage.ts',{
     '@react-native-async-storage/async-storage':f.io,'react-native':{Platform:{OS:'web'}},'expo-secure-store':{},'expo-crypto':{},zustand:require('zustand'),'./ProtectedStorageCore':{createProtectedStorage},
-  });
+  },{crypto:crypto.webcrypto});
   const value=JSON.stringify({state:{profile:{name:'Synthetic',geminiApiKey:'secret',healthConnections:{apple:{connectedAt:'today'},'google-fit':{accessToken:'token',refreshToken:'refresh'}}}}});
-  f.records.set('health',value);const result=JSON.parse(await store.getItem('health'));
-  assert.equal(result.state.profile.name,'Synthetic');assert.equal(result.state.profile.geminiApiKey,undefined);
-  assert.ok(!f.records.get('health').includes('refreshToken'));
-  await store.setItem('health',value);assert.ok(!f.records.get('health').includes('geminiApiKey'));
+  f.records.set('health',value);const work=mod.SecureHealthStorage.getItem('health');
+  await new Promise(r=>setTimeout(r,0));await mod.unlockWebVault('a long synthetic passphrase');
+  const result=JSON.parse(await work);assert.equal(result.state.profile.name,'Synthetic');assert.equal(result.state.profile.geminiApiKey,undefined);
+  assert.equal(result.state.profile.healthConnections['google-fit'],undefined);
+  assert.ok(!f.records.get('health').includes('Synthetic'));assert.match(f.records.get('health'),/^safescale-aes-v1:/);
+  await mod.SecureHealthStorage.setItem('health',value);assert.ok(!f.records.get('health').includes('geminiApiKey'));
 });
+
 test('request deadlines and cancellation also apply to hung response parsing',async()=>{
   const {controlledRequest:r}=load('src/services/RequestControl.ts');
   await assert.rejects(r(()=>new Promise(()=>{}),5),/timed out/);
@@ -82,5 +85,5 @@ test('native storage read failure blocks replacement and allows recovery after u
   await assert.rejects(status.SecureHealthStorage.getItem('health'));
   await status.SecureHealthStorage.setItem('health','replacement');assert.equal(writes,0);
   assert.equal(status.useStorageStatus.getState().readFailed,true);locked=false;
-  await status.SecureHealthStorage.getItem('health');await status.SecureHealthStorage.setItem('health','value');assert.equal(writes,1);
+  await status.SecureHealthStorage.getItem('health');await status.SecureHealthStorage.setItem('health','{}');assert.equal(writes,1);
 });

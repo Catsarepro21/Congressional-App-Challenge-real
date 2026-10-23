@@ -111,19 +111,10 @@ test('competition demo hides all personal slices and restores real records witho
   store.getState().toggleTestMode();assert.equal(store.getState().activeWorkout.id,'private-workout');
   assert.equal(store.getState().medicalRecords[0].id,'private-document');assert.equal(store.getState().aiPreference,'cloud');
 });
-
-test('competition demo blocks cloud actions even with a key and rejects approval after switching modes',async()=>{
-  let demo=true;let uploads=0;
-  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{
-    zustand:require('zustand'),'../store/useSafeScaleStore':{useSafeScaleStore:{getState:()=>({isTestMode:demo})}},
-  });
-  const details={purpose:'Synthetic demo',endpoint:'https://example.invalid',dataPayloadSummary:'fictional'};
-  const cloud=async()=>{uploads++;return 'cloud';};
-  assert.equal(await g.executeWithPermission(details,cloud,async()=>'offline'),'offline');assert.equal(s.getState().currentRequest,null);
-  demo=false;const pending=g.executeWithPermission(details,cloud,async()=>'offline');
-  const id=s.getState().currentRequest.id;demo=true;g.approveCurrentRequest(id);
-  assert.equal(await pending,'offline');assert.equal(uploads,0);
-  demo=false;const race=g.executeWithPermission(details,cloud,async()=>'offline');
-  g.approveCurrentRequest(s.getState().currentRequest.id);demo=true;
-  assert.equal(await race,'offline');assert.equal(uploads,0);
+test('all modes block cloud actions even with a key and stale approval',async()=>{
+  const {CloudPermissionGuard:g,useCloudPermissionStore:s}=load('src/services/CloudPermissionGuard.ts',{zustand:require('zustand')});
+  const details={purpose:'Synthetic',endpoint:'https://example.invalid',dataPayloadSummary:'fictional'};let calls=0;
+  g.approveCurrentRequest('old');assert.equal(await g.executeWithPermission(details,async()=>{calls++;},async()=>'offline'),'offline');
+  await assert.rejects(g.executeWithPermission(details,async()=>{calls++;}),/blocked/);
+  assert.equal(calls,0);assert.equal(s.getState().currentRequest,null);
 });

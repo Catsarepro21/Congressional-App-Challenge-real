@@ -29,7 +29,7 @@ function load(path, mocks = {}) {
       fetch: mocks.fetch || globalThis.fetch,
       require: (name) => {
         if (name in mocks) return mocks[name];
-        if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);
+        if (name === './OfflinePolicy') return load('src/services/OfflinePolicy.ts'); if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);
       },
     },
   );
@@ -225,43 +225,12 @@ test("LocalHealthChatEngine: medication query identifies pending dose and low st
   assert.match(reply.text, /Low stock/i);
   assert.ok(reply.dataPointsReferenced.includes("Medication Schedule"));
 });
-
-test("CloudPermissionGuard: interactive permission flow enforces user choice every time", async () => {
-  const guard = guardModule.CloudPermissionGuard;
-
-  // 1. User approves request
-  const requestPromise = guard.requestPermission({
-    purpose: "Analyze food photo",
-    endpoint: "https://generativelanguage.googleapis.com",
-    dataPayloadSummary: "Photo bytes",
-  });
-
-  // Verify modal state is populated
-  const storeState = guardModule.useCloudPermissionStore.getState();
-  assert.ok(storeState.currentRequest);
-  assert.equal(storeState.currentRequest.purpose, "Analyze food photo");
-
-  // User taps "Allow"
-  guard.approveCurrentRequest(guardModule.useCloudPermissionStore.getState().currentRequest.id);
-  const granted = await requestPromise;
-  assert.equal(granted, true);
-  assert.equal(guardModule.useCloudPermissionStore.getState().currentRequest, null);
-
-  // 2. Next request: user denies request (proves it is NOT remembered)
-  const secondPromise = guard.requestPermission({
-    purpose: "Cloud deep reasoning",
-    endpoint: "https://generativelanguage.googleapis.com",
-    dataPayloadSummary: "Medical text",
-  });
-
-  assert.ok(guardModule.useCloudPermissionStore.getState().currentRequest);
-
-  // User taps "Deny"
-  guard.denyCurrentRequest(guardModule.useCloudPermissionStore.getState().currentRequest.id);
-  const secondResult = await secondPromise;
-  assert.equal(secondResult, false);
-  assert.equal(guardModule.useCloudPermissionStore.getState().currentRequest, null);
+test('CloudPermissionGuard: no setting or repeated request enables cloud access',async()=>{
+  const guard=guardModule.CloudPermissionGuard;
+  for(let i=0;i<2;i++)assert.equal(await guard.requestPermission({purpose:'test',endpoint:'test',dataPayloadSummary:'synthetic'}),false);
+  assert.equal(guardModule.useCloudPermissionStore.getState().currentRequest,null);
 });
+
 
 test("CloudPermissionGuard: executeWithPermission executes local fallback when user denies", async () => {
   const guard = guardModule.CloudPermissionGuard;
@@ -286,7 +255,7 @@ test("CloudPermissionGuard: executeWithPermission executes local fallback when u
   );
 
   // Simulate user denying interactive prompt
-  guard.denyCurrentRequest(guardModule.useCloudPermissionStore.getState().currentRequest.id);
+  guard.denyCurrentRequest('stale');
 
   const result = await actionPromise;
   assert.equal(result, "local-result");

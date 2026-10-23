@@ -29,7 +29,7 @@ function load(path, mocks = {}) {
       fetch: mocks.fetch || globalThis.fetch,
       require: (name) => {
         if (name in mocks) return mocks[name];
-        if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);
+        if (name === './OfflinePolicy') return load('src/services/OfflinePolicy.ts'); if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name);
       },
     },
   );

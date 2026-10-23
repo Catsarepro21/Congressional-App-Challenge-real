@@ -84,8 +84,8 @@ export const NotificationService = {
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: `Medication Reminder: ${name}`,
-          body: `It is time to take your ${dosage}.`,
+          title: 'SafeScale reminder',
+          body: 'Open SafeScale to review your scheduled routine.',
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           data: { medId },
@@ -217,11 +217,11 @@ export const NotificationService = {
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⚠️ Medication Low Stock Alert',
-          body: `You only have ${remaining} doses of ${name} remaining. Please refill soon!`,
+          title: 'SafeScale reminder',
+          body: 'Open SafeScale to review an item in your routine.',
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
-          data: { type: 'refill', medName: name },
+          data: { type: 'refill' },
         },
         trigger: null, // null trigger immediately fires
       });
@@ -262,8 +262,8 @@ export const NotificationService = {
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: `Upcoming Vaccination Milestone 💉`,
-          body: `You are due for: ${name}. Contact your physician to schedule.`,
+          title: 'SafeScale reminder',
+          body: 'Open SafeScale to review an upcoming date.',
           sound: true,
           priority: Notifications.AndroidNotificationPriority.DEFAULT,
           data: { milestoneId },

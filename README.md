@@ -1,5 +1,15 @@
 # SafeScale Health
 
+## October 23, 2026: local-only security changes
+
+The current source blocks external app-service requests, cloud AI, remote image loads, and Google sign-in. Apple Health and Android Health Connect remain local device integrations. On-device photo failure no longer falls back to cloud processing. Manual exports remain an explicit user action and produce unencrypted copies outside the vault.
+
+Native records use AES encryption with a device secure-storage key. Browser records now require a passphrase-derived encrypted vault; the passphrase is not saved. Supported photo attachments are embedded inside encrypted records rather than saved as cache references. Original photos and any OS-retained temporary copies remain subject to platform storage behavior.
+
+Profile → **Test on-device text model** uses fictional context to exercise the actual Apple Foundation Models bridge. Select On-Device AI to use the native model for chat. Unsupported or unavailable models use labeled local rules and never escalate to cloud.
+
+See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for evidence, limitations, and the iPhone acceptance checks. These source changes do not update existing IPA files. Native compilation and actual iPhone inference still require a new build and device validation. Older dated notes below describe prior states.
+
 ## September 13, 2026: personalized daily experience
 
 - Today supports persistent hide/show/reorder controls, with fasting hidden by default. An active fasting timer remains discoverable even if its card is hidden.

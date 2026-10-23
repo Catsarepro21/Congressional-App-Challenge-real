@@ -1,3 +1,4 @@
+import { offlineFetch as fetch } from './OfflinePolicy';
 /**
  * @file src/services/WeeklyReportService.ts
  * @description Generates a weekly health summary report.
