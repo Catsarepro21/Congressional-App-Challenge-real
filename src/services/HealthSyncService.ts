@@ -56,6 +56,7 @@ export async function syncHealthSource(source: HealthSource, previous?: HealthCo
   if (source === 'google-health') {
     if (Platform.OS !== 'ios') throw new Error('Google Health is available in the native iPhone app.');
     if ((!previous?.accessToken || previous.consentVersion !== 1) && !includeProfile) throw new Error('Reconnect Google Health to enable imports.');
+    if (googleSyncController && !includeProfile) throw new Error('A Google Health import is already in progress.');
     cancelGoogleHealthSync();
     const controller = new AbortController(); googleSyncController = controller;
     try {

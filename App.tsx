@@ -32,17 +32,16 @@ import { deleteLocalHealthData, useSafeScaleStore } from "./src/store/useSafeSca
 
 import WebAlertHost from "./src/components/WebAlertHost";
 import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
+import AppPrivacyCover from './src/components/AppPrivacyCover';
 
 const BACKGROUND = "#F5F6F1";
 
 export default function App() {
+  return <View style={{flex:1}}><AppContents /><AppPrivacyCover /></View>;
+}
+
+function AppContents() {
   const [confirmStorageReset, setConfirmStorageReset] = useState(false);
-  const [privacyCover, setPrivacyCover] = useState(Platform.OS !== 'web' && AppState.currentState !== 'active');
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const subscription = AppState.addEventListener('change', state => setPrivacyCover(state !== 'active'));
-    return () => subscription.remove();
-  }, []);
   const vaultLocked = useWebVaultStatus(state => state.locked);
   const demo = useSafeScaleStore(state => state.isTestMode);
   const revision = useSafeScaleStore(state => state.dataRevision);
@@ -87,8 +86,6 @@ export default function App() {
       clearInterval(timer);
     };
   }, [hydrated, isDeletingData]);
-
-  if (privacyCover) return <SafeAreaProvider><View style={{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:BACKGROUND}}><Text>SafeScale Health</Text></View></SafeAreaProvider>;
 
   if (isDeletingData) return <SafeAreaProvider><View style={{flex:1,justifyContent:"center",padding:24}}><ActivityIndicator /><Text>Deleting local records…</Text></View></SafeAreaProvider>;
 

@@ -37,6 +37,13 @@ test('canceling Google Health aborts active reads and prevents connection restor
   const work=sync.syncHealthSource('google-health',{connectedAt:'now',consentVersion:1,accessToken:'synthetic'});
   assert.ok(signal);sync.cancelGoogleHealthSync();assert.equal(signal.aborted,true);release();await assert.rejects(work,/canceled/);
 });
+test('background refresh cannot interrupt an interactive Google Health import',async()=>{
+  let release,signal;const sync=coordinator({fetchFitnessData:async(_a,_b,_c,s)=>{signal=s;await new Promise(r=>{release=r;});return {steps:12};},fetchProfileData:async()=>({})});
+  const connection={connectedAt:'now',consentVersion:1,accessToken:'synthetic'};
+  const interactive=sync.syncHealthSource('google-health',connection,undefined,true);
+  await assert.rejects(sync.syncHealthSource('google-health',connection),/already in progress/);assert.equal(signal.aborted,false);
+  release();assert.equal((await interactive).readings.steps,12);
+});
 test('Google OAuth uses PKCE, validates state before token exchange, and verifies linked account identity',async()=>{
   let callbackValid=false;const calls=[];let authUrl;
   const google=load('src/services/GoogleHealthService.ts',{
@@ -120,4 +127,16 @@ test('file cleanup and OAuth callbacks do not depend on a browser-only URL parse
   assert.equal(oauth.validateGoogleCallback(redirect+'?state=expected&code=synthetic',redirect,'expected'),'synthetic');
   assert.throws(()=>oauth.validateGoogleCallback(redirect.replace('oauthredirect','wrong')+'?state=expected&code=synthetic',redirect,'expected'));
   assert.throws(()=>oauth.validateGoogleCallback(redirect+'?state=expected&state=other&code=synthetic',redirect,'expected'));
+});
+test('inactive privacy cover preserves the mounted application across native permission dialogs',()=>{
+  let covered=false,listener,removed=false;const cleanups=[];
+  const react={createElement:(type,props,...children)=>({type,props:{...props,children}}),useState:()=>[covered,v=>{covered=v;}],useEffect:effect=>{if(!listener)cleanups.push(effect());}};
+  const rn={View:'View',Text:'Text',Platform:{OS:'ios'},AppState:{currentState:'active',addEventListener:(_type,fn)=>{listener=fn;return {remove:()=>{removed=true;}};}}};
+  const cover=load('src/components/AppPrivacyCover.tsx',{react:{...react,default:react},'react-native':rn}).default;
+  const imports=[...fs.readFileSync('App.tsx','utf8').matchAll(/from ["']([^"']+)["']/g)].map(m=>m[1]);
+  const mocks=Object.fromEntries(imports.map(name=>[name,{default:()=>null}]));mocks.react={...react,default:react};mocks['react-native']=rn;mocks['./src/components/AppPrivacyCover']={default:cover};
+  const app=load('App.tsx',mocks).default;const tree=app();const contents=tree.props.children[0];
+  assert.equal(cover(),null);listener('inactive');const overlay=cover();assert.ok(overlay);assert.equal(overlay.props.accessibilityViewIsModal,true);
+  assert.equal(tree.props.children[0],contents);assert.equal(typeof contents.type,'function');
+  listener('active');assert.equal(cover(),null);cleanups[0]();assert.equal(removed,true);
 });
