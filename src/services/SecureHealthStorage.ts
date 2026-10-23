@@ -40,12 +40,14 @@ export function stripWebCredentials(value: string): string {
   if (data.state?.aiPreference === 'cloud') data.state.aiPreference = 'on-device';
   if (data.state?.profile) {
     delete data.state.profile.geminiApiKey;
-    for (const connection of Object.values(data.state.profile.healthConnections || {}) as Record<string, unknown>[]) {
-      delete connection.accessToken; delete connection.refreshToken;
+    for (const [source, connection] of Object.entries(data.state.profile.healthConnections || {}) as [string, Record<string, unknown>][]) {
+      const permittedGoogle = source === 'google-health' && Platform.OS === 'ios' && connection.consentVersion === 1;
+      if (!permittedGoogle) {delete connection.accessToken; delete connection.refreshToken;}
+      if (source === 'google-health' && !permittedGoogle) delete data.state.profile.healthConnections[source];
     }
     delete data.state.profile.healthConnections?.['google-fit'];
-    delete data.state.profile.healthConnections?.['google-health'];
-    if (data.state.profile.lastHealthSource?.startsWith('google-')) delete data.state.profile.lastHealthSource;
+    delete data.state.profile.googleAccessToken; delete data.state.profile.googleRefreshToken;
+    if (data.state.profile.lastHealthSource?.startsWith('google-') && !data.state.profile.healthConnections?.[data.state.profile.lastHealthSource]) delete data.state.profile.lastHealthSource;
   }
   return JSON.stringify(data);
 }

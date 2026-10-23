@@ -1,6 +1,6 @@
-/** This build never contacts external app services, even with old saved cloud settings. */
+/** AI and legacy adapters stay offline. Google Health uses its separate read-only transport. */
 export const LOCAL_ONLY = true;
-export const OFFLINE_MESSAGE = 'External services are disabled. Health records and photos are processed on this device.';
+export const OFFLINE_MESSAGE = 'This external service is disabled. AI, photos and journal records are processed on this device. Optional Google Health imports have a separate read-only connection.';
 
 export function blockExternalService(): never {
   throw new Error(OFFLINE_MESSAGE);

@@ -22,7 +22,7 @@ export default function PrivacySettings() {
     } catch { Alert.alert('Export failed', 'Your records are unchanged. Please try again.'); }
   };
   return <Card>
-    <Heading title="Privacy & local processing" detail="Cloud AI and external service requests are disabled in this build." />
+    <Heading title="Privacy & local processing" detail="AI, photos and health insights stay on this device. Optional Google Health / Fitbit import uses Google sign-in and read-only requests after you connect." />
     <Text style={s.body}>{Platform.OS === 'web'
       ? 'Saved browser records are encrypted with your vault passphrase. The passphrase and key are not saved; close this tab to lock the vault.'
       : 'Saved records are encrypted on this device. The encryption key is kept in device secure storage. Apple Health permissions are managed separately by iOS.'}</Text>

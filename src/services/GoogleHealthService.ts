@@ -1,5 +1,4 @@
-import { blockExternalService } from './OfflinePolicy';
-import { offlineFetch as fetch } from './OfflinePolicy';
+import { googleHealthFetch as fetch } from './GoogleHealthTransport';
 /**
  * @file src/services/GoogleHealthService.ts
  * @description Google Health REST API integration (using Google's OAuth and Health REST v4 endpoints).
@@ -76,11 +75,11 @@ async function exchangeCodeForToken(
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Google Health token exchange failed: ${err}`);
+    throw new Error(`Google Health sign-in failed (HTTP ${response.status}). Check the OAuth client and test-user configuration.`);
   }
 
   const data = await response.json() as { access_token: string; refresh_token?: string };
+  if (!data.access_token) throw new Error('Google did not return an access token.');
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
@@ -95,16 +94,18 @@ async function fetchHealthDataPoints(
   accessToken: string,
   dataType: string,
   filterExpression: string,
-  pageSize = 1000
+  pageSize = 1000,
+  signal?: AbortSignal
 ): Promise<any[]> {
   const baseUrl = `https://health.googleapis.com/v4/users/me/dataTypes/${dataType}/dataPoints:reconcile`;
   const points: any[] = [];
   let pageToken: string | undefined;
+  const seenPages = new Set<string>();
   do {
-    const params = new URLSearchParams({ filter: filterExpression, pageSize: String(pageSize) });
+    const params = new URLSearchParams({ filter: filterExpression, pageSize: String(dataType === 'sleep' ? 25 : pageSize) });
     if (pageToken) params.set('pageToken', pageToken);
     const response = await fetch(`${baseUrl}?${params.toString()}`, {
-      method: 'GET',
+      method: 'GET', signal,
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
@@ -117,8 +118,10 @@ async function fetchHealthDataPoints(
     }
 
     const data = await response.json() as { dataPoints?: any[]; nextPageToken?: string };
-    points.push(...(data.dataPoints || []));
+    points.push(...(data.dataPoints || []).map((point: any) => point.dataPoint ?? point));
     pageToken = data.nextPageToken || undefined;
+    if (pageToken && (seenPages.has(pageToken) || seenPages.size >= 20)) throw new Error('Google Health returned too many or repeated pages. Retry the import.');
+    if (pageToken) seenPages.add(pageToken);
   } while (pageToken);
   return points;
 }
@@ -140,12 +143,33 @@ export const GoogleHealthService = {
   /**
    * Starts the Google OAuth flow using expo-web-browser for Google Health.
    */
-  authorize: async (customClientId?: string): Promise<{ accessToken: string; refreshToken?: string } | null> => { return blockExternalService(); },
+  authorize: async (customClientId?: string): Promise<{ accessToken: string; refreshToken?: string } | null> => {
+    if (Platform.OS !== 'ios') throw new Error('Google Health sign-in is configured for the iPhone app.');
+    const clientId = customClientId?.trim() || GOOGLE_IOS_CLIENT_ID;
+    const redirect = googleRedirectUri(clientId);
+    const pkce = await createGooglePKCE();
+    const params = new URLSearchParams({client_id:clientId, redirect_uri:redirect, response_type:'code',
+      scope:SCOPES, access_type:'offline', prompt:'consent', state:pkce.state,
+      code_challenge:pkce.challenge, code_challenge_method:'S256'});
+    const result = await WebBrowser.openAuthSessionAsync(`${GOOGLE_AUTH_URL}?${params}`, redirect);
+    if (result.type !== 'success') return null;
+    const code = validateGoogleCallback(result.url, redirect, pkce.state);
+    const tokens = await exchangeCodeForToken(code, clientId, redirect, pkce.verifier);
+    await GoogleHealthService.verifyIdentity(tokens.accessToken);
+    return tokens;
+  },
+
+  verifyIdentity: async (accessToken: string): Promise<void> => {
+    const response = await fetch('https://health.googleapis.com/v4/users/me/identity', {headers:{Authorization:`Bearer ${accessToken}`}});
+    if (response.status === 401) throw new Error('UNAUTHENTICATED');
+    if (response.status === 400) throw new Error('This Google account is not linked to Google Health. Open the Google Health/Fitbit app and finish linking, then reconnect.');
+    if (!response.ok) throw new Error(`Google Health account verification failed (HTTP ${response.status}). Check API access and permissions.`);
+  },
 
   /**
    * Silently refreshes an expired access token using the stored refresh token.
    */
-  refreshAccessToken: async (refreshToken: string, customClientId?: string): Promise<string> => {
+  refreshAccessToken: async (refreshToken: string, customClientId?: string, signal?: AbortSignal): Promise<string> => {
     let clientId = GoogleHealthService.CLIENT_ID || '';
     if (customClientId && customClientId.trim() && !customClientId.includes('YOUR_')) {
       clientId = customClientId.trim();
@@ -158,17 +182,17 @@ export const GoogleHealthService = {
     });
 
     const response = await fetch(GOOGLE_TOKEN_URL, {
-      method: 'POST',
+      method: 'POST', signal,
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Google Health token refresh failed: ${err}`);
+      throw new Error('Google Health sign-in expired. Reconnect Google Health to continue.');
     }
 
     const data = await response.json() as { access_token: string };
+    if (!data.access_token) throw new Error('Google Health did not return a refreshed token. Reconnect the account.');
     return data.access_token;
   },
 
@@ -178,7 +202,8 @@ export const GoogleHealthService = {
   fetchFitnessData: async (
     accessToken: string,
     lastSuccessfulSync?: string | null,
-    appWorkouts?: any[]
+    appWorkouts?: any[],
+    signal?: AbortSignal
   ): Promise<GoogleHealthFitResult> => {
     const now = Date.now();
     const startMs = now - 24 * 60 * 60 * 1000; // Query last 24h
@@ -215,7 +240,8 @@ export const GoogleHealthService = {
       const stepPoints = await fetchHealthDataPoints(
         accessToken,
         'steps',
-        stepFilter
+        stepFilter,
+        1000, signal
       );
       let stepsSum = 0;
       stepPoints.forEach((point) => {
@@ -252,7 +278,8 @@ export const GoogleHealthService = {
       const caloriePoints = await fetchHealthDataPoints(
         accessToken,
         'active-energy-burned',
-        calorieFilter
+        calorieFilter,
+        1000, signal
       );
       let caloriesSum = 0;
       caloriePoints.forEach((point) => {
@@ -285,7 +312,8 @@ export const GoogleHealthService = {
       const hrPoints = await fetchHealthDataPoints(
         accessToken,
         'heart-rate',
-        `heart_rate.sample_time.physical_time >= "${startTimeISO}" AND heart_rate.sample_time.physical_time < "${endTimeISO}"`
+        `heart_rate.sample_time.physical_time >= "${startTimeISO}" AND heart_rate.sample_time.physical_time < "${endTimeISO}"`,
+        1000, signal
       );
       const bpms: number[] = [];
       hrPoints.forEach((point) => {
@@ -307,8 +335,9 @@ export const GoogleHealthService = {
         const restingHrPoints = await fetchHealthDataPoints(
           accessToken,
           'daily-resting-heart-rate',
-          `daily_resting_heart_rate.date >= "${yesterdayDateStr}"`
-        );
+          `daily_resting_heart_rate.date >= "${yesterdayDateStr}"`,
+        1000, signal
+      );
         if (restingHrPoints && restingHrPoints.length > 0) {
           const latestRestingPoint = restingHrPoints.reduce((latest, current) => {
             const latestDate = latest.dailyRestingHeartRate?.date;
@@ -341,7 +370,8 @@ export const GoogleHealthService = {
       const sleepPoints = await fetchHealthDataPoints(
         accessToken,
         'sleep',
-        `sleep.interval.end_time >= "${startTimeISO}" AND sleep.interval.end_time < "${endTimeISO}"`
+        `sleep.interval.end_time >= "${startTimeISO}" AND sleep.interval.end_time < "${endTimeISO}"`,
+        1000, signal
       );
       let totalSleepMin = 0;
       sleepPoints.forEach((point) => {
@@ -350,19 +380,12 @@ export const GoogleHealthService = {
           if (!isNaN(min)) {
             totalSleepMin += min;
           }
-        } else if (point?.sleep?.interval?.startTime && point?.sleep?.interval?.endTime) {
-          // Fallback: calculate duration from start and end times
-          const start = new Date(point.sleep.interval.startTime).getTime();
-          const end = new Date(point.sleep.interval.endTime).getTime();
-          if (!isNaN(start) && !isNaN(end)) {
-            totalSleepMin += (end - start) / 60000;
-          }
         }
       });
 
       if (totalSleepMin > 0) {
         results.sleepMinutes = Math.round(totalSleepMin);
-        results.sleepConsistency = Math.min(100, Math.round((results.sleepMinutes / 480) * 100));
+        // A single sleep duration does not measure multi-day sleep consistency.
       }
     } catch (e) {
       console.warn('[GoogleHealth] Sleep fetch failed:', e);
@@ -375,14 +398,14 @@ export const GoogleHealthService = {
   /**
    * Fetches the user's name, DOB, height, and weight from Google.
    */
-  fetchProfileData: async (accessToken: string): Promise<GoogleHealthProfileData> => {
+  fetchProfileData: async (accessToken: string, signal?: AbortSignal): Promise<GoogleHealthProfileData> => {
     const result: GoogleHealthProfileData = {};
 
     // 1. Fetch Name and DOB using People API
     try {
       const response = await fetch(
         'https://people.googleapis.com/v1/people/me?personFields=names,birthdays',
-        {
+        {signal,
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
@@ -426,7 +449,8 @@ export const GoogleHealthService = {
       const heightPoints = await fetchHealthDataPoints(
         accessToken,
         'height',
-        `height.sample_time.physical_time >= "${fiveYearsAgoISO}"`
+        `height.sample_time.physical_time >= "${fiveYearsAgoISO}"`,
+        1000, signal
       );
       if (heightPoints && heightPoints.length > 0) {
         // Find latest point based on sampleTime.physicalTime
@@ -453,7 +477,8 @@ export const GoogleHealthService = {
       const weightPoints = await fetchHealthDataPoints(
         accessToken,
         'weight',
-        `weight.sample_time.physical_time >= "${fiveYearsAgoISO}"`
+        `weight.sample_time.physical_time >= "${fiveYearsAgoISO}"`,
+        1000, signal
       );
       if (weightPoints && weightPoints.length > 0) {
         const latestPoint = weightPoints.reduce((latest, current) => {

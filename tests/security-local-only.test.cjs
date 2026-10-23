@@ -50,15 +50,17 @@ test('the app transport cannot call global fetch, even with a credentialed reque
   for(const uri of ['https://example.invalid/pixel','//example.invalid/pixel','javascript:alert(1)','data:image/svg+xml;base64,AA'])assert.equal(localImageUri(uri),undefined);
   assert.equal(localImageUri('file:///local.jpg'),'file:///local.jpg');assert.equal(localImageUri('data:image/jpeg;base64,AA'),'data:image/jpeg;base64,AA');
 });
-test('every app fetch is bound to the deny transport and no browser sign-in can launch',()=>{
+test('only the explicit Google Health integration can reach its bounded transport or sign-in',()=>{
   function walk(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);}
   for(const file of walk('src').filter(f=>/\.tsx?$/.test(f))){
     const text=fs.readFileSync(file,'utf8');
+    if(file.endsWith('GoogleHealthTransport.ts')){assert.match(text,/redirect:'error'/);continue;}
+    if(file.endsWith('GoogleHealthService.ts')){assert.match(text,/googleHealthFetch as fetch/);continue;}
     if(/\bfetch\s*\(/.test(text))assert.match(text,/import \{ offlineFetch as fetch \} from ['"].*OfflinePolicy['"]/ ,file);
     assert.doesNotMatch(text,/\b(?:XMLHttpRequest|WebSocket|sendBeacon|openAuthSessionAsync)\s*\(/,file);
     assert.doesNotMatch(text,/(?:globalThis|window)\.fetch\s*\(/,file);
   }
-  for(const name of ['GoogleFitService','GoogleHealthService']){
+  for(const name of ['GoogleFitService']){
     const text=fs.readFileSync(`src/services/${name}.ts`,'utf8');assert.match(text,/authorize:[\s\S]*?return blockExternalService\(\)/);
   }
 });

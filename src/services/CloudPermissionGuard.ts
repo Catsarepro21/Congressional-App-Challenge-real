@@ -25,6 +25,6 @@ export const CloudPermissionGuard = {
     await Promise.resolve();
     if (signal?.aborted) throw new Error('Request canceled.');
     if (localFallbackAction) return localFallbackAction();
-    throw new Error('Cloud request blocked. External services are disabled; no data was uploaded.');
+    throw new Error('Cloud AI request blocked. AI uploads are disabled; no data was uploaded.');
   },
 };

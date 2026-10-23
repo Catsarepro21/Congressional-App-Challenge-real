@@ -4,10 +4,15 @@ import {localImageUri} from './OfflinePolicy';
 function isCacheCopy(uri: string): boolean {
   if (!FileSystem.cacheDirectory) return false;
   try {
-    const file = new URL(uri); const cache = new URL(FileSystem.cacheDirectory);
-    const normalize = (path: string) => decodeURIComponent(path).replace(/^\/private(?=\/var\/)/, '');
-    const filePath = normalize(file.pathname); const cachePath = normalize(cache.pathname);
-    if (file.protocol !== 'file:' || file.host || cache.host || filePath.includes('\\') || filePath.split('/').some(part => part === '.' || part === '..')) return false;
+    // React Native's built-in URL parser does not reliably implement file: pathnames.
+    const localPath = (value: string): string => {
+      const match = /^file:\/\/(\/[^?#]*)$/i.exec(value);
+      if (!match) throw new Error('Not a local file URL.');
+      const path = decodeURIComponent(match[1]).replace(/^\/private(?=\/var\/)/, '');
+      if (path.startsWith('//') || path.includes('\\') || /%[a-f0-9]{2}/i.test(path) || path.split('/').some(part => part === '.' || part === '..')) throw new Error('Invalid local file path.');
+      return path;
+    };
+    const filePath = localPath(uri); const cachePath = localPath(FileSystem.cacheDirectory);
     return filePath.startsWith(cachePath.endsWith('/') ? cachePath : cachePath + '/');
   } catch {return false;}
 }
