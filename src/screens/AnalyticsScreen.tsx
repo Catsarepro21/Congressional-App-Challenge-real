@@ -711,7 +711,7 @@ export const AnalyticsScreen: React.FC = () => {
     report += `Resting Heart Rate: ${biometricCore.restingHeartRate > 0 ? `${biometricCore.restingHeartRate} bpm` : 'N/A'}\n`;
     report += `Average Steps: ${biometricCore.steps > 0 ? `${biometricCore.steps} steps` : 'N/A'}\n`;
     report += `Calorie Output: ${biometricCore.activeCalories > 0 ? `${biometricCore.activeCalories} kcal` : 'N/A'}\n`;
-    report += `Health Stability Index: ${biometricCore.dailyStabilityScore > 0 ? `${biometricCore.dailyStabilityScore}%` : 'N/A'}\n\n`;
+    report += `Experimental Stability Index: ${biometricCore.dailyStabilityScore > 0 ? `${biometricCore.dailyStabilityScore}/100` : 'N/A (insufficient data)'}\n\n`;
 
     report += `[Logged Vital Signs]\n`;
     if (vitalsLogs.length === 0) {
@@ -761,14 +761,14 @@ export const AnalyticsScreen: React.FC = () => {
     }
     report += `\n`;
 
-    report += `[Official Medical Records Vault]\n`;
+    report += `[Saved Medical Records: user-entered or imported]\n`;
     const immunizations = medicalRecords.filter(r => r.type === 'Immunization');
     const labResults = medicalRecords.filter(r => r.type === 'LabResult');
     const conditions = medicalRecords.filter(r => r.type === 'Condition');
 
-    report += `Active Diagnoses:\n`;
+    report += `Recorded Conditions:\n`;
     if (conditions.length === 0) {
-      report += `  No clinical diagnoses imported.\n`;
+      report += `  No conditions recorded.\n`;
     } else {
       conditions.forEach(c => report += `  - ${c.title} (${c.value}) · ${c.provider}\n`);
     }
@@ -994,7 +994,7 @@ export const AnalyticsScreen: React.FC = () => {
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
                 <Text style={{ fontSize: 48, fontWeight: '800', color: COLORS.textPrimary }}>
-                  {biometricCore.dailyStabilityScore || 85}
+                  {biometricCore.dailyStabilityScore > 0 ? biometricCore.dailyStabilityScore : '—'}
                 </Text>
                 <Text style={{ fontSize: 16, color: COLORS.primary, fontWeight: '700', marginLeft: 8, marginTop: 16 }}>
                   / 100
@@ -1009,10 +1009,13 @@ export const AnalyticsScreen: React.FC = () => {
                   }}
                 >
                   <Text style={{ color: COLORS.primary, fontSize: 11, fontWeight: '700' }}>
-                    {biometricCore.dailyStabilityScore >= 80 ? 'Excellent Index' : 'Active Tracking'}
+                    {biometricCore.dailyStabilityScore > 0 ? 'Experimental index' : 'Insufficient data'}
                   </Text>
                 </View>
               </View>
+              <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 12, lineHeight: 18 }}>
+                Experimental score from recorded resting heart rate and sleep consistency; at least three resting heart rate readings are required. It is not a diagnosis or a measure of overall health.
+              </Text>
             </View>
 
             {/* 7-Day Stability Trend */}

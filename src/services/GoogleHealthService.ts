@@ -97,27 +97,30 @@ async function fetchHealthDataPoints(
   filterExpression: string,
   pageSize = 1000
 ): Promise<any[]> {
-  const url = `https://health.googleapis.com/v4/users/me/dataTypes/${dataType}/dataPoints:reconcile?filter=${encodeURIComponent(filterExpression)}&pageSize=${pageSize}`;
-  
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  const baseUrl = `https://health.googleapis.com/v4/users/me/dataTypes/${dataType}/dataPoints:reconcile`;
+  const points: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({ filter: filterExpression, pageSize: String(pageSize) });
+    if (pageToken) params.set('pageToken', pageToken);
+    const response = await fetch(`${baseUrl}?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-  if (!response.ok) {
-    const err = await response.text();
-    console.warn(`[GoogleHealth] API error for ${dataType}: ${err}`);
-    if (response.status === 401) {
-      throw new Error('UNAUTHENTICATED');
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('UNAUTHENTICATED');
+      throw new Error(`Google Health ${dataType} request failed (HTTP ${response.status}).`);
     }
-    return [];
-  }
 
-  const data = await response.json() as { dataPoints?: any[] };
-  return data.dataPoints || [];
+    const data = await response.json() as { dataPoints?: any[]; nextPageToken?: string };
+    points.push(...(data.dataPoints || []));
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken);
+  return points;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +192,7 @@ export const GoogleHealthService = {
     const dd = String(localDate.getDate()).padStart(2, '0');
     const todayDateStr = `${yyyy}-${mm}-${dd}`;
 
-    const tomorrowDate = new Date(localDate.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowDate = new Date(yyyy, localDate.getMonth(), localDate.getDate() + 1);
     const tomorrowYyyy = tomorrowDate.getFullYear();
     const tomorrowMm = String(tomorrowDate.getMonth() + 1).padStart(2, '0');
     const tomorrowDd = String(tomorrowDate.getDate()).padStart(2, '0');
@@ -238,7 +241,7 @@ export const GoogleHealthService = {
       results.steps = Math.round(stepsSum);
     } catch (e) {
       console.warn('[GoogleHealth] Steps fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     // 2. Active Calories (bounded by civil calendar day OR last sync time)
@@ -274,7 +277,7 @@ export const GoogleHealthService = {
       results.activeCalories = Math.round(caloriesSum);
     } catch (e) {
       console.warn('[GoogleHealth] Calories fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     // 3. Heart Rate & Resting Heart Rate
@@ -294,10 +297,10 @@ export const GoogleHealthService = {
 
       if (bpms.length > 0) {
         results.heartRate = Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length);
-        results.restingHeartRate = Math.round(Math.min(...bpms));
       }
 
-      // Try to query daily-resting-heart-rate for a more accurate resting HR if available
+      // A minimum sampled heart rate is not a measured resting heart rate.
+      // Only use Google's dedicated daily resting-heart-rate data when available.
       try {
         const yesterday = new Date(now - 24 * 60 * 60 * 1000);
         const yesterdayDateStr = yesterday.toISOString().split('T')[0];
@@ -325,12 +328,12 @@ export const GoogleHealthService = {
           }
         }
       } catch (rErr) {
-        console.warn('[GoogleHealth] Fetching daily resting HR failed, using calculated min:', rErr);
+        console.warn('[GoogleHealth] Fetching daily resting HR failed:', rErr);
         if (rErr instanceof Error && rErr.message === 'UNAUTHENTICATED') throw rErr;
       }
     } catch (e) {
       console.warn('[GoogleHealth] Heart rate fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     // 4. Sleep
@@ -363,7 +366,7 @@ export const GoogleHealthService = {
       }
     } catch (e) {
       console.warn('[GoogleHealth] Sleep fetch failed:', e);
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED') throw e;
+      throw e;
     }
 
     return results;
