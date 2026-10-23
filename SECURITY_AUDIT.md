@@ -6,6 +6,8 @@ Reviewed October 23, 2026 against the current working tree. User requirement: en
 
 The supplied device video also confirmed a barcode permission button beneath a touch-intercepting reticle and overly restrictive native model instructions. The reticle now ignores touches, permanent denial opens Settings, permissions refresh on resume, image-picker privacy strings are explicitly configured, and ordinary non-clinical wellness suggestions are allowed while personal claims remain grounded in records. These are source/runtime-handler fixes; automated checks do not prove camera hardware or live model quality.
 
+The app-switch privacy screen now overlays the mounted application instead of replacing its subtree. iOS permission sheets, camera pickers and OAuth sessions can temporarily make the app inactive; replacing that subtree discarded pending screen callbacks. The cover still hides the content while inactive, but camera/sign-in flows retain their state. Background refresh cannot cancel an interactive Google import already in progress.
+
 ## Result
 
 The source has been hardened for local processing and encrypted record storage. The automated checks and browser onboarding pass. This is not a security certification or proof of an installed native build: no Swift compilation, signed IPA installation, native encryption read/write trial, or actual Foundation Models inference was possible on this Windows host.

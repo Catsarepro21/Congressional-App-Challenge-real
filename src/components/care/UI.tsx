@@ -1,4 +1,5 @@
 import React from "react";
+import AppPrivacyCover from '../AppPrivacyCover';
 import {
   View,
   Text,
@@ -190,6 +191,7 @@ export function Sheet({
             {children}
           </ScrollView>
         </View>
+        <AppPrivacyCover />
       </KeyboardAvoidingView>
     </Modal>
   );
