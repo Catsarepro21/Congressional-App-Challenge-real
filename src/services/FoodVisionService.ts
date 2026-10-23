@@ -1,3 +1,4 @@
+import { offlineFetch as fetch } from './OfflinePolicy';
 /**
  * @file src/services/FoodVisionService.ts
  * @description AI-powered food photo analysis service with multi-tier routing.
@@ -273,21 +274,10 @@ export const FoodVisionService = {
     }
 
     if (provider === 'on-device') {
-      try {
-        return await FoodVisionService.analyzeImageOffline(imageUri, keywordHint);
-      } catch (offlineErr) {
-        // If offline vision was inconclusive and user has cloud API key, offer cloud fallback
-        if (apiKey && apiKey.trim()) {
-          return analyzeWithGemini(imageUri, apiKey.trim());
-        }
-        throw offlineErr;
-      }
+      return FoodVisionService.analyzeImageOffline(imageUri, keywordHint);
     }
 
     // Cloud provider
-    if (!apiKey.trim()) {
-      throw new Error('Add a Gemini API key in Profile to use cloud photo analysis.');
-    }
-    return analyzeWithGemini(imageUri, apiKey.trim());
+    throw new Error('Cloud photo analysis is disabled. Select On-Device AI or log the meal manually.');
   },
 };

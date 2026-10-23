@@ -1,3 +1,4 @@
+import { offlineFetch as fetch } from './OfflinePolicy';
 import { controlledRequest } from './RequestControl';
 /**
  * @file src/services/LocalHealthChatEngine.ts

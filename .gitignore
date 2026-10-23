@@ -60,3 +60,6 @@ zsign*
 
 # Local verification exports
 /dist-preview/
+/dist-security-check/
+/security-test-results.txt
+/dependency-audit.json

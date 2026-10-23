@@ -46,6 +46,9 @@
     "node": ">=22.13.0"
   },
   "overrides": {
+    "compression": "1.8.2",
+    "shell-quote": "1.11.0",
+    "source-map-js": "1.2.2",
     "metro": "0.84.5",
     "metro-config": "0.84.5",
     "metro-transform-worker": "0.84.5",

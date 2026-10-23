@@ -16,7 +16,7 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
   const [message, setMessage] = useState('');
   const lock = useRef(false); const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const sources: HealthSource[] = Platform.OS === 'android' ? ['health-connect', 'google-health', 'google-fit', 'apple'] : ['apple', 'google-health', 'google-fit', 'health-connect'];
+  const sources: HealthSource[] = Platform.OS === 'android' ? ['health-connect', 'apple'] : ['apple', 'health-connect'];
   async function connect(source: HealthSource, reconnect = false) {
     if (lock.current || demo) return;
     lock.current = true; setBusy(source); onBusyChange?.(true); setMessage('');

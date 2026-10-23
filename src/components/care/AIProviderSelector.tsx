@@ -28,7 +28,6 @@ interface ProviderOption {
 
 const OPTIONS: ProviderOption[] = [
   { key: 'on-device', icon: 'chip', badge: '' },
-  { key: 'cloud', icon: 'cloud-outline', badge: 'All devices' },
   { key: 'opt-out', icon: 'shield-lock-outline', badge: 'Maximum privacy' },
 ];
 

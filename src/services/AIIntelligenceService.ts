@@ -125,9 +125,9 @@ export const AIIntelligenceService = {
   providerDescription: (provider: AIIntelligenceProvider): string => {
     switch (provider) {
       case 'on-device':
-        return 'Use available native photo and text models. Ingredient checks stay offline; cloud requests require separate approval.';
+        return 'Use available native photo and text models. Ingredient checks stay offline. Cloud processing is disabled.';
       case 'cloud':
-        return 'Uses secure cloud AI for analysis. Requires an internet connection. Data is sent to Google servers.';
+        return 'Cloud processing is disabled in this local-only build.';
       case 'opt-out':
         return 'Disable all AI models. Uses deterministic rule-based checks and manual entry only. Maximum privacy.';
     }

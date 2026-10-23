@@ -1,3 +1,4 @@
+import { localImageUri } from '../../services/OfflinePolicy';
 /**
  * @file src/components/care/FoodNutritionModal.tsx
  * @description Comprehensive multi-tier nutrition logging modal.
@@ -222,7 +223,7 @@ export default function FoodNutritionModal({
       {/* Photo preview */}
       {photoUri ? (
         <View style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
-          <Image source={{ uri: photoUri }} style={{ width: '100%', height: 200, borderRadius: 16 }} resizeMode="cover" />
+          <Image source={{ uri: localImageUri(photoUri) }} style={{ width: '100%', height: 200, borderRadius: 16 }} resizeMode="cover" />
         </View>
       ) : null}
 
@@ -255,14 +256,14 @@ export default function FoodNutritionModal({
           {aiPreference === 'cloud' && photoUri ? (
             <>
               <Text style={s.body}>
-                Send this photo to Google Gemini for a nutrition estimate. A photo cannot rule out hidden ingredients or allergens.
+                Cloud photo analysis is disabled. Select On-Device AI in Profile or enter the meal manually.
               </Text>
-              <Button label="Send photo for analysis" onPress={() => { if (photoUri) analyzePhoto(photoUri); }} />
+
             </>
           ) : photoUri ? (
             <>
               <Text style={s.body}>
-                On-device Visual Intelligence identifies foods locally using the Apple Neural Engine and the offline USDA database. 100% private.
+                Photo identification runs locally with Apple Vision and the offline food database when supported. Check the suggested food and portion before saving.
               </Text>
               <Button label="⚡ Identify photo with On-Device AI" onPress={() => { if (photoUri) analyzePhoto(photoUri); }} />
             </>

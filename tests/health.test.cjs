@@ -35,20 +35,12 @@ test('sync preserves saved readings on an empty response and rejects unsupported
   await assert.rejects(coordinator('web').syncHealthSource('apple'), /native/);
   await assert.rejects(sync.bounded(new Promise(() => {}), 5), /too long/);
 });
-test('Google cancellation is harmless and expired credentials refresh once', async () => {
-  assert.equal(await coordinator('ios', {}, {authorize: async () => null}).syncHealthSource('google-health'), null);
-  const calls = [];
-  const google = {
-    fetchFitnessData: async token => { calls.push(token); if (token === 'expired') throw new Error('UNAUTHENTICATED'); return {steps:123}; },
-    refreshAccessToken: async token => { assert.equal(token, 'refresh'); return 'fresh'; },
-  };
-  const result = await coordinator('ios', {}, google).syncHealthSource('google-fit', {accessToken:'expired',refreshToken:'refresh',connectedAt:'original'});
-  assert.deepEqual(calls, ['expired','fresh']);
-  assert.equal(result.connection.accessToken,'fresh');
-  assert.equal(result.connection.connectedAt,'original');
-  assert.equal(result.readings.steps,123);
-  assert.equal(result.readings.heartRate,0);
+test('external health sources cannot authorize, refresh, or fetch', async () => {
+  let calls=0;const external={authorize:async()=>{calls++;},fetchFitnessData:async()=>{calls++;},refreshAccessToken:async()=>{calls++;}};
+  for(const source of ['google-health','google-fit']) await assert.rejects(coordinator('ios',{},external).syncHealthSource(source,{accessToken:'old',refreshToken:'old'}),/disabled/);
+  assert.equal(calls,0);
 });
+
 test('missing native method and thrown native error resolve safely', async () => {
   assert.equal(await reader.queryHealth({}, 'read', {}), null);
   assert.equal(await reader.queryHealth({ read() { throw Error('missing entitlement'); } }, 'read', {}), null);

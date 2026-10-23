@@ -13,6 +13,8 @@ function service(fetch, DateImpl = Date) {
   vm.runInNewContext(code, {
     exports, fetch, URL, URLSearchParams, Date: DateImpl, console,
     require: name => {
+      // Exercise the retained parser with synthetic responses; production transport stays blocked.
+      if (name === './OfflinePolicy') return {offlineFetch:fetch,blockExternalService:()=>{throw Error('External services disabled');}};
       if (name === 'expo-web-browser') return { maybeCompleteAuthSession() {} };
       if (name === 'react-native') return { Platform: { OS: 'ios', select: values => values.ios } };
       if (name === './GoogleOAuth') return { GOOGLE_IOS_CLIENT_ID: 'test' };

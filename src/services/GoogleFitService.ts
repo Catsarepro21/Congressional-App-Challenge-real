@@ -1,3 +1,5 @@
+import { blockExternalService } from './OfflinePolicy';
+import { offlineFetch as fetch } from './OfflinePolicy';
 /**
  * @file src/services/GoogleFitService.ts
  * @description Google Fit REST API integration for Android and iOS.
@@ -253,54 +255,7 @@ export const GoogleFitService = {
    * Starts the Google OAuth flow using expo-web-browser.
    * Returns an access token if successful, null if cancelled.
    */
-  authorize: async (customClientId?: string): Promise<{ accessToken: string; refreshToken?: string } | null> => {
-    // Intercept UI parameters to dodge empty settings configurations
-    let clientId = GoogleFitService.CLIENT_ID || '';
-    
-    if (customClientId && customClientId.trim() && !customClientId.includes('YOUR_')) {
-      clientId = customClientId.trim();
-    }
-
-    if (!clientId) {
-      throw new Error('NO_CLIENT_ID');
-    }
-
-    // Android native app client types demand your raw package name with a single trailing slash
-    if (Platform.OS !== 'ios') throw new Error('Google browser sign-in is configured for iOS only in this build.');
-    const finalRedirectUri = googleRedirectUri(clientId);
-    const {verifier: codeVerifier, challenge, state} = await createGooglePKCE();
-
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: clientId,
-      redirect_uri: finalRedirectUri,
-      scope: SCOPES,
-      state,
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-      access_type: 'offline',
-      prompt: 'consent',
-    });
-
-    const authUrl = `${GOOGLE_AUTH_URL}?${params.toString()}`;
-
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, finalRedirectUri);
-
-    if (result.type !== 'success' || !result.url) {
-      return null;
-    }
-
-    const code = validateGoogleCallback(result.url, finalRedirectUri, state);
-
-    const tokens = await exchangeCodeForToken(
-      code,
-      clientId,
-      finalRedirectUri,
-      codeVerifier,
-    );
-
-    return tokens;
-  },
+  authorize: async (customClientId?: string): Promise<{ accessToken: string; refreshToken?: string } | null> => { return blockExternalService(); },
 
   /**
    * Silently refreshes an expired access token using the stored refresh token.

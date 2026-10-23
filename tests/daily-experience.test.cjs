@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 function load(file, mocks = {}, globals = {}) {
  const exports = {};
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText, {exports, Date, console, setTimeout, clearTimeout, AbortController, ...globals, require: name => { if(name in mocks) return mocks[name]; if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name); }});
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText, {exports, Date, console, setTimeout, clearTimeout, AbortController, ...globals, require: name => { if(name in mocks) return mocks[name]; if (name === './OfflinePolicy') return load('src/services/OfflinePolicy.ts'); if (name === './RequestControl') return load('src/services/RequestControl.ts'); throw Error(name); }});
  return exports;
 }
 const daily = load('src/utils/daily.ts');
@@ -47,9 +47,9 @@ test('weekly report groups meals by day and excludes old and undated meals', asy
  const result=await report.generateReport([], [meal('a',date,300),meal('b',date,500),meal('c',daily.localDate(yesterday),400),meal('d','2000-01-01',9999),meal('e',undefined,9999)],[],[],{},false);
  assert.equal(result.avgDailyCalories,600); assert.match(result.narrative,/2 days/);
 });
-test('nutrition errors never fabricate a result; validates every nutrient', async () => {
+test('disabled photo routes never fabricate a nutrition result', async () => {
  const mocks={'./CloudPermissionGuard': {CloudPermissionGuard: {executeWithPermission: async (_details, action) => action()}}, 'expo-file-system/legacy':{readAsStringAsync:async()=> 'image',EncodingType:{Base64:'base64'}}};
  const fv=load('src/services/FoodVisionService.ts',mocks,{fetch:async()=>({ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({foodName:'Meal',portionEstimate:'1',calories:300,carbs:-1,protein:4,fat:3,fiber:1,sugar:2,sodium:10,confidence:'low'})}]}}]})})}).FoodVisionService;
  await assert.rejects(fv.analyzeImage('file:///burger.jpg','opt-out'),/not available offline/);
- await assert.rejects(fv.analyzeImage('file:///x.jpg','cloud','test-only'),/Invalid Gemini/);
+ await assert.rejects(fv.analyzeImage('file:///x.jpg','cloud','test-only'),/disabled/);
 });
