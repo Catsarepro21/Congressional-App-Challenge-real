@@ -8,7 +8,7 @@ function load(file,mocks={}) {
 }
 function storeFixture(overrides={}) {
   let saved;let cancelled=0;
-  const storage={getItem:async()=>null,setItem:async(_n,v)=>{saved=v;},removeItem:async()=>{saved=null;},clearSavedData:async()=>{saved=null;},retryWrite:async()=>{}};
+  const storage={getItem:async()=>null,setItem:async(_n,v)=>{saved=v;},removeItem:async()=>{saved=null;},clearSavedData:async reset=>{saved=null;reset?.();},retryWrite:async()=>{}};
   const mod=load('src/store/useSafeScaleStore.ts',{
     zustand:require('zustand'),'zustand/middleware':require('zustand/middleware'),
     '../utils/daily':load('src/utils/daily.ts'),'../utils/deviceName':{getSuggestedOwnerName:()=>null},

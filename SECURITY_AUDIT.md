@@ -72,6 +72,17 @@ User-reported hardware/software is a target, not proof of availability. Apple In
 7. Replace old scheduled reminders and inspect their lock-screen previews. Check app switching/locking does not expose the current record in the preview.
 8. With a network inspection tool, confirm no external app-service requests occur while using the representative flows. This network trace has not been captured in this review.
 
+## October 23 follow-up to independent review
+
+- Native photos are inlined only in application memory. On disk, photos use random opaque references and separately encrypted 128 KiB chunks; the main encrypted record contains references. Unchanged photos are not encrypted again for ordinary health updates. New allocations are journaled before writing, old chunks are collected after the record commit, and explicit deletion enumerates only this app's photo namespace, including interrupted-save orphans.
+- Attachments are bounded to 14 million encoded characters each and 20 million across the current record; non-photo record JSON is bounded to 768 KiB before encryption. A save failure preserves the committed record and displays a retry notice while keeping editing available. This is bounded prototype storage, not unlimited photo archiving.
+- Cache copies are cleaned after successful encrypted persistence. Picker base64 is requested only on web; iOS `/private/var` cache aliases and WebP/HEIF MIME types are handled. Oversized/unreadable legacy file attachments are marked missing without discarding the rest of the record. Originals outside app cache are never deleted.
+- Browser corruption now rejects hydration rather than leaving it pending. Explicit deletion cancels pending unlocks, suppresses reset-state persistence, removes photo chunks and records, drops the browser key, and requires creation of a new vault. Recovery screens offer a separate, explicit destructive reset confirmation.
+- Export filtering now excludes `photoUri` and `documentImage` at every nesting level, matching the existing disclosure. Exports remain deliberately unencrypted and initiated by the user.
+- Relative image paths are denied. Dead Gemini photo/text request implementations and chat escalation controls were removed; legacy text entry points remain local. Cloud feature defaults are false.
+- Native Vision validates regular-file status and compressed byte size, then downsamples to at most 2048 pixels per edge before classification. Local text input/history and output lengths are bounded. Input character limits are not an exact model tokenizer; an unavailable/over-capacity model still falls back to the clearly labeled local rules.
+- Follow-up tests use synthetic records and real AES-GCM/Web Crypto to check large photos, small encrypted rows, save failures, unchanged-photo reuse, restart hydration, cleanup ordering, missing attachments, browser reset/rekey, pending-unlock deletion, relative image denial, and photo-free export. Physical-device cache inspection and native inference remain separate acceptance checks. The previously signed `de71ce8` IPA predates these fixes.
+
 ## References checked
 
 - [Expo Crypto](https://docs.expo.dev/versions/latest/sdk/crypto/) — AES API, key sizes, sealed-data handling. Local installed SDK 56 source/types were also inspected.

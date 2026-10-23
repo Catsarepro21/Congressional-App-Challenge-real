@@ -6,7 +6,7 @@ const ITERATIONS = 600000;
 type Envelope = { version: 1; salt: number[]; iv: number[]; data: number[] };
 
 /** Passphrase-derived AES-GCM; the key and passphrase are never written to disk. */
-export function createWebVault(io: StorageIO, crypto: Crypto, onLocked: (creating: boolean) => void) {
+export function createWebVault(io: StorageIO, crypto: Crypto, onLocked: (creating: boolean) => void, transformLegacy?: (value: string) => string, migrateLegacy = true) {
   const AAD = new TextEncoder().encode('SafeScale browser vault v1');
   let key: CryptoKey | undefined;
   let salt: Uint8Array | undefined;
@@ -30,6 +30,11 @@ export function createWebVault(io: StorageIO, crypto: Crypto, onLocked: (creatin
   async function ensureKey(raw: string | null): Promise<void> {
     if (key) return;
     if (!crypto?.subtle) throw new Error('A secure browser with Web Crypto is required.');
+    // Reject corrupt records immediately instead of stranding hydration behind an unlock promise.
+    if (raw !== null) {
+      if (raw.startsWith(PREFIX)) envelope(raw.slice(PREFIX.length));
+      else JSON.parse(raw);
+    }
     if (!unlocking) {
       unlocking = new Promise<void>((resolve, reject) => {pending = {raw, resolve, reject};});
       onLocked(!raw?.startsWith(PREFIX));
@@ -44,7 +49,7 @@ export function createWebVault(io: StorageIO, crypto: Crypto, onLocked: (creatin
       return JSON.stringify({version:1, salt:Array.from(salt!), iv:Array.from(iv), data:Array.from(new Uint8Array(encrypted))});
     },
     decrypt: async raw => {await ensureKey(PREFIX + raw); return decrypt(raw, key!);},
-  });
+  }, transformLegacy, migrateLegacy);
   return {
     getItem: async (name: string) => {
       // Unlock before null is returned: onboarding writes must also be encrypted.
@@ -53,9 +58,14 @@ export function createWebVault(io: StorageIO, crypto: Crypto, onLocked: (creatin
     },
     setItem: protectedIO.setItem,
     removeItem: protectedIO.removeItem,
+    reset: () => {
+      pending?.reject(new Error('The browser vault was reset.'));
+      key = undefined; salt = undefined; pending = undefined; unlocking = undefined;
+    },
     unlock: async (passphrase: string) => {
       if (!pending) throw new Error('The vault is not waiting to be unlocked.');
-      const saved = pending.raw;
+      const request = pending;
+      const saved = request.raw;
       const creating = !saved?.startsWith(PREFIX);
       if (creating && passphrase.length < 12) throw new Error('Choose a passphrase with at least 12 characters.');
       const nextSalt = saved?.startsWith(PREFIX) ? new Uint8Array(envelope(saved.slice(PREFIX.length)).salt) : crypto.getRandomValues(new Uint8Array(16));
@@ -68,8 +78,9 @@ export function createWebVault(io: StorageIO, crypto: Crypto, onLocked: (creatin
       } else if (saved !== null) {
         JSON.parse(saved); // Legacy data is migrated only after successful encryption.
       }
+      if (pending !== request) throw new Error('The vault changed while unlocking. Please retry.');
       key = candidate; salt = nextSalt;
-      const resolve = pending.resolve; pending = undefined; resolve();
+      pending = undefined; request.resolve();
     },
   };
 }

@@ -9,7 +9,7 @@ function load(file, mocks = {}, globals = {}) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,
     {exports, TextEncoder, TextDecoder, URL, Date, console, setTimeout, clearTimeout, AbortController, ...globals,
-      require: name => {if(name in mocks)return mocks[name]; if(name === './OfflinePolicy')return load('src/services/OfflinePolicy.ts');throw Error(name);}});
+      require: name => {if(name in mocks)return mocks[name]; if(name === './PhotoRecordStorage')return load('src/services/PhotoRecordStorage.ts'); if(name === './OfflinePolicy')return load('src/services/OfflinePolicy.ts');throw Error(name);}});
   return exports;
 }
 const core = load('src/services/ProtectedStorageCore.ts');
