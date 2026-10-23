@@ -16,14 +16,15 @@ export function googleRedirectUri(clientId: string): string {
 }
 
 export function validateGoogleCallback(url: string, redirect: string, state: string): string {
-  const returned = new URL(url);
-  const expected = new URL(redirect);
-  if (returned.protocol !== expected.protocol || returned.host !== expected.host || returned.pathname !== expected.pathname || returned.searchParams.get('state') !== state) {
+  // Custom schemes are not parsed consistently by React Native's URL implementation.
+  const separator = url.indexOf('?');
+  const params = new URLSearchParams(separator === -1 ? '' : url.slice(separator + 1));
+  if (separator === -1 || url.slice(0, separator) !== redirect || url.includes('#') || params.getAll('state').length !== 1 || params.get('state') !== state) {
     throw new Error('Google sign-in response did not match this request. Please try again.');
   }
-  const error = returned.searchParams.get('error');
+  const error = params.get('error');
   if (error) throw new Error(`Google sign-in rejected: ${error}`);
-  const code = returned.searchParams.get('code');
-  if (!code) throw new Error('Google did not return an authorization code.');
+  const code = params.get('code');
+  if (!code || params.getAll('code').length !== 1) throw new Error('Google did not return one authorization code.');
   return code;
 }

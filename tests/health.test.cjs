@@ -35,9 +35,9 @@ test('sync preserves saved readings on an empty response and rejects unsupported
   await assert.rejects(coordinator('web').syncHealthSource('apple'), /native/);
   await assert.rejects(sync.bounded(new Promise(() => {}), 5), /too long/);
 });
-test('external health sources cannot authorize, refresh, or fetch', async () => {
+test('unconsented Google Health and legacy Google Fit cannot authorize in the background', async () => {
   let calls=0;const external={authorize:async()=>{calls++;},fetchFitnessData:async()=>{calls++;},refreshAccessToken:async()=>{calls++;}};
-  for(const source of ['google-health','google-fit']) await assert.rejects(coordinator('ios',{},external).syncHealthSource(source,{accessToken:'old',refreshToken:'old'}),/disabled/);
+  for(const source of ['google-health','google-fit']) await assert.rejects(coordinator('ios',{},external).syncHealthSource(source,{accessToken:'old',refreshToken:'old'}),/disabled|Reconnect/);
   assert.equal(calls,0);
 });
 
@@ -139,7 +139,7 @@ test('Google PKCE uses SHA256 and rejects a mismatched OAuth state', async () =>
   const crypto = require('node:crypto');
   const code = ts.transpileModule(fs.readFileSync('src/services/GoogleOAuth.ts', 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText;
   const exports = {};
-  vm.runInNewContext(code, {exports, URL, require() { return {
+  vm.runInNewContext(code, {exports, URL, URLSearchParams, require() { return {
     getRandomBytesAsync: async n => crypto.randomBytes(n),
     randomUUID: () => crypto.randomUUID(),
     CryptoDigestAlgorithm: {SHA256: 'sha256'}, CryptoEncoding: {BASE64: 'base64'},

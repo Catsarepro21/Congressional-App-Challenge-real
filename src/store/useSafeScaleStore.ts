@@ -57,7 +57,7 @@ import type {
 } from '../types';
 import { HealthDataService } from '../services/HealthDataService';
 import { NotificationService } from '../services/NotificationService';
-import { syncHealthSource, readableData } from '../services/HealthSyncService';
+import { syncHealthSource, readableData, cancelGoogleHealthSync } from '../services/HealthSyncService';
 import type { HealthSource } from '../types';
 import { getSuggestedOwnerName } from '../utils/deviceName';
 import {
@@ -378,6 +378,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
         if (!result) return;
         const current = useSafeScaleStore.getState();
         if (current.dataRevision !== state.dataRevision || current.isTestMode || current.isDeletingData || !current.profile.healthConnections?.[lastSource]) return;
+        if (current.profile.healthConnections[lastSource]?.connectedAt !== connections[lastSource]?.connectedAt) return;
         current.updateProfile({
           healthConnections: { ...current.profile.healthConnections, [lastSource]: result.connection },
         });
@@ -749,6 +750,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
 
   /** Toggles Test/Simulation Mode on/off. Seeding or clearing data. */
   toggleTestMode: (): void => {
+    cancelGoogleHealthSync?.();
     if (useSafeScaleStore.getState().isDeletingData) return;
     set((state) => {
       if (state.isTestMode && demoSnapshot) {
@@ -1723,6 +1725,7 @@ export async function deleteLocalHealthData(): Promise<void> {
   if (state.isTestMode || state.isDeletingData) throw new Error('Exit sample mode before deleting personal data.');
   const revision = state.dataRevision + 1;
   useSafeScaleStore.setState({isDeletingData:true, dataRevision:revision});
+  cancelGoogleHealthSync?.();
   try {
     await NotificationService.cancelAllReminders();
     await SecureHealthStorage.clearSavedData(() => {

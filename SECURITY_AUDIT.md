@@ -2,6 +2,10 @@
 
 Reviewed October 23, 2026 against the current working tree. User requirement: encrypted health records, no external health-data uploads, and functioning local AI. Intended device reported by the user: iPhone 16, iOS 27.2.
 
+**Later October 23 scope update:** The user explicitly requested restoration of Google Health / Fitbit import on iOS. This supersedes the blanket network/sign-in ban in the earlier review below. A separate allowlisted transport now permits Google OAuth token exchange and read-only Google Health/People requests. No journal/photo/chat/medical-record upload endpoint is enabled. New consent is required; legacy tokens cannot silently reconnect. Google tokens stay in the encrypted native vault and are excluded from browser persistence and exports. Disconnect/deletion cancels in-progress imports. OAuth project permissions, test-user configuration and actual account access must still be verified by signing in on the device.
+
+The supplied device video also confirmed a barcode permission button beneath a touch-intercepting reticle and overly restrictive native model instructions. The reticle now ignores touches, permanent denial opens Settings, permissions refresh on resume, image-picker privacy strings are explicitly configured, and ordinary non-clinical wellness suggestions are allowed while personal claims remain grounded in records. These are source/runtime-handler fixes; automated checks do not prove camera hardware or live model quality.
+
 ## Result
 
 The source has been hardened for local processing and encrypted record storage. The automated checks and browser onboarding pass. This is not a security certification or proof of an installed native build: no Swift compilation, signed IPA installation, native encryption read/write trial, or actual Foundation Models inference was possible on this Windows host.

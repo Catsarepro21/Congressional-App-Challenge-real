@@ -651,6 +651,8 @@ export interface HealthWearableInfo {
 }
 
 export interface HealthConnection {
+  /** Version of the user's explicit consent to read Google Health, never to upload app records. */
+  consentVersion?: 1;
   accessToken?: string;
   refreshToken?: string;
   connectedAt: string;

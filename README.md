@@ -2,7 +2,9 @@
 
 ## October 23, 2026: local-only security changes
 
-The current source blocks external app-service requests, cloud AI, remote image loads, and Google sign-in. Apple Health and Android Health Connect remain local device integrations. On-device photo failure no longer falls back to cloud processing. Manual exports remain an explicit user action and produce unencrypted copies outside the vault.
+The current source blocks cloud AI, remote image loads, and unrelated external services. Apple Health and Android Health Connect remain local device integrations. Optional **Google Health / Fitbit import on iPhone** is restored: explicit sign-in uses PKCE and read-only Google API requests; connection tokens are retained only inside encrypted native records after new consent. Journal records, photos, medical records and chats are not uploaded. On-device photo failure does not fall back to cloud processing. Manual exports remain an explicit user action and produce unencrypted copies outside the vault.
+
+The October 23 device-video follow-up fixes the barcode reticle intercepting the camera permission button, adds Settings/resume handling and image-picker permission descriptions, and makes Apple Foundation Models distinguish ordinary wellness guidance from claims about the user's recorded facts. Unavailable models still use clearly labeled local rules. Historical verification notes below describe earlier revisions; live iPhone camera and Google sign-in need acceptance testing on the updated IPA.
 
 Native records use AES encryption with a device secure-storage key. Browser records now require a passphrase-derived encrypted vault; the passphrase is not saved. Supported photo attachments are embedded inside encrypted records rather than saved as cache references. Original photos and any OS-retained temporary copies remain subject to platform storage behavior.
 
