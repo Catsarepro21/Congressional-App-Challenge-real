@@ -78,7 +78,7 @@ export interface HealthConnectRecord {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NORMALIZED INTERNAL DATA STRUCTURES
-// These are the canonical shapes used throughout the SafeScale state layer.
+// These are the canonical shapes used throughout the Healthfolio state layer.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type DataSource = 'HealthKit' | 'HealthConnect' | 'Mock';

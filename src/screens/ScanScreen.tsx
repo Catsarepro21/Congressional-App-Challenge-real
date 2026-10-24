@@ -611,8 +611,8 @@ export const ScanScreen: React.FC<ScanScreenProps> = ({ onNavigate }) => {
           </Text>
           <Text style={{ fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 18 }}>
             {isPermanentlyDenied
-              ? 'Camera permission is disabled. Please open system settings to grant camera access to SafeScale Health.'
-              : 'SafeScale Health requires access to your camera to scan food ingredient labels for potential allergens.'}
+              ? 'Camera permission is disabled. Please open system settings to grant camera access to Healthfolio.'
+              : 'Healthfolio requires access to your camera to scan food ingredient labels for potential allergens.'}
           </Text>
         </View>
         <Pressable

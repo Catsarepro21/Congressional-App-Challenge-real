@@ -16,9 +16,9 @@ export default function PrivacySettings() {
       const text = privacyExport(saved);
       if (Platform.OS === 'web') {
         const url = URL.createObjectURL(new Blob([text], {type:'application/json'}));
-        const link = document.createElement('a');link.href=url;link.download='safescale-health-export.json';link.click();
+        const link = document.createElement('a');link.href=url;link.download='healthfolio-export.json';link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else await Share.share({message:text,title:'SafeScale health export'});
+      } else await Share.share({message:text,title:'Healthfolio health export'});
     } catch { Alert.alert('Export failed', 'Your records are unchanged. Please try again.'); }
   };
   return <Card>
@@ -30,7 +30,7 @@ export default function PrivacySettings() {
     <Button label="Export health records" secondary disabled={demo} onPress={exportData} />
     <Button label="Delete local data…" secondary disabled={demo} onPress={() => {setConfirmation('');setDeleting(true);}} />
     {deleting && <Sheet title="Delete local data" onClose={() => setDeleting(false)}>
-      <Text style={s.body}>This permanently deletes SafeScale's saved records, profile, credentials, active workout, chat, and app reminders on this device. It cannot be undone. Export anything you want to keep first.</Text>
+      <Text style={s.body}>This permanently deletes Healthfolio's saved records, profile, credentials, active workout, chat, and app reminders on this device. It cannot be undone. Export anything you want to keep first.</Text>
       <Text style={s.body}>Apple Health, Google accounts, your photo library, attached files, and previously exported copies are not deleted. Revoke health/account permissions in those services separately.</Text>
       <TextInput accessibilityLabel="Type DELETE to confirm" placeholder="Type DELETE to confirm" value={confirmation} onChangeText={setConfirmation} autoCapitalize="characters" style={s.input} />
       <Button label="Permanently delete local data" disabled={confirmation !== 'DELETE'} onPress={async () => {

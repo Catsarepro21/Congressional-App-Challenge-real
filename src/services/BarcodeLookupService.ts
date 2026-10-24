@@ -1,7 +1,7 @@
 import { offlineFetch as fetch } from './OfflinePolicy';
 /**
  * @file src/services/BarcodeLookupService.ts
- * @description Multi-tier barcode resolution service for SafeScale Health.
+ * @description Multi-tier barcode resolution service for Healthfolio.
  *
  * Sourcing hierarchy:
  *   1. Local USDA DB — Instant, zero-latency, 100% offline.

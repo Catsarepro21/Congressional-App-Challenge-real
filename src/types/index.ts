@@ -1,6 +1,6 @@
 /**
  * @file src/types/index.ts
- * @description Central type registry for the SafeScale Health application.
+ * @description Central type registry for the Healthfolio application.
  *
  * All domain interfaces and union types are defined here and exported for
  * consumption by services, store, and UI components. Zero usage of `any`.

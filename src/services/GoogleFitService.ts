@@ -12,7 +12,7 @@ import { offlineFetch as fetch } from './OfflinePolicy';
  * - Sleep sessions (last 24h)
  *
  * This enables users who have Fitbit, Garmin, Polar, or any other
- * device that syncs to Google Fit to read their data in SafeScale Health.
+ * device that syncs to Google Fit to read their data in Healthfolio.
  */
 
 import * as WebBrowser from 'expo-web-browser';

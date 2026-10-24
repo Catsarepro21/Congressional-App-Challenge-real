@@ -293,7 +293,7 @@ export const LocalHealthChatEngine = {
     }
 
     if (options.signal?.aborted) throw new Error('Request canceled.');
-    // 2. SafeScale On-Device Clinical Knowledge Reasoning Engine
+    // 2. Healthfolio On-Device Clinical Knowledge Reasoning Engine
     const { text, dataPoints } = generateLocalClinicalResponse(userMessage, snapshot);
 
     return {

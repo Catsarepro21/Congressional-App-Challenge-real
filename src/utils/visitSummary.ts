@@ -4,7 +4,7 @@ import { localDate } from "./daily";
 /** Explicit fields only: never serialize tokens, API keys or document images. */
 export function visitSummary(state: SafeScaleState): string {
   return [
-    "SAFESCALE — PERSONAL VISIT NOTES",
+    "HEALTHFOLIO — PERSONAL VISIT NOTES",
     `Prepared ${localDate()}${state.isTestMode ? " · FICTIONAL SAMPLE DATA" : ""}`,
     `Name: ${state.profile.name || "Not entered"}`,
     `Allergies recorded: ${state.userAllergies.join(", ") || "Not entered"}`,

@@ -38,7 +38,7 @@ export function promptMealPhoto(onPhotoSelected: (uri: string) => void): void {
             if (!perm.granted) {
               Alert.alert(
                 'Camera Access Required',
-                'Enable Camera access for SafeScale Health in Settings to snap meal photos.',
+                'Enable Camera access for Healthfolio in Settings to snap meal photos.',
                 [{text:'Cancel',style:'cancel'}, {text:'Open Settings',onPress:() => {void Linking.openSettings();}}],
               );
               return;
@@ -66,7 +66,7 @@ export function promptMealPhoto(onPhotoSelected: (uri: string) => void): void {
             if (!perm.granted) {
               Alert.alert(
                 'Photos Access Required',
-                'Enable Photos access for SafeScale Health in Settings to select an attachment.',
+                'Enable Photos access for Healthfolio in Settings to select an attachment.',
                 [{text:'Cancel',style:'cancel'}, {text:'Open Settings',onPress:() => {void Linking.openSettings();}}],
               );
               return;

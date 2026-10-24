@@ -4,7 +4,7 @@ import WebVaultUnlock from './src/components/care/WebVaultUnlock';
 import { Button } from './src/components/care/UI';
 /**
  * @file App.tsx
- * @description Root application entry point for SafeScale Health.
+ * @description Root application entry point for Healthfolio.
  *
  * Provides:
  *   - SafeAreaProvider  (react-native-safe-area-context)
@@ -95,7 +95,7 @@ function AppContents() {
     <Text accessibilityRole="alert">{storageError}</Text>
     <Button label="Retry storage" onPress={() => {if (readFailed) void useSafeScaleStore.persist.rehydrate(); else void SecureHealthStorage.retryWrite();}} />
     {readFailed && <>
-      {confirmStorageReset && <Text>This permanently deletes SafeScale records and attachments on this device. Apple Health and your photo library are unchanged.</Text>}
+      {confirmStorageReset && <Text>This permanently deletes Healthfolio records and attachments on this device. Apple Health and your photo library are unchanged.</Text>}
       <Button label={confirmStorageReset ? 'Permanently delete saved records' : 'Reset saved records…'} secondary onPress={async () => {
         if (!confirmStorageReset) {setConfirmStorageReset(true); return;}
         try {await deleteLocalHealthData(); setConfirmStorageReset(false);} catch {setConfirmStorageReset(false);}

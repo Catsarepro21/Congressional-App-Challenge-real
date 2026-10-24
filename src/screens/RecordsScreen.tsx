@@ -46,7 +46,7 @@ export default function RecordsScreen() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `safescale-visit-${localDate()}.txt`;
+        link.download = `healthfolio-visit-${localDate()}.txt`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } else await Share.share({ message: summary, title: "My visit notes" });

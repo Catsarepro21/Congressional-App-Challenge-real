@@ -28,7 +28,7 @@ export default function WebVaultUnlock() {
       {error ? <Text accessibilityRole="alert" style={s.body}>{error}</Text> : null}
       <Button label={busy ? 'Opening…' : creating ? 'Create encrypted vault' : 'Unlock vault'} onPress={unlock} disabled={busy || !passphrase || (creating && passphrase.length < 12)} />
       {error && <>
-        {confirmReset && <Text style={s.body}>This permanently deletes SafeScale records and attachments saved in this browser. There is no recovery.</Text>}
+        {confirmReset && <Text style={s.body}>This permanently deletes Healthfolio records and attachments saved in this browser. There is no recovery.</Text>}
         <Button label={confirmReset ? 'Permanently delete browser records' : 'Reset browser vault…'} secondary disabled={busy} onPress={async () => {
           if (!confirmReset) {setConfirmReset(true); return;}
           setBusy(true);

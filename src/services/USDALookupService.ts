@@ -7,7 +7,7 @@
  *   - Direct lookup by USDA FDC ID
  *   - Offline UPC / EAN barcode lookup
  *   - Category browsing
- *   - Conversion to SafeScale's unified FoodAnalysisResult format
+ *   - Conversion to Healthfolio's unified FoodAnalysisResult format
  */
 
 import { USDA_COMMON_FOODS } from '../data/usda_common_foods';
@@ -226,7 +226,7 @@ export const USDALookupService = {
   },
 
   /**
-   * Convert a USDA food entry into SafeScale's unified FoodAnalysisResult format.
+   * Convert a USDA food entry into Healthfolio's unified FoodAnalysisResult format.
    */
   toFoodAnalysisResult: (
     entry: USDAFoodEntry,

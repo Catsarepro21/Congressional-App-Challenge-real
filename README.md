@@ -1,4 +1,4 @@
-# SafeScale Health
+# Healthfolio
 
 ## October 23, 2026: local-only security changes
 

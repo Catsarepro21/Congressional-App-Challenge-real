@@ -10,5 +10,5 @@ export default function AppPrivacyCover() {
     return () => subscription.remove();
   }, []);
   if (!covered) return null;
-  return <View accessibilityViewIsModal style={{position:'absolute',top:0,right:0,bottom:0,left:0,zIndex:99999,justifyContent:'center',alignItems:'center',backgroundColor:'#F5F6F1'}}><Text>SafeScale Health</Text></View>;
+  return <View accessibilityViewIsModal style={{position:'absolute',top:0,right:0,bottom:0,left:0,zIndex:99999,justifyContent:'center',alignItems:'center',backgroundColor:'#F5F6F1'}}><Text>Healthfolio</Text></View>;
 }

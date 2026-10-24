@@ -106,7 +106,7 @@ const DEFAULT_SLEEP_CONSISTENCY = 80;
  * Typed stub representing a single sample record as delivered by the
  * iOS HealthKit native bridge (react-native-health or similar adapter).
  *
- * Only the data types relevant to SafeScale Health are enumerated.
+ * Only the data types relevant to Healthfolio are enumerated.
  * Additional HK types can be appended to the union as the feature set expands.
  */
 export interface AppleHealthKitSample {
@@ -560,7 +560,7 @@ export class HealthDataService {
           console.warn('[HealthKit] Permission request failed:', error);
           reject(new Error(
             `HealthKit initialization failed: ${msg}. ` +
-            'Verify that Health access is enabled in iPhone Settings → Privacy & Security → Health → SafeScale Health.',
+            'Verify that Health access is enabled in iPhone Settings → Privacy & Security → Health → Healthfolio.',
           ));
         } else {
           resolve(true);
