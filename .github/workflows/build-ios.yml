@@ -81,7 +81,7 @@ jobs:
       - name: Verify generated project
         run: |
           set -euo pipefail
-          test -f ios/SafeScaleHealth.xcodeproj/project.pbxproj
+          test -f ios/Healthfolio.xcodeproj/project.pbxproj
 
       - name: Install pods
         working-directory: ios
@@ -89,15 +89,15 @@ jobs:
           set -euo pipefail
           printf 'export NODE_BINARY="%s"\n' "$(command -v node)" > .xcode.env.local
           pod install --repo-update
-          test -f SafeScaleHealth.xcworkspace/contents.xcworkspacedata
+          test -f Healthfolio.xcworkspace/contents.xcworkspacedata
 
       - name: Compile unsigned app
         run: |
           set -euo pipefail
 
           xcodebuild \
-            -workspace ios/SafeScaleHealth.xcworkspace \
-            -scheme SafeScaleHealth \
+            -workspace ios/Healthfolio.xcworkspace \
+            -scheme Healthfolio \
             -configuration Release \
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
@@ -111,11 +111,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP_PATH=build/Build/Products/Release-iphoneos/SafeScaleHealth.app
+          APP_PATH=build/Build/Products/Release-iphoneos/Healthfolio.app
           test -d "$APP_PATH"
 
           mkdir -p package/Payload
-          ditto "$APP_PATH" package/Payload/SafeScaleHealth.app
+          ditto "$APP_PATH" package/Payload/Healthfolio.app
 
           cd package
           zip -qry SafeScaleHealth-unsigned.ipa Payload

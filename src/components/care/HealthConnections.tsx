@@ -20,7 +20,7 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
   async function connect(source: HealthSource, reconnect = false, confirmed = false) {
     if (lock.current || demo) return;
     if (source === 'google-health' && !confirmed && (reconnect || connections?.[source]?.consentVersion !== 1)) {
-      Alert.alert('Connect Google Health / Fitbit?', 'Google will handle sign-in and permission approval. SafeScale downloads your permitted readings from Google. Your SafeScale journal, photos, chats and medical records are not uploaded. Imported readings and connection tokens are encrypted on this iPhone.', [
+      Alert.alert('Connect Google Health / Fitbit?', 'Google will handle sign-in and permission approval. Healthfolio downloads your permitted readings from Google. Your Healthfolio journal, photos, chats and medical records are not uploaded. Imported readings and connection tokens are encrypted on this iPhone.', [
         {text:'Cancel', style:'cancel'}, {text:'Connect', onPress:() => {void connect(source,reconnect,true);}},
       ]); return;
     }
@@ -99,7 +99,7 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
       `Native Module: ${diag.hasNativeBridge ? 'Found' : 'Missing'}`,
       `Permission Keys: ${diag.permissionKeysCount} available`,
       diag.reason ? `Note: ${diag.reason}` : '',
-      '\nIf you do not see the permissions prompt, open:\niPhone Settings → Privacy & Security → Health → SafeScale Health',
+      '\nIf you do not see the permissions prompt, open:\niPhone Settings → Privacy & Security → Health → Healthfolio',
     ].filter(Boolean).join('\n');
     Alert.alert('Apple Health Diagnostics', lines);
   }
@@ -108,7 +108,7 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
       { text: 'Cancel', style: 'cancel' }, { text: 'Disconnect', onPress: () => {
         if (source === 'google-health') cancelGoogleHealthSync();
         const state = useSafeScaleStore.getState(); const next = { ...state.profile.healthConnections }; delete next[source];
-        state.updateProfile({ healthConnections: next, ...(state.profile.lastHealthSource === source ? {lastHealthSource:undefined} : {}) }); setMessage(`${HEALTH_SOURCE_NAMES[source]} disconnected from SafeScale.`);
+        state.updateProfile({ healthConnections: next, ...(state.profile.lastHealthSource === source ? {lastHealthSource:undefined} : {}) }); setMessage(`${HEALTH_SOURCE_NAMES[source]} disconnected from Healthfolio.`);
       } },
     ]);
   }
@@ -120,7 +120,7 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
       const connection = connections?.[source];
       return <View key={source} style={{ gap: 9, borderTopWidth: 1, borderColor: C.line, paddingTop: 14 }}>
         <Text style={s.label}>{HEALTH_SOURCE_NAMES[source]}{source === 'google-fit' ? ' · Legacy API' : ''}</Text>
-        <Text style={s.body}>{!supported ? source === 'health-connect' ? 'Available in the Android app.' : 'Available in the iPhone app.' : connection?.lastSyncedAt ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}` : connection ? 'Connected · No readings imported yet' : source === 'google-health' ? 'Import Fitbit and other readings linked to your Google Health account. Read-only access; no journal, photo, chat or medical-record uploads.' : 'You choose which health information SafeScale can read.'}</Text>
+        <Text style={s.body}>{!supported ? source === 'health-connect' ? 'Available in the Android app.' : 'Available in the iPhone app.' : connection?.lastSyncedAt ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}` : connection ? 'Connected · No readings imported yet' : source === 'google-health' ? 'Import Fitbit and other readings linked to your Google Health account. Read-only access; no journal, photo, chat or medical-record uploads.' : 'You choose which health information Healthfolio can read.'}</Text>
         {connection?.wearable?.detected ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignSelf: 'flex-start' }}>
             <Text style={{ fontSize: 13 }}>⌚</Text>

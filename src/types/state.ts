@@ -1,6 +1,6 @@
 /**
  * @file state.ts
- * @description Strict TypeScript interface definitions for all SafeScale Health global state domains.
+ * @description Strict TypeScript interface definitions for all Healthfolio global state domains.
  * All types are fully typed with zero usage of `any`.
  */
 

@@ -103,7 +103,7 @@ export function Page({
       >
         <View style={s.row}>
           <View style={{ flex: 1 }}>
-            <Text style={s.eyebrow}>SAFESCALE / HEALTH COMPANION</Text>
+            <Text style={s.eyebrow}>HEALTHFOLIO / HEALTH COMPANION</Text>
             <Text accessibilityRole="header" style={s.title}>
               {title}
             </Text>

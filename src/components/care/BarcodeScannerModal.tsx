@@ -82,7 +82,7 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
       if (permission?.canAskAgain === false) {await Linking.openSettings(); return;}
       const next = await requestPermission();
       if (!next.granted) setError(next.canAskAgain ? 'Camera access was not enabled. You can retry or enter the barcode manually.' : 'Camera access is disabled. Tap Open Camera Settings to enable it.');
-    } catch {setError('Camera could not start. Check iPhone Settings → SafeScale Health → Camera.');}
+    } catch {setError('Camera could not start. Check iPhone Settings → Healthfolio → Camera.');}
   }
 
   // Scanner laser line animation

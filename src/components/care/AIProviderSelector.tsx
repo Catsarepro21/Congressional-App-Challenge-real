@@ -57,7 +57,7 @@ export default function AIProviderSelector({
       {showHeading ? (
         <Heading
           title="Intelligence & privacy"
-          detail="Choose how SafeScale processes ingredient scans and health insights. You can change this any time in Settings."
+          detail="Choose how Healthfolio processes ingredient scans and health insights. You can change this any time in Settings."
         />
       ) : null}
 

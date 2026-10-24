@@ -1,6 +1,6 @@
 /**
  * @file theme.ts
- * @description Material 3 Design System token constants for SafeScale Health.
+ * @description Material 3 Design System token constants for Healthfolio.
  *
  * Cross-referenced against Stitch Design System Screen ID:
  *   asset-stub-assets-92e53d5e4f4743dba630e7a393eda643-1779903855787

@@ -1,6 +1,6 @@
 /**
  * @file index.ts
- * @description Barrel export for all SafeScale Health service modules.
+ * @description Barrel export for all Healthfolio service modules.
  * Import from '@/services' for clean import paths in consumer files.
  */
 

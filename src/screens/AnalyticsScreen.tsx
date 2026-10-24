@@ -688,7 +688,7 @@ export const AnalyticsScreen: React.FC = () => {
   const generateDoctorReport = (): string => {
     const todayStr = new Date().toLocaleDateString();
     let report = `========================================\n`;
-    report += `SAFESCALE HEALTH CLINICIAN SUMMARY REPORT\n`;
+    report += `HEALTHFOLIO CLINICIAN SUMMARY REPORT\n`;
     report += `Generated on: ${todayStr}\n`;
     report += `========================================\n\n`;
 
@@ -788,7 +788,7 @@ export const AnalyticsScreen: React.FC = () => {
     }
     
     report += `\n========================================\n`;
-    report += `End of Health Summary Report. SafeScale Health Inc.\n`;
+    report += `End of Health Summary Report. Healthfolio Inc.\n`;
     return report;
   };
 

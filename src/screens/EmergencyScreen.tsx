@@ -109,7 +109,7 @@ export default function EmergencyScreen() {
         )}
       </Card>
       <Text style={s.body}>
-        This card is available inside SafeScale. It does not set up your phone’s
+        This card is available inside Healthfolio. It does not set up your phone’s
         lock-screen Medical ID or contact emergency services automatically.
       </Text>
     </Page>

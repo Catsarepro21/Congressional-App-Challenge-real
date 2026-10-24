@@ -1,6 +1,6 @@
 /**
  * @file src/store/useSafeScaleStore.ts
- * @description Zustand global state store for the SafeScale Health application.
+ * @description Zustand global state store for the Healthfolio application.
  *
  * ARCHITECTURAL CONTRACTS:
  *

@@ -181,7 +181,7 @@ export default function HealthChatScreen({ onBack }: { onBack?: () => void }) {
                           ? '☁️ Cloud Gemini (Approved)'
                           : msg.source === 'apple-foundation'
                           ? '🍏 Apple Foundation Model'
-                          : '⚡ SafeScale local rules'}
+                          : '⚡ Healthfolio local rules'}
                       </Text>
                     </View>
                     <Text style={localStyles.timeText}>{msg.timestamp}</Text>
