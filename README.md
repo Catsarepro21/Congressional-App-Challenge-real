@@ -24,20 +24,3 @@ npm run web
 
 For a fictional walkthrough: finish onboarding, then select **Profile → Enter Competition Demo**. Native features require a custom build. Use the **Build iOS IPA (Unsigned)** GitHub workflow, or generate the iOS project on a compatible Mac and open `ios/Healthfolio.xcworkspace`.
 
-## Checks
-
-```sh
-npm run check:secrets
-npm run typecheck
-npm test
-```
-
-October 26: **145 tests pass**, TypeScript passes, and common credential checks pass. The iOS JavaScript/Hermes export passes. Native device testing is still required. Dependency audit: 0 critical and 5 high flags in Expo tooling.
-
-## Privacy
-
-Records and attached photos use encrypted local storage. Cloud AI uploads are disabled; optional Google Health imports are read-only. Manual exports are unencrypted copies. See [security notes](SECURITY_AUDIT.md) for details.
-
-This is a wellness prototype. The repository is private, so downloads require repository access.
-
-
