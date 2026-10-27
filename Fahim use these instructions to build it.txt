@@ -1,3 +1,0 @@
-Use README.md for the current build and free Personal Team installation steps.
-The old Xcode 16.2 / unsigned-IPA instructions are superseded.
-An unsigned IPA is a build artifact, not a directly installable iPhone app.
