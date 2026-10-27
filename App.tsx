@@ -24,7 +24,6 @@ import JournalScreen from "./src/screens/JournalScreen";
 import RecordsScreen from "./src/screens/RecordsScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import EmergencyScreen from "./src/screens/EmergencyScreen";
-import SettingsScreen from "./src/screens/SettingsScreen";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import HealthChatScreen from "./src/screens/HealthChatScreen";
 import { BottomNavBar } from "./src/components/BottomNavBar";
@@ -180,3 +179,4 @@ function AppContents() {
     </SafeAreaProvider>
   );
 }
+
