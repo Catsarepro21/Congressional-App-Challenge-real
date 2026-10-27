@@ -82,10 +82,16 @@ export const SecureHealthStorage = {
       const value = await photoStorage.getItem(name);
       const photos = value !== null && Platform.OS !== 'web' ? await inlineSavedPhotos(value) : undefined;
       const clean = value === null ? null : stripWebCredentials(photos?.value ?? value);
-      if (clean !== null) await photoStorage.setItem(name, clean);
-      // Remove temporary plaintext copies only after the encrypted write succeeds.
-      for (const file of photos?.temporaryFiles || []) {try {await removePhotoCacheCopy(file);} catch { /* The OS may retain its temporary cache copy. */ }}
-      useStorageStatus.setState({error:null, readFailed:false}); return clean;
+      try {
+        if (clean !== null) await photoStorage.setItem(name, clean);
+        // Remove temporary plaintext copies only after the encrypted write succeeds.
+        for (const file of photos?.temporaryFiles || []) {try {await removePhotoCacheCopy(file);} catch { /* The OS may retain its temporary cache copy. */ }}
+        useStorageStatus.setState({error:null, readFailed:false});
+      } catch {
+        if (clean !== null && !pendingWrite) pendingWrite = {name, value:clean};
+        useStorageStatus.setState({error:'Records were opened, but storage updates are not saved yet. Free device storage and retry before closing the app.', readFailed:false});
+      }
+      return clean;
     } catch (error) {
       useStorageStatus.setState({error:'Saved data could not be opened. Unlock the device and retry. Your saved data has not been replaced.', readFailed:true});
       throw error;
@@ -138,3 +144,4 @@ export const SecureHealthStorage = {
   },
   retryWrite: async () => {if (pendingWrite) await SecureHealthStorage.setItem(pendingWrite.name, pendingWrite.value);},
 };
+

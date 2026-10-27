@@ -152,3 +152,19 @@ test('resetting a locked browser vault releases its pending hydration instead of
   assert.equal(records.size,0);assert.equal(mod.useStorageStatus.getState().readFailed,false);
   await tick();await mod.unlockWebVault('replacement synthetic passphrase');
 });
+
+test('readable native records stay available when a migration rewrite fails and can be retried',async()=>{
+  let full=true;const events=[];
+  const value=JSON.stringify({state:{medicalRecords:[{title:'Synthetic record'}]}});
+  const mod=load('src/services/SecureHealthStorage.ts',{
+    '@react-native-async-storage/async-storage':{},'react-native':{Platform:{OS:'ios'}},'expo-secure-store':{},'expo-crypto':{},zustand:require('zustand'),
+    './ProtectedStorageCore':{createProtectedStorage:()=>({getItem:async name=>name==='safescale-storage'?value:null,setItem:async()=>{events.push('write');if(full)throw Error('disk full');},removeItem:async()=>{}})},
+    './LocalPhotoStorage':{inlineSavedPhotos:async value=>({value,temporaryFiles:['file:///cache/copy.jpg']}),removePhotoCacheCopy:async()=>events.push('cleanup')},
+  });
+  assert.equal(JSON.parse(await mod.SecureHealthStorage.getItem('safescale-storage')).state.medicalRecords[0].title,'Synthetic record');
+  assert.equal(mod.useStorageStatus.getState().readFailed,false);
+  assert.ok(mod.useStorageStatus.getState().error);assert.deepEqual(events,['write']);
+  full=false;await mod.SecureHealthStorage.retryWrite();
+  assert.equal(mod.useStorageStatus.getState().error,null);assert.deepEqual(events,['write','write','cleanup']);
+});
+

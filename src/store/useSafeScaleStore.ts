@@ -1732,6 +1732,8 @@ export async function deleteLocalHealthData(): Promise<void> {
       demoSnapshot = null;
       useSafeScaleStore.setState({...useSafeScaleStore.getInitialState(), dataRevision:revision}, true);
     });
+    // Notify hydration subscribers again; web recovery completes after the new vault is unlocked.
+    void useSafeScaleStore.persist.rehydrate();
   } catch (error) {
     useSafeScaleStore.setState({isDeletingData:false});
     throw error;
@@ -1745,3 +1747,4 @@ export function retryWorkoutSync(id: string): void {
   useSafeScaleStore.setState({workouts:state.workouts.map(item => item.id === id ? {...item,healthSyncStatus:'pending'} : item)});
   syncSavedWorkout(workout);
 }
+
