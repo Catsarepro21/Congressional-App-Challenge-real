@@ -7,7 +7,7 @@
  * capabilities and disables the on-device option on unsupported devices with
  * a clear explanation.
  *
- * Used in both OnboardingScreen (step 2) and SettingsScreen.
+ * Used in onboarding and the active profile settings.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -57,7 +57,7 @@ export default function AIProviderSelector({
       {showHeading ? (
         <Heading
           title="Intelligence & privacy"
-          detail="Choose how SafeScale processes ingredient scans and health insights. You can change this any time in Settings."
+          detail="Choose how Healthfolio processes ingredient scans and health insights. You can change this any time in Settings."
         />
       ) : null}
 
@@ -208,3 +208,4 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+

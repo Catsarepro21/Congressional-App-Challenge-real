@@ -3,7 +3,7 @@
  * @description User-prompted meal photo capture / library selector with explicit permission handling.
  */
 
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {Platform} from 'react-native';
 import {inlineLocalPhoto, removePhotoCacheCopy} from '../services/LocalPhotoStorage';
@@ -38,14 +38,17 @@ export function promptMealPhoto(onPhotoSelected: (uri: string) => void): void {
             if (!perm.granted) {
               Alert.alert(
                 'Camera Access Required',
-                'Please enable Camera access for SafeScale Health in iPhone Settings to snap meal photos.',
+                'Enable Camera access for Healthfolio in Settings to snap meal photos.',
+                [{text:'Cancel',style:'cancel'}, {text:'Open Settings',onPress:() => {void Linking.openSettings();}}],
               );
               return;
             }
+            // The native chooser must finish dismissing before another controller is presented.
+            if (Platform.OS === 'ios') await new Promise(resolve => setTimeout(resolve,350));
             const result = await ImagePicker.launchCameraAsync({
               mediaTypes: ['images'],
               quality: 0.7,
-              base64: true,
+              base64: Platform.OS === 'web',
             });
             if (!result.canceled && result.assets?.[0]?.uri) {
               await selectPhoto(result.assets[0].uri, onPhotoSelected, result.assets[0].base64);
@@ -63,14 +66,16 @@ export function promptMealPhoto(onPhotoSelected: (uri: string) => void): void {
             if (!perm.granted) {
               Alert.alert(
                 'Photos Access Required',
-                'Please enable Photo Library access for SafeScale Health in iPhone Settings to select photos.',
+                'Enable Photos access for Healthfolio in Settings to select an attachment.',
+                [{text:'Cancel',style:'cancel'}, {text:'Open Settings',onPress:() => {void Linking.openSettings();}}],
               );
               return;
             }
+            if (Platform.OS === 'ios') await new Promise(resolve => setTimeout(resolve,350));
             const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ['images'],
               quality: 0.7,
-              base64: true,
+              base64: Platform.OS === 'web',
             });
             if (!result.canceled && result.assets?.[0]?.uri) {
               await selectPhoto(result.assets[0].uri, onPhotoSelected, result.assets[0].base64);

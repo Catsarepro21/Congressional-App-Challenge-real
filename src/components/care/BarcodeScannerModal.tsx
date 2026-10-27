@@ -21,6 +21,8 @@ import {
   Animated,
   Alert,
   Platform,
+  Linking,
+  AppState,
   StyleSheet,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -51,7 +53,7 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
   const addLoggedItem = useSafeScaleStore(state => state.addLoggedItem);
   const allergies = useSafeScaleStore(state => state.userAllergies);
 
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission, getPermission] = useCameraPermissions();
   const [manualCode, setManualCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -59,6 +61,29 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
   const [allergenWarnings, setAllergenWarnings] = useState<string[]>([]);
   const [logged, setLogged] = useState(false);
   const [cameraActive, setCameraActive] = useState(true);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
+  const resolving = useRef(false);
+  const generation = useRef(0);
+  useEffect(() => {
+    if (!visible || Platform.OS === 'web') return;
+    setForeground(AppState.currentState === 'active');
+    void getPermission().then(next => {if (next.granted) setError('');}).catch(() => setError('Camera permission could not be checked. Try again or open Settings.'));
+    const listener = AppState.addEventListener('change', state => {
+      setForeground(state === 'active');
+      if (state !== 'active') setCameraReady(false);
+      if (state === 'active') void getPermission().then(next => {if (next.granted) setError('');}).catch(() => {});
+    });
+    return () => listener.remove();
+  }, [visible, getPermission]);
+  async function enableCamera() {
+    setError('');
+    try {
+      if (permission?.canAskAgain === false) {await Linking.openSettings(); return;}
+      const next = await requestPermission();
+      if (!next.granted) setError(next.canAskAgain ? 'Camera access was not enabled. You can retry or enter the barcode manually.' : 'Camera access is disabled. Tap Open Camera Settings to enable it.');
+    } catch {setError('Camera could not start. Check iPhone Settings → Healthfolio → Camera.');}
+  }
 
   // Scanner laser line animation
   const laserAnim = useRef(new Animated.Value(0)).current;
@@ -78,6 +103,8 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
 
   useEffect(() => {
     if (!visible) {
+      generation.current += 1; resolving.current = false;
+      setLoading(false); setCameraActive(true); setCameraReady(false);
       setResult(null);
       setError('');
       setManualCode('');
@@ -88,11 +115,14 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
 
   const handleResolveBarcode = async (barcode: string) => {
     const trimmed = barcode.trim();
+    if (resolving.current) return;
     if (!trimmed) {
       setError('Please enter or scan a barcode.');
       return;
     }
 
+    resolving.current = true;
+    const request = generation.current;
     setLoading(true);
     setError('');
     setAllergenWarnings([]);
@@ -100,6 +130,7 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
 
     try {
       const foodResult = await BarcodeLookupService.lookupBarcode(trimmed);
+      if (generation.current !== request) return;
       setResult(foodResult);
 
       // Allergen cross-check
@@ -114,16 +145,17 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
         }
       }
     } catch (err: unknown) {
+      if (generation.current !== request) return;
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
       setCameraActive(true);
     } finally {
-      setLoading(false);
+      if (generation.current === request) {resolving.current = false; setLoading(false);}
     }
   };
 
   const handleBarcodeScanned = ({ data }: { data: string }) => {
-    if (loading || result) return;
+    if (loading || result || !cameraReady) return;
     handleResolveBarcode(data);
   };
 
@@ -179,14 +211,16 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
       {/* Viewfinder View / Camera */}
       {!result && (
         <View style={localStyles.cameraContainer}>
-          {Platform.OS !== 'web' && permission?.granted ? (
+          {Platform.OS !== 'web' && permission?.granted && foreground ? (
             <CameraView
               style={StyleSheet.absoluteFill}
               facing="back"
+              onCameraReady={() => setCameraReady(true)}
+              onMountError={event => {setCameraReady(false); setError(`Camera could not start: ${event.message}. Close the scanner and retry.`);}}
               barcodeScannerSettings={{
                 barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
               }}
-              onBarcodeScanned={cameraActive && !loading ? handleBarcodeScanned : undefined}
+              onBarcodeScanned={cameraActive && cameraReady && !loading ? handleBarcodeScanned : undefined}
             />
           ) : (
             <View style={localStyles.simulatedCamera}>
@@ -201,16 +235,17 @@ export default function BarcodeScannerModal({ visible, onClose, onScanned }: Bar
               {!permission?.granted && Platform.OS !== 'web' && (
                 <Pressable
                   style={localStyles.permissionBtn}
-                  onPress={() => requestPermission()}
+                  accessibilityRole="button"
+                  onPress={enableCamera}
                 >
-                  <Text style={localStyles.permissionBtnText}>Enable Camera</Text>
+                  <Text style={localStyles.permissionBtnText}>{permission?.canAskAgain === false ? 'Open Camera Settings' : 'Enable Camera'}</Text>
                 </Pressable>
               )}
             </View>
           )}
 
           {/* Scanner Reticle Overlay */}
-          <View style={localStyles.reticleFrame}>
+          <View pointerEvents="none" style={localStyles.reticleFrame}>
             <Animated.View
               style={[
                 localStyles.laserLine,

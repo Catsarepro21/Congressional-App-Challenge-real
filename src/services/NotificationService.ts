@@ -84,8 +84,8 @@ export const NotificationService = {
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'SafeScale reminder',
-          body: 'Open SafeScale to review your scheduled routine.',
+          title: 'Healthfolio reminder',
+          body: 'Open Healthfolio to review your scheduled routine.',
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           data: { medId },
@@ -130,8 +130,8 @@ export const NotificationService = {
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'SafeScale Health Reminder',
-          body: 'This is a test notification from your SafeScale Health Tracker!',
+          title: 'Healthfolio Reminder',
+          body: 'This is a test notification from your Healthfolio Tracker!',
           sound: true,
         },
         trigger: {
@@ -217,8 +217,8 @@ export const NotificationService = {
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'SafeScale reminder',
-          body: 'Open SafeScale to review an item in your routine.',
+          title: 'Healthfolio reminder',
+          body: 'Open Healthfolio to review an item in your routine.',
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           data: { type: 'refill' },
@@ -262,8 +262,8 @@ export const NotificationService = {
 
       const identifier = await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'SafeScale reminder',
-          body: 'Open SafeScale to review an upcoming date.',
+          title: 'Healthfolio reminder',
+          body: 'Open Healthfolio to review an upcoming date.',
           sound: true,
           priority: Notifications.AndroidNotificationPriority.DEFAULT,
           data: { milestoneId },

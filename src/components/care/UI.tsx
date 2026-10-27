@@ -1,4 +1,5 @@
 import React from "react";
+import AppPrivacyCover from '../AppPrivacyCover';
 import {
   View,
   Text,
@@ -102,7 +103,7 @@ export function Page({
       >
         <View style={s.row}>
           <View style={{ flex: 1 }}>
-            <Text style={s.eyebrow}>SAFESCALE / HEALTH COMPANION</Text>
+            <Text style={s.eyebrow}>HEALTHFOLIO / HEALTH COMPANION</Text>
             <Text accessibilityRole="header" style={s.title}>
               {title}
             </Text>
@@ -190,6 +191,7 @@ export function Sheet({
             {children}
           </ScrollView>
         </View>
+        <AppPrivacyCover />
       </KeyboardAvoidingView>
     </Modal>
   );

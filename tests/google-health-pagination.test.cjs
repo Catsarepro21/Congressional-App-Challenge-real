@@ -14,6 +14,7 @@ function service(fetch, DateImpl = Date) {
     exports, fetch, URL, URLSearchParams, Date: DateImpl, console,
     require: name => {
       // Exercise the retained parser with synthetic responses; production transport stays blocked.
+      if (name === './GoogleHealthTransport') return {googleHealthFetch:fetch};
       if (name === './OfflinePolicy') return {offlineFetch:fetch,blockExternalService:()=>{throw Error('External services disabled');}};
       if (name === 'expo-web-browser') return { maybeCompleteAuthSession() {} };
       if (name === 'react-native') return { Platform: { OS: 'ios', select: values => values.ios } };

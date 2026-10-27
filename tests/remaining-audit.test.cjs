@@ -8,7 +8,7 @@ function load(file,mocks={}) {
 }
 function storeFixture(overrides={}) {
   let saved;let cancelled=0;
-  const storage={getItem:async()=>null,setItem:async(_n,v)=>{saved=v;},removeItem:async()=>{saved=null;},clearSavedData:async()=>{saved=null;},retryWrite:async()=>{}};
+  const storage={getItem:async()=>null,setItem:async(_n,v)=>{saved=v;},removeItem:async()=>{saved=null;},clearSavedData:async reset=>{saved=null;reset?.();},retryWrite:async()=>{}};
   const mod=load('src/store/useSafeScaleStore.ts',{
     zustand:require('zustand'),'zustand/middleware':require('zustand/middleware'),
     '../utils/daily':load('src/utils/daily.ts'),'../utils/deviceName':{getSuggestedOwnerName:()=>null},
@@ -118,3 +118,18 @@ test('all modes block cloud actions even with a key and stale approval',async()=
   await assert.rejects(g.executeWithPermission(details,async()=>{calls++;}),/blocked/);
   assert.equal(calls,0);assert.equal(s.getState().currentRequest,null);
 });
+
+test('reset after an initial storage failure completes hydration and restores onboarding',async()=>{
+  let corrupt=true;
+  const f=storeFixture({'../services/SecureHealthStorage':{SecureHealthStorage:{
+    getItem:async()=>{if(corrupt)throw Error('Unreadable records');return null;},
+    setItem:async()=>{},removeItem:async()=>{},clearSavedData:async reset=>{corrupt=false;reset?.();},
+  }}});
+  const store=f.useSafeScaleStore;await store.persist.rehydrate();
+  assert.equal(store.persist.hasHydrated(),false);
+  let finished=0;store.persist.onFinishHydration(()=>finished++);
+  await f.deleteLocalHealthData();await new Promise(r=>setTimeout(r,0));
+  assert.equal(store.persist.hasHydrated(),true);assert.equal(finished,1);
+  assert.equal(store.getState().hasCompletedOnboarding,false);assert.equal(store.getState().isDeletingData,false);
+});
+

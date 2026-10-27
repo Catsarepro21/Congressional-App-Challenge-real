@@ -1,6 +1,6 @@
 /**
  * @file src/types/index.ts
- * @description Central type registry for the SafeScale Health application.
+ * @description Central type registry for the Healthfolio application.
  *
  * All domain interfaces and union types are defined here and exported for
  * consumption by services, store, and UI components. Zero usage of `any`.
@@ -651,6 +651,8 @@ export interface HealthWearableInfo {
 }
 
 export interface HealthConnection {
+  /** Version of the user's explicit consent to read Google Health, never to upload app records. */
+  consentVersion?: 1;
   accessToken?: string;
   refreshToken?: string;
   connectedAt: string;

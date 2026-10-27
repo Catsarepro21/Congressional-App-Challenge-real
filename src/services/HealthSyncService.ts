@@ -1,6 +1,7 @@
 import { Platform, NativeModules } from 'react-native';
 import { HealthDataService } from './HealthDataService';
 import { queryHealth } from './NativeHealthReader';
+import { GoogleHealthService } from './GoogleHealthService';
 import type { BiometricSummary, HealthConnection, HealthSource } from '../types';
 
 export const HEALTH_SOURCE_NAMES: Record<HealthSource, string> = {
@@ -21,6 +22,10 @@ export interface HealthSyncResult {
   activityRings?: any;
   sleepStages?: any;
   hrvMs?: number;
+}
+let googleSyncController: AbortController | undefined;
+export function cancelGoogleHealthSync(): void {
+  googleSyncController?.abort(); googleSyncController = undefined;
 }
 
 export async function bounded<T>(operation: Promise<T>, milliseconds = 45000): Promise<T> {
@@ -48,7 +53,38 @@ export function readableData(data: Partial<BiometricSummary> | null): Partial<Bi
 }
 
 export async function syncHealthSource(source: HealthSource, previous?: HealthConnection, customClientId?: string, includeProfile = false): Promise<HealthSyncResult | null> {
-  if (source !== 'apple' && source !== 'health-connect') throw new Error('External health services are disabled. Use Apple Health or Android Health Connect on this device.');
+  if (source === 'google-health') {
+    if (Platform.OS !== 'ios') throw new Error('Google Health is available in the native iPhone app.');
+    if ((!previous?.accessToken || previous.consentVersion !== 1) && !includeProfile) throw new Error('Reconnect Google Health to enable imports.');
+    if (googleSyncController && !includeProfile) throw new Error('A Google Health import is already in progress.');
+    cancelGoogleHealthSync();
+    const controller = new AbortController(); googleSyncController = controller;
+    try {
+      let connection = previous?.consentVersion === 1 ? {...previous} : undefined;
+      if (!connection?.accessToken) {
+        // Background sync must never launch sign-in or reuse tokens predating explicit consent.
+        if (!includeProfile) throw new Error('Reconnect Google Health to enable imports.');
+        const tokens = await GoogleHealthService.authorize(customClientId);
+        if (!tokens) return null;
+        if (controller.signal.aborted) throw new Error('Google Health import canceled.');
+        connection = {...tokens, connectedAt:new Date().toISOString(), consentVersion:1};
+      }
+      let rawData;
+      try {rawData = await bounded(GoogleHealthService.fetchFitnessData(connection.accessToken!, undefined, undefined, controller.signal));}
+      catch (error) {
+        if (!(error instanceof Error) || error.message !== 'UNAUTHENTICATED' || !connection.refreshToken) throw error;
+        connection.accessToken = await GoogleHealthService.refreshAccessToken(connection.refreshToken, customClientId, controller.signal);
+        rawData = await bounded(GoogleHealthService.fetchFitnessData(connection.accessToken, undefined, undefined, controller.signal));
+      }
+      const readings = readableData(rawData);
+      annotateImport(readings, 'Google Health / Fitbit');
+      const importedProfile = includeProfile ? await bounded(GoogleHealthService.fetchProfileData(connection.accessToken!, controller.signal)).catch(() => undefined) : undefined;
+      if (controller.signal.aborted) throw new Error('Google Health import canceled.');
+      return {connection:{...connection, ...(readings ? {lastSyncedAt:new Date().toISOString()} : {})}, readings,
+        profile: importedProfile ? {name:importedProfile.name, dob:importedProfile.dob, height:importedProfile.heightCm, weight:importedProfile.weightKg} : undefined};
+    } finally {controller.abort(); if (googleSyncController === controller) googleSyncController = undefined;}
+  }
+  if (source !== 'apple' && source !== 'health-connect') throw new Error('Google Fit legacy access is disabled. Use Google Health for Fitbit imports.');
   if (source === 'apple' || source === 'health-connect') {
     const expected = source === 'apple' ? 'ios' : 'android';
     if (Platform.OS !== expected) throw new Error(`${HEALTH_SOURCE_NAMES[source]} requires the native ${expected === 'ios' ? 'iPhone' : 'Android'} app.`);

@@ -381,7 +381,7 @@ export default function ActivityScreen() {
       <Card>
         <Heading
           title="Record or Log Workouts"
-          detail="SafeScale attempts to save completed workouts to Apple Health. Ring credit depends on the samples accepted by HealthKit."
+          detail="Healthfolio attempts to save completed workouts to Apple Health. Ring credit depends on the samples accepted by HealthKit."
         />
         <View style={s.wrap}>
           <Button
@@ -444,7 +444,7 @@ export default function ActivityScreen() {
                     <View style={s.row}>
                       <Text style={styles.workoutName}>{w.name || `${w.type} Workout`}</Text>
                       <Text style={styles.sourceTag}>
-                        {w.source === 'apple-health' ? ' Health' : w.source === 'google-fit' ? 'Google' : 'SafeScale'}
+                        {w.source === 'apple-health' ? ' Health' : w.source === 'google-fit' ? 'Google' : 'Healthfolio'}
                       </Text>
                     </View>
                     <Text style={styles.workoutMeta}>
@@ -491,7 +491,7 @@ export default function ActivityScreen() {
             Select your activity type. A timer and estimated calories will be recorded. Apple Health sync is attempted when you finish.
           </Text>
 
-          <View style={s.row}><Text style={[s.body,{flex:1}]}>Record GPS route and steps while SafeScale is open. Location and motion permissions are optional. Recording pauses on screen lock or background.</Text><Switch accessibilityLabel="Record GPS and steps" value={recordSensors} onValueChange={setRecordSensors} disabled={demo} /></View>
+          <View style={s.row}><Text style={[s.body,{flex:1}]}>Record GPS route and steps while Healthfolio is open. Location and motion permissions are optional. Recording pauses on screen lock or background.</Text><Switch accessibilityLabel="Record GPS and steps" value={recordSensors} onValueChange={setRecordSensors} disabled={demo} /></View>
           <View style={styles.typeSelectorGrid}>
             {WORKOUT_TYPES.map((item) => (
               <Pressable

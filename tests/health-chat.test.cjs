@@ -289,7 +289,7 @@ test('native chat returns actual model output and falls back locally on model er
     '../../modules/safescale-vision':native,
   }).LocalHealthChatEngine;
   let actualPrompt;
-  const response = await engine({isFoundationModelSupportedAsync:async()=>true,generateTextAsync:async(p,c)=>{actualPrompt=p;assert.match(c,/NUTRITION/);return {text:'Model answer for this question',isLocal:true,provider:'apple-foundation'};}}).sendMessage('Summarize my records');
+  const response = await engine({isFoundationModelSupportedAsync:async()=>true,generateTextAsync:async(p,c)=>{actualPrompt=p;assert.match(c,/nutrition/);return {text:'Model answer for this question',isLocal:true,provider:'apple-foundation'};}}).sendMessage('Summarize my records');
   assert.equal(actualPrompt,'Summarize my records'); assert.equal(response.source,'apple-foundation');
   assert.equal(response.text,'Model answer for this question');
   const fallback = await engine({isFoundationModelSupportedAsync:async()=>true,generateTextAsync:async()=>{throw Error('Model not ready');}}).sendMessage('What are my macros?');

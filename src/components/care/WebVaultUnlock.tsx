@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Text, View, TextInput} from 'react-native';
 import {unlockWebVault, useWebVaultStatus} from '../../services/SecureHealthStorage';
 import {Button, s, C} from './UI';
+import {deleteLocalHealthData} from '../../store/useSafeScaleStore';
 
 export default function WebVaultUnlock() {
   const creating = useWebVaultStatus(state => state.creating);
@@ -9,6 +10,7 @@ export default function WebVaultUnlock() {
   const [confirmation, setConfirmation] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   async function unlock() {
     if (creating && passphrase !== confirmation) {setError('The passphrases do not match.'); return;}
     setBusy(true); setError('');
@@ -25,6 +27,17 @@ export default function WebVaultUnlock() {
       {creating && <TextInput accessibilityLabel="Confirm vault passphrase" placeholder="Confirm passphrase" value={confirmation} onChangeText={setConfirmation} secureTextEntry autoCapitalize="none" autoCorrect={false} style={s.input} editable={!busy} />}
       {error ? <Text accessibilityRole="alert" style={s.body}>{error}</Text> : null}
       <Button label={busy ? 'Opening…' : creating ? 'Create encrypted vault' : 'Unlock vault'} onPress={unlock} disabled={busy || !passphrase || (creating && passphrase.length < 12)} />
+      {error && <>
+        {confirmReset && <Text style={s.body}>This permanently deletes Healthfolio records and attachments saved in this browser. There is no recovery.</Text>}
+        <Button label={confirmReset ? 'Permanently delete browser records' : 'Reset browser vault…'} secondary disabled={busy} onPress={async () => {
+          if (!confirmReset) {setConfirmReset(true); return;}
+          setBusy(true);
+          try {await deleteLocalHealthData(); setError(''); setPassphrase(''); setConfirmation('');}
+          catch {setError('Deletion could not finish. Please retry.');}
+          finally {setBusy(false); setConfirmReset(false);}
+        }} />
+        {confirmReset && <Button label="Cancel reset" secondary disabled={busy} onPress={() => setConfirmReset(false)} />}
+      </>}
     </View>
   </View>;
 }

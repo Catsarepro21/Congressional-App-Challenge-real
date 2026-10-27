@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SafeScale Health",
+    "name": "Healthfolio",
     "slug": "safescale-health",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,8 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "scheme": [
-      "com.anonymous.safescalehealth"
+      "com.anonymous.safescalehealth",
+      "com.googleusercontent.apps.178801571593-jjv6fmn8te3q9rjt4am5p3slk4m7d4vr"
     ],
     "ios": {
       "supportsTablet": true,
@@ -17,12 +18,13 @@
         "com.apple.developer.healthkit": true
       },
       "infoPlist": {
+        "CFBundleDisplayName": "Healthfolio",
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "SafeScale Health requires access to the camera to scan food barcodes and medical document records.",
-        "NSLocationWhenInUseUsageDescription": "SafeScale uses location for optional foreground workout routes and nearby care search.",
-        "NSHealthShareUsageDescription": "SafeScale reads the health information you allow to organize your daily records on this device.",
-        "NSHealthUpdateUsageDescription": "SafeScale Health requires access to write health data for tracking purposes.",
-        "NSMotionUsageDescription": "SafeScale uses motion access to count steps during workouts you choose to record.",
+        "NSCameraUsageDescription": "Healthfolio requires access to the camera to scan food barcodes and medical document records.",
+        "NSLocationWhenInUseUsageDescription": "Healthfolio uses location for optional foreground workout routes and nearby care search.",
+        "NSHealthShareUsageDescription": "Healthfolio reads the health information you allow to organize your daily records on this device.",
+        "NSHealthUpdateUsageDescription": "Healthfolio requires access to write health data for tracking purposes.",
+        "NSMotionUsageDescription": "Healthfolio uses motion access to count steps during workouts you choose to record.",
         "UIFileSharingEnabled": false
       }
     },
@@ -54,17 +56,22 @@
       }
     },
     "plugins": [
+      ["expo-image-picker", {
+        "photosPermission": "Healthfolio reads only the meal or document photos you choose to attach to your encrypted local records.",
+        "cameraPermission": "Healthfolio uses the camera when you choose to photograph a meal or document.",
+        "microphonePermission": false
+      }],
       "./plugins/withLocalNotificationsOnly",
       [
         "expo-camera",
         {
-          "cameraPermission": "SafeScale Health requires access to the camera to scan food barcodes and medical document records."
+          "cameraPermission": "Healthfolio requires access to the camera to scan food barcodes and medical document records."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "SafeScale uses location for optional foreground workout routes and nearby care search."
+          "locationWhenInUsePermission": "Healthfolio uses location for optional foreground workout routes and nearby care search."
         }
       ],
       "react-native-health-connect",

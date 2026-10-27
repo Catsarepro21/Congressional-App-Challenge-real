@@ -6,6 +6,8 @@ import { create } from 'zustand';
 import { createProtectedStorage } from './ProtectedStorageCore';
 import { createWebVault } from './WebVaultCore';
 import {inlineSavedPhotos, removePhotoCacheCopy} from './LocalPhotoStorage';
+import {getRandomBytesAsync} from 'expo-crypto';
+import {createPhotoRecordStorage} from './PhotoRecordStorage';
 
 const KEY_NAME = 'safescale.health.encryption.v1';
 const options = {keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY};
@@ -30,7 +32,7 @@ const nativeStorage = createProtectedStorage(AsyncStorage, {
     return sealed.combined('base64');
   },
   decrypt: async value => new TextDecoder().decode(await aesDecryptAsync(AESSealedData.fromCombined(value), await key(false))),
-});
+}, stripWebCredentials, false);
 
 /** Web preview has no device keychain. Never persist its API/OAuth credentials. */
 export function stripWebCredentials(value: string): string {
@@ -38,12 +40,14 @@ export function stripWebCredentials(value: string): string {
   if (data.state?.aiPreference === 'cloud') data.state.aiPreference = 'on-device';
   if (data.state?.profile) {
     delete data.state.profile.geminiApiKey;
-    for (const connection of Object.values(data.state.profile.healthConnections || {}) as Record<string, unknown>[]) {
-      delete connection.accessToken; delete connection.refreshToken;
+    for (const [source, connection] of Object.entries(data.state.profile.healthConnections || {}) as [string, Record<string, unknown>][]) {
+      const permittedGoogle = source === 'google-health' && Platform.OS === 'ios' && connection.consentVersion === 1;
+      if (!permittedGoogle) {delete connection.accessToken; delete connection.refreshToken;}
+      if (source === 'google-health' && !permittedGoogle) delete data.state.profile.healthConnections[source];
     }
     delete data.state.profile.healthConnections?.['google-fit'];
-    delete data.state.profile.healthConnections?.['google-health'];
-    if (data.state.profile.lastHealthSource?.startsWith('google-')) delete data.state.profile.lastHealthSource;
+    delete data.state.profile.googleAccessToken; delete data.state.profile.googleRefreshToken;
+    if (data.state.profile.lastHealthSource?.startsWith('google-') && !data.state.profile.healthConnections?.[data.state.profile.lastHealthSource]) delete data.state.profile.lastHealthSource;
   }
   return JSON.stringify(data);
 }
@@ -56,7 +60,7 @@ let webQueue: Promise<unknown> = Promise.resolve();
 function orderedWeb<T>(action: () => Promise<T>): Promise<T> {
   const next = webQueue.then(action); webQueue = next.catch(() => {}); return next;
 }
-const webVault = Platform.OS === 'web' ? createWebVault(AsyncStorage, globalThis.crypto, creating => useWebVaultStatus.setState({locked:true, creating})) : undefined;
+const webVault = Platform.OS === 'web' ? createWebVault(AsyncStorage, globalThis.crypto, creating => useWebVaultStatus.setState({locked:true, creating}), stripWebCredentials, false) : undefined;
 export async function unlockWebVault(passphrase: string): Promise<void> {
   if (!webVault) return;
   await webVault.unlock(passphrase);
@@ -64,31 +68,36 @@ export async function unlockWebVault(passphrase: string): Promise<void> {
 }
 const backend = Platform.OS === 'web' ? {
   ...AsyncStorage,
-  getItem: (name: string) => orderedWeb(async () => {
-    const value = await webVault!.getItem(name);
-    if (value === null) return null;
-    const clean = stripWebCredentials(value);
-    if (clean !== value) await webVault!.setItem(name, clean);
-    return clean;
-  }),
+  getItem: (name: string) => orderedWeb(() => webVault!.getItem(name)),
   removeItem: (name: string) => orderedWeb(() => webVault!.removeItem(name)),
-  setItem: (name: string, value: string) => orderedWeb(() => webVault!.setItem(name, stripWebCredentials(value))),
+  setItem: (name: string, value: string) => orderedWeb(() => webVault!.setItem(name, value)),
 } : nativeStorage;
+const photoStorage = createPhotoRecordStorage(backend, async () =>
+  Array.from(await getRandomBytesAsync(32), byte => byte.toString(16).padStart(2, '0')).join(''), AsyncStorage.getAllKeys?.bind(AsyncStorage));
 
 export const SecureHealthStorage = {
-  getItem: async (name: string) => {
+  getItem: (name: string): Promise<string | null> => {
+    const task = writeQueue.then(async () => {
     try {
-      const value = await backend.getItem(name);
+      const value = await photoStorage.getItem(name);
       const photos = value !== null && Platform.OS !== 'web' ? await inlineSavedPhotos(value) : undefined;
       const clean = value === null ? null : stripWebCredentials(photos?.value ?? value);
-      if (clean !== null && clean !== value) await backend.setItem(name, clean);
-      // Remove temporary plaintext copies only after the encrypted write succeeds.
-      for (const file of photos?.temporaryFiles || []) {try {await removePhotoCacheCopy(file);} catch { /* The OS may retain its temporary cache copy. */ }}
-      useStorageStatus.setState({error:null, readFailed:false}); return clean;
+      try {
+        if (clean !== null) await photoStorage.setItem(name, clean);
+        // Remove temporary plaintext copies only after the encrypted write succeeds.
+        for (const file of photos?.temporaryFiles || []) {try {await removePhotoCacheCopy(file);} catch { /* The OS may retain its temporary cache copy. */ }}
+        useStorageStatus.setState({error:null, readFailed:false});
+      } catch {
+        if (clean !== null && !pendingWrite) pendingWrite = {name, value:clean};
+        useStorageStatus.setState({error:'Records were opened, but storage updates are not saved yet. Free device storage and retry before closing the app.', readFailed:false});
+      }
+      return clean;
     } catch (error) {
       useStorageStatus.setState({error:'Saved data could not be opened. Unlock the device and retry. Your saved data has not been replaced.', readFailed:true});
       throw error;
     }
+    });
+    writeQueue = task.catch(() => {}); return task;
   },
   setItem: (name: string, value: string): Promise<void> => {
     if (deleting || useStorageStatus.getState().readFailed) return Promise.resolve();
@@ -97,29 +106,42 @@ export const SecureHealthStorage = {
       if (deleting || useStorageStatus.getState().readFailed) return;
       try {
         const photos = Platform.OS !== 'web' ? await inlineSavedPhotos(value) : undefined;
-        await backend.setItem(name, stripWebCredentials(photos?.value ?? value));
+        await photoStorage.setItem(name, stripWebCredentials(photos?.value ?? value));
+        for (const file of photos?.temporaryFiles || []) {try {await removePhotoCacheCopy(file);} catch { /* Retry cleanup on a later read when possible. */ }}
         if (pendingWrite === write) {pendingWrite = undefined; useStorageStatus.setState({error:null});}
-      } catch {
-        useStorageStatus.setState({error:'Changes are not saved yet. Unlock the device and retry before closing the app.'});
+      } catch (error) {
+        const detail = error instanceof Error && /^(Photo storage is full|Record storage is full|Choose an image)/.test(error.message)
+          ? error.message : 'Unlock the device and retry before closing the app.';
+        useStorageStatus.setState({error:`Changes are not saved yet. ${detail}`});
       }
     });
     writeQueue = task.catch(() => {}); return task;
   },
   removeItem: (name: string) => backend.removeItem(name),
-  clearSavedData: async () => {
+  clearSavedData: async (resetState?: () => void) => {
     deleting = true;
     try {
+      // Release a pending unlock before waiting for reads/writes, including recovery-screen resets.
+      webVault?.reset();
       await writeQueue;
       // Removal follows every queued encrypted write. No failed write may be retried afterward.
-      await backend.removeItem('safescale-storage');
+      await photoStorage.clear('safescale-storage');
       pendingWrite = undefined;
       if (Platform.OS !== 'web') {
         // The records are already removed; key deletion failure must not restore them.
         try { await SecureStore.deleteItemAsync(KEY_NAME, options); } catch { /* An unused key can remain if the OS denies deletion. */ }
         keyPromise = undefined;
       }
+      // Reset application state while persistence is suppressed; deletion must not recreate a vault.
+      resetState?.();
+      if (webVault) {
+        webVault.reset();
+        useWebVaultStatus.setState({locked:true, creating:true});
+        void webVault.getItem('safescale-storage').catch(() => {});
+      }
       useStorageStatus.setState({error:null, readFailed:false});
     } finally { deleting = false; }
   },
   retryWrite: async () => {if (pendingWrite) await SecureHealthStorage.setItem(pendingWrite.name, pendingWrite.value);},
 };
+

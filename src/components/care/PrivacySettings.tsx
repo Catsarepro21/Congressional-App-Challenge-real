@@ -16,13 +16,13 @@ export default function PrivacySettings() {
       const text = privacyExport(saved);
       if (Platform.OS === 'web') {
         const url = URL.createObjectURL(new Blob([text], {type:'application/json'}));
-        const link = document.createElement('a');link.href=url;link.download='safescale-health-export.json';link.click();
+        const link = document.createElement('a');link.href=url;link.download='healthfolio-export.json';link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else await Share.share({message:text,title:'SafeScale health export'});
+      } else await Share.share({message:text,title:'Healthfolio health export'});
     } catch { Alert.alert('Export failed', 'Your records are unchanged. Please try again.'); }
   };
   return <Card>
-    <Heading title="Privacy & local processing" detail="Cloud AI and external service requests are disabled in this build." />
+    <Heading title="Privacy & local processing" detail="AI, photos and health insights stay on this device. Optional Google Health / Fitbit import uses Google sign-in and read-only requests after you connect." />
     <Text style={s.body}>{Platform.OS === 'web'
       ? 'Saved browser records are encrypted with your vault passphrase. The passphrase and key are not saved; close this tab to lock the vault.'
       : 'Saved records are encrypted on this device. The encryption key is kept in device secure storage. Apple Health permissions are managed separately by iOS.'}</Text>
@@ -30,7 +30,7 @@ export default function PrivacySettings() {
     <Button label="Export health records" secondary disabled={demo} onPress={exportData} />
     <Button label="Delete local data…" secondary disabled={demo} onPress={() => {setConfirmation('');setDeleting(true);}} />
     {deleting && <Sheet title="Delete local data" onClose={() => setDeleting(false)}>
-      <Text style={s.body}>This permanently deletes SafeScale's saved records, profile, credentials, active workout, chat, and app reminders on this device. It cannot be undone. Export anything you want to keep first.</Text>
+      <Text style={s.body}>This permanently deletes Healthfolio's saved records, profile, credentials, active workout, chat, and app reminders on this device. It cannot be undone. Export anything you want to keep first.</Text>
       <Text style={s.body}>Apple Health, Google accounts, your photo library, attached files, and previously exported copies are not deleted. Revoke health/account permissions in those services separately.</Text>
       <TextInput accessibilityLabel="Type DELETE to confirm" placeholder="Type DELETE to confirm" value={confirmation} onChangeText={setConfirmation} autoCapitalize="characters" style={s.input} />
       <Button label="Permanently delete local data" disabled={confirmation !== 'DELETE'} onPress={async () => {

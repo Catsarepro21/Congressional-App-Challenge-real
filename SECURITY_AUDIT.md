@@ -2,6 +2,12 @@
 
 Reviewed October 23, 2026 against the current working tree. User requirement: encrypted health records, no external health-data uploads, and functioning local AI. Intended device reported by the user: iPhone 16, iOS 27.2.
 
+**Later October 23 scope update:** The user explicitly requested restoration of Google Health / Fitbit import on iOS. This supersedes the blanket network/sign-in ban in the earlier review below. A separate allowlisted transport now permits Google OAuth token exchange and read-only Google Health/People requests. No journal/photo/chat/medical-record upload endpoint is enabled. New consent is required; legacy tokens cannot silently reconnect. Google tokens stay in the encrypted native vault and are excluded from browser persistence and exports. Disconnect/deletion cancels in-progress imports. OAuth project permissions, test-user configuration and actual account access must still be verified by signing in on the device.
+
+The supplied device video also confirmed a barcode permission button beneath a touch-intercepting reticle and overly restrictive native model instructions. The reticle now ignores touches, permanent denial opens Settings, permissions refresh on resume, image-picker privacy strings are explicitly configured, and ordinary non-clinical wellness suggestions are allowed while personal claims remain grounded in records. These are source/runtime-handler fixes; automated checks do not prove camera hardware or live model quality.
+
+The app-switch privacy screen now overlays the mounted application instead of replacing its subtree. iOS permission sheets, camera pickers and OAuth sessions can temporarily make the app inactive; replacing that subtree discarded pending screen callbacks. The cover still hides the content while inactive, but camera/sign-in flows retain their state. Background refresh cannot cancel an interactive Google import already in progress.
+
 ## Result
 
 The source has been hardened for local processing and encrypted record storage. The automated checks and browser onboarding pass. This is not a security certification or proof of an installed native build: no Swift compilation, signed IPA installation, native encryption read/write trial, or actual Foundation Models inference was possible on this Windows host.
@@ -71,6 +77,17 @@ User-reported hardware/software is a target, not proof of availability. Apple In
 6. Exercise Apple Health permission/read locally. Receiving permission alone does not prove data was read. Confirm a known sample appears and no cloud sign-in flow exists.
 7. Replace old scheduled reminders and inspect their lock-screen previews. Check app switching/locking does not expose the current record in the preview.
 8. With a network inspection tool, confirm no external app-service requests occur while using the representative flows. This network trace has not been captured in this review.
+
+## October 23 follow-up to independent review
+
+- Native photos are inlined only in application memory. On disk, photos use random opaque references and separately encrypted 128 KiB chunks; the main encrypted record contains references. Unchanged photos are not encrypted again for ordinary health updates. New allocations are journaled before writing, old chunks are collected after the record commit, and explicit deletion enumerates only this app's photo namespace, including interrupted-save orphans.
+- Attachments are bounded to 14 million encoded characters each and 20 million across the current record; non-photo record JSON is bounded to 768 KiB before encryption. A save failure preserves the committed record and displays a retry notice while keeping editing available. This is bounded prototype storage, not unlimited photo archiving.
+- Cache copies are cleaned after successful encrypted persistence. Picker base64 is requested only on web; iOS `/private/var` cache aliases and WebP/HEIF MIME types are handled. Oversized/unreadable legacy file attachments are marked missing without discarding the rest of the record. Originals outside app cache are never deleted.
+- Browser corruption now rejects hydration rather than leaving it pending. Explicit deletion cancels pending unlocks, suppresses reset-state persistence, removes photo chunks and records, drops the browser key, and requires creation of a new vault. Recovery screens offer a separate, explicit destructive reset confirmation.
+- Export filtering now excludes `photoUri` and `documentImage` at every nesting level, matching the existing disclosure. Exports remain deliberately unencrypted and initiated by the user.
+- Relative image paths are denied. Dead Gemini photo/text request implementations and chat escalation controls were removed; legacy text entry points remain local. Cloud feature defaults are false.
+- Native Vision validates regular-file status and compressed byte size, then downsamples to at most 2048 pixels per edge before classification. Local text input/history and output lengths are bounded. Input character limits are not an exact model tokenizer; an unavailable/over-capacity model still falls back to the clearly labeled local rules.
+- Follow-up tests use synthetic records and real AES-GCM/Web Crypto to check large photos, small encrypted rows, save failures, unchanged-photo reuse, restart hydration, cleanup ordering, missing attachments, browser reset/rekey, pending-unlock deletion, relative image denial, and photo-free export. Physical-device cache inspection and native inference remain separate acceptance checks. The previously signed `de71ce8` IPA predates these fixes.
 
 ## References checked
 
