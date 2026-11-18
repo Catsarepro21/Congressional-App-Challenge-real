@@ -4,9 +4,13 @@ A health organizer for medications, symptoms, activity, medical records, and app
 
 ## Web demo
 
+**[Open the live Healthfolio demo](https://healthfolio-demo.vercel.app/)**
+
 The Competition Demo opens with a fictional profile. Try recording a sample dose, filtering the journal and timeline, or preparing a sample visit summary. Use fictional entries only. Edits stay in memory and reset when you reload.
 
 The demo is for demonstration only and does not provide medical advice. Camera and photo attachments, device sync, workout sensors, reminders, and cloud AI are disabled. The health assistant uses built-in rules in the browser.
+
+![Healthfolio's Today screen with fictional demo data](docs/healthfolio-demo.webp)
 
 **[Download the unsigned IPA](https://github.com/Catsarepro21/Congressional-App-Challenge-real/releases/download/ios-build-40424644493-1/SafeScaleHealth-unsigned.ipa)** · [Release notes](https://github.com/Catsarepro21/Congressional-App-Challenge-real/releases/tag/v1.0.0) · [IPA source](https://github.com/Catsarepro21/Congressional-App-Challenge-real/tree/e57d05a19ca7688477eacf1680de1a2fe26a4e57)
 
