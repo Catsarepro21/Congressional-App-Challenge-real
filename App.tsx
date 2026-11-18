@@ -37,11 +37,13 @@ const BACKGROUND = "#F5F6F1";
 
 export default function App() {
   return <View style={{flex:1}}>
-    {PUBLIC_WEB_PREVIEW && <View style={{backgroundColor:'#FFF3CD',paddingHorizontal:16,paddingVertical:8}}>
-      <Text style={{color:'#493B08',fontWeight:'700'}}>Designed for iOS · Web preview</Text>
-      <Text style={{color:'#493B08',fontSize:12}}>Some features are unavailable in a browser. Use fictional details only. Entries reset on reload.</Text>
-    </View>}
-    <AppContents />
+    {PUBLIC_WEB_PREVIEW ? <>
+      <View style={{backgroundColor:'#FFF3CD',paddingHorizontal:16,paddingVertical:8}}>
+        <Text style={{color:'#493B08',fontWeight:'700'}}>Designed for iOS · Web preview</Text>
+        <Text style={{color:'#493B08',fontSize:12}}>Some features are unavailable in a browser. Use fictional details only. Entries reset on reload.</Text>
+      </View>
+      <AppContents />
+    </> : <AppContents />}
     <AppPrivacyCover />
   </View>;
 }

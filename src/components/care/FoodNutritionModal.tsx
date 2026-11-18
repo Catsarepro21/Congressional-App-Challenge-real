@@ -321,7 +321,7 @@ export default function FoodNutritionModal({
 
           {manualName.trim().length > 2 && (
             <Button
-              label="⚡ Parse meal with On-Device AI"
+              label={PUBLIC_WEB_PREVIEW ? "Parse meal description" : "⚡ Parse meal with On-Device AI"}
               secondary
               onPress={handleParseNLP}
             />
