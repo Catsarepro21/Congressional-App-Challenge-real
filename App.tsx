@@ -1,7 +1,7 @@
 import {useWorkoutSensors} from './src/hooks/useWorkoutSensors';
 import { SecureHealthStorage, useStorageStatus, useWebVaultStatus } from './src/services/SecureHealthStorage';
 import WebVaultUnlock from './src/components/care/WebVaultUnlock';
-import { Button } from './src/components/care/UI';
+import { Button, Card, Heading, Page, s } from './src/components/care/UI';
 /**
  * @file App.tsx
  * @description Root application entry point for Healthfolio.
@@ -27,7 +27,7 @@ import EmergencyScreen from "./src/screens/EmergencyScreen";
 import OnboardingScreen from "./src/screens/OnboardingScreen";
 import HealthChatScreen from "./src/screens/HealthChatScreen";
 import { BottomNavBar } from "./src/components/BottomNavBar";
-import { deleteLocalHealthData, useSafeScaleStore } from "./src/store/useSafeScaleStore";
+import { deleteLocalHealthData, PUBLIC_WEB_DEMO, useSafeScaleStore } from "./src/store/useSafeScaleStore";
 
 import WebAlertHost from "./src/components/WebAlertHost";
 import CloudPermissionModal from "./src/components/care/CloudPermissionModal";
@@ -88,7 +88,7 @@ function AppContents() {
 
   if (isDeletingData) return <SafeAreaProvider><View style={{flex:1,justifyContent:"center",padding:24}}><ActivityIndicator /><Text>Deleting local records…</Text></View></SafeAreaProvider>;
 
-  if (vaultLocked && !storageError) return <SafeAreaProvider><WebVaultUnlock /></SafeAreaProvider>;
+  if (!PUBLIC_WEB_DEMO && vaultLocked && !storageError) return <SafeAreaProvider><WebVaultUnlock /></SafeAreaProvider>;
 
   if (storageError && readFailed) return <SafeAreaProvider><View style={{flex:1, justifyContent:'center',padding:24,gap:20,backgroundColor:BACKGROUND}}>
     <Text accessibilityRole="alert">{storageError}</Text>
@@ -154,7 +154,16 @@ function AppContents() {
         return <TimelineScreen />;
       case 4:
       case 5:
-        return <ProfileScreen />;
+        return PUBLIC_WEB_DEMO ? <Page title="Demo profile" subtitle="The fictional profile used throughout Healthfolio.">
+          <Card>
+            <Heading title="Demo Alex" detail="Sample allergies: Peanut and Almond." />
+            <Button label="View sample Medical ID" secondary onPress={() => handleTabPress(8)} />
+          </Card>
+          <Card>
+            <Heading title="About the web demo" />
+            <Text style={s.body}>Explore sample records and try logging fictional entries. Reload the page to reset the demo. Health device sync, camera, workout sensors, reminders, and cloud AI are disabled.</Text>
+          </Card>
+        </Page> : <ProfileScreen />;
       case 10:
         return <HealthChatScreen onBack={() => handleTabPress(0)} />;
       default:
@@ -172,7 +181,9 @@ function AppContents() {
         <View key={revision} style={{flex:1}}>{renderScreen()}</View>
         {demo && <View style={{backgroundColor:'#FFF3CD',paddingHorizontal:16,paddingVertical:8}}>
           <Text accessibilityRole="header" style={{color:'#493B08',fontWeight:'700'}}>Competition demo · Fictional data</Text>
-          <Text style={{color:'#493B08',fontSize:12}}>Cloud AI uploads disabled. Prototype for wellness tracking, not medical advice. Exit in Profile.</Text>
+          <Text style={{color:'#493B08',fontSize:12}}>{PUBLIC_WEB_DEMO
+            ? 'Use fictional entries only. Edits reset on reload. For demonstration only, not medical advice.'
+            : 'Cloud AI uploads disabled. Prototype for wellness tracking, not medical advice. Exit in Profile.'}</Text>
         </View>}
         <BottomNavBar activeIndex={activeTab} onTabPress={handleTabPress} />
       </View>

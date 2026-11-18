@@ -336,6 +336,12 @@ const updateAdherenceInHistory = (
 // ---------------------------------------------------------------------------
 
 let demoSnapshot: SafeScaleState | null = null;
+export const PUBLIC_WEB_DEMO = typeof document !== 'undefined' && process.env.EXPO_PUBLIC_WEB_DEMO === '1';
+const demoStorage = {
+  getItem: () => null,
+  setItem: async () => {},
+  removeItem: async () => {},
+};
 
 export const useSafeScaleStore = create<SafeScaleState>()(
   persist(
@@ -751,7 +757,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   /** Toggles Test/Simulation Mode on/off. Seeding or clearing data. */
   toggleTestMode: (): void => {
     cancelGoogleHealthSync?.();
-    if (useSafeScaleStore.getState().isDeletingData) return;
+    const current = useSafeScaleStore.getState();
+    if (current.isDeletingData || (PUBLIC_WEB_DEMO && current.isTestMode)) return;
     set((state) => {
       if (state.isTestMode && demoSnapshot) {
         const restored = demoSnapshot;
@@ -1554,7 +1561,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     }),
     {
       name: 'safescale-storage',
-      storage: createJSONStorage(() => SecureHealthStorage),
+      storage: createJSONStorage(() => PUBLIC_WEB_DEMO ? demoStorage : SecureHealthStorage),
       partialize: (state) => {
         // Demo edits never replace the real profile on disk, including after a restart.
         if (state.isTestMode && demoSnapshot) state = demoSnapshot;
@@ -1601,6 +1608,8 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     }
   )
 );
+
+if (PUBLIC_WEB_DEMO) useSafeScaleStore.getState().toggleTestMode();
 
 // ---------------------------------------------------------------------------
 // Selectors (memoization-friendly, exported for use with useShallow)

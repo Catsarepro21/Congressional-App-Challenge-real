@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text } from 'react-native';
-import { useSafeScaleStore } from '../store/useSafeScaleStore';
+import { PUBLIC_WEB_DEMO, useSafeScaleStore } from '../store/useSafeScaleStore';
 import HealthConnections from '../components/care/HealthConnections';
 import FoodNutritionModal from '../components/care/FoodNutritionModal';
 import FoodSearchModal from '../components/care/FoodSearchModal';
@@ -55,7 +55,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
           const known = !!vitals.readingMetadata?.[key] || value > 0;
           return <View key={key} style={{gap:4}}><View style={[s.row,{justifyContent:'space-between'}]}><Text style={s.body}>{labels[key]}</Text><Text style={s.heading}>{known ? Math.round(value).toLocaleString() : 'Not recorded'}</Text></View><Text style={s.body}>{readingCaption(vitals.readingMetadata?.[key])}</Text></View>;
         })}
-        <Button label="Sync health readings" secondary icon="sync" onPress={() => setConnectionsOpen(true)} /></Card>;
+        {!PUBLIC_WEB_DEMO && <Button label="Sync health readings" secondary icon="sync" onPress={() => setConnectionsOpen(true)} />}</Card>;
     }
   };
   return <Page title={profile.name ? `Hello, ${profile.name.split(' ')[0]}.` : 'A little care, every day.'} subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}>
@@ -66,7 +66,17 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
       <Text style={{ color: '#D2E2DB', fontSize: 15, lineHeight: 23 }}>{nextMed && cards.includes('medications') ? `${taken} of ${meds.length} daily doses recorded. Your schedule is below.` : 'Keep your routine and see your health records together.'}</Text>
       <View style={s.wrap}><Button label="View timeline" secondary onPress={() => onNavigate(9)} /><Button label="Add check-in" secondary onPress={() => onNavigate(2)} /></View>
     </View>
-    <View style={s.wrap}><Button label="AI Health Assistant" secondary icon="brain" onPress={() => onNavigate(10)} /><Button label="Log meal" secondary onPress={() => setMealOpen(true)} /><Button label="Search food" secondary icon="magnify" onPress={() => setFoodSearchOpen(true)} /><Button label="Scan barcode" secondary icon="barcode-scan" onPress={() => setBarcodeOpen(true)} /><Button label="Snap meal photo" secondary icon="camera" onPress={() => promptMealPhoto(setFoodPhotoUri)} /><Button label="Medical ID" secondary icon="card-account-details-outline" onPress={() => onNavigate(8)} /><Button label="Customize Today" secondary icon="tune" onPress={() => setCustomizing(true)} /></View>
+    <View style={s.wrap}>
+      <Button label="AI Health Assistant" secondary icon="brain" onPress={() => onNavigate(10)} />
+      {!PUBLIC_WEB_DEMO && <Button label="Log meal" secondary onPress={() => setMealOpen(true)} />}
+      <Button label="Search food" secondary icon="magnify" onPress={() => setFoodSearchOpen(true)} />
+      {!PUBLIC_WEB_DEMO && <>
+        <Button label="Scan barcode" secondary icon="barcode-scan" onPress={() => setBarcodeOpen(true)} />
+        <Button label="Snap meal photo" secondary icon="camera" onPress={() => promptMealPhoto(setFoodPhotoUri)} />
+      </>}
+      <Button label="Medical ID" secondary icon="card-account-details-outline" onPress={() => onNavigate(8)} />
+      <Button label="Customize Today" secondary icon="tune" onPress={() => setCustomizing(true)} />
+    </View>
     {fasting && !cards.includes('fasting') ? <Card><Heading title="Your fasting timer is running" detail="Hiding the card does not stop your timer." /><Button label="Show fasting timer" secondary onPress={() => save([...cards, 'fasting'])} /></Card> : null}
     {cards.map(id => <View key={id}>{renderCard(id)}</View>)}
     {!cards.length ? <Card><Heading title="Make this space yours" detail="Choose the cards you want to see each day." /><Button label="Choose cards" onPress={() => setCustomizing(true)} /></Card> : null}
@@ -80,8 +90,8 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
       <Button label="Restore default layout" secondary onPress={() => save([...DEFAULT_TODAY_CARDS])} /><Button label="Done" onPress={() => setCustomizing(false)} />
     </Sheet> : null}
     {connectionsOpen ? <Sheet title="Health connections" onClose={() => setConnectionsOpen(false)}><HealthConnections /></Sheet> : null}
-    <FoodNutritionModal visible={mealOpen || foodPhotoUri !== null} onClose={() => { setFoodPhotoUri(null); setMealOpen(false); }} photoUri={foodPhotoUri || undefined} />
+    {!PUBLIC_WEB_DEMO && <FoodNutritionModal visible={mealOpen || foodPhotoUri !== null} onClose={() => { setFoodPhotoUri(null); setMealOpen(false); }} photoUri={foodPhotoUri || undefined} />}
     <FoodSearchModal visible={foodSearchOpen} onClose={() => setFoodSearchOpen(false)} />
-    <BarcodeScannerModal visible={barcodeOpen} onClose={() => setBarcodeOpen(false)} />
+    {!PUBLIC_WEB_DEMO && <BarcodeScannerModal visible={barcodeOpen} onClose={() => setBarcodeOpen(false)} />}
   </Page>;
 }
