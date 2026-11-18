@@ -336,8 +336,8 @@ const updateAdherenceInHistory = (
 // ---------------------------------------------------------------------------
 
 let demoSnapshot: SafeScaleState | null = null;
-export const PUBLIC_WEB_DEMO = typeof document !== 'undefined' && process.env.EXPO_PUBLIC_WEB_DEMO === '1';
-const demoStorage = {
+export const PUBLIC_WEB_PREVIEW = typeof document !== 'undefined' && process.env.EXPO_PUBLIC_WEB_PREVIEW === '1';
+const previewStorage = {
   getItem: () => null,
   setItem: async () => {},
   removeItem: async () => {},
@@ -757,8 +757,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
   /** Toggles Test/Simulation Mode on/off. Seeding or clearing data. */
   toggleTestMode: (): void => {
     cancelGoogleHealthSync?.();
-    const current = useSafeScaleStore.getState();
-    if (current.isDeletingData || (PUBLIC_WEB_DEMO && current.isTestMode)) return;
+    if (useSafeScaleStore.getState().isDeletingData) return;
     set((state) => {
       if (state.isTestMode && demoSnapshot) {
         const restored = demoSnapshot;
@@ -1561,7 +1560,7 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     }),
     {
       name: 'safescale-storage',
-      storage: createJSONStorage(() => PUBLIC_WEB_DEMO ? demoStorage : SecureHealthStorage),
+      storage: createJSONStorage(() => PUBLIC_WEB_PREVIEW ? previewStorage : SecureHealthStorage),
       partialize: (state) => {
         // Demo edits never replace the real profile on disk, including after a restart.
         if (state.isTestMode && demoSnapshot) state = demoSnapshot;
@@ -1608,8 +1607,6 @@ export const useSafeScaleStore = create<SafeScaleState>()(
     }
   )
 );
-
-if (PUBLIC_WEB_DEMO) useSafeScaleStore.getState().toggleTestMode();
 
 // ---------------------------------------------------------------------------
 // Selectors (memoization-friendly, exported for use with useShallow)
@@ -1733,14 +1730,19 @@ export async function deleteLocalHealthData(): Promise<void> {
   const state = useSafeScaleStore.getState();
   if (state.isTestMode || state.isDeletingData) throw new Error('Exit sample mode before deleting personal data.');
   const revision = state.dataRevision + 1;
+  const reset = () => {
+    demoSnapshot = null;
+    useSafeScaleStore.setState({...useSafeScaleStore.getInitialState(), dataRevision:revision}, true);
+  };
+  if (PUBLIC_WEB_PREVIEW) {
+    reset();
+    return;
+  }
   useSafeScaleStore.setState({isDeletingData:true, dataRevision:revision});
   cancelGoogleHealthSync?.();
   try {
     await NotificationService.cancelAllReminders();
-    await SecureHealthStorage.clearSavedData(() => {
-      demoSnapshot = null;
-      useSafeScaleStore.setState({...useSafeScaleStore.getInitialState(), dataRevision:revision}, true);
-    });
+    await SecureHealthStorage.clearSavedData(reset);
     // Notify hydration subscribers again; web recovery completes after the new vault is unlocked.
     void useSafeScaleStore.persist.rehydrate();
   } catch (error) {

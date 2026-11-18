@@ -2,15 +2,15 @@
 
 A health organizer for medications, symptoms, activity, medical records, and appointment summaries. Built with React Native, Expo, TypeScript, and Swift.
 
-## Web demo
+## Web preview
 
-**[Open the live Healthfolio demo](https://healthfolio-demo.vercel.app/)**
+**[Open Healthfolio in your browser](https://healthfolio-demo.vercel.app/)**
 
-The Competition Demo opens with a fictional profile. Try recording a sample dose, filtering the journal and timeline, or preparing a sample visit summary. Use fictional entries only. Edits stay in memory and reset when you reload.
+Complete the regular setup, then try logging a dose, adding a journal entry, or preparing a visit summary. Use fictional details only. Entries stay in the current tab and reset when you reload. For a ready-made fictional profile, choose **Profile → Enter Competition Demo**. Exit Competition Demo to return to your own entries for the session.
 
-The demo is for demonstration only and does not provide medical advice. Camera and photo attachments, device sync, workout sensors, reminders, and cloud AI are disabled. The health assistant uses built-in rules in the browser.
+Healthfolio was designed for iOS. Some features are unavailable in the browser, including health device sync, camera scanning, photo attachments, workout sensors, and reminders. The browser assistant uses built-in rules. The preview is for demonstration only and does not provide medical advice.
 
-![Healthfolio's Today screen with fictional demo data](docs/healthfolio-demo.webp)
+![Healthfolio's Today screen after browser setup](docs/healthfolio-demo.webp)
 
 **[Download the unsigned IPA](https://github.com/Catsarepro21/Congressional-App-Challenge-real/releases/download/ios-build-40424644493-1/SafeScaleHealth-unsigned.ipa)** · [Release notes](https://github.com/Catsarepro21/Congressional-App-Challenge-real/releases/tag/v1.0.0) · [IPA source](https://github.com/Catsarepro21/Congressional-App-Challenge-real/tree/e57d05a19ca7688477eacf1680de1a2fe26a4e57)
 
@@ -29,7 +29,7 @@ Requires Node.js 22.13 or newer.
 
 ```sh
 npm ci
-npm run web:demo
+npm run web:preview
 ```
 
 To build and preview the same production web bundle that Vercel serves:
@@ -41,5 +41,5 @@ npx expo serve --port 4173
 
 Open http://localhost:4173. For Vercel, import the repository at its root in a Hobby workspace. The checked-in configuration runs `npm ci` and `npm run build:web`, then publishes `dist/`. No environment variables or external services are required.
 
-`npm run web` starts the original local web app with onboarding. On the native app, select **Profile → Enter Competition Demo** for a fictional walkthrough. Native features require a custom build. Use the **Build iOS IPA (Unsigned)** GitHub workflow, or generate the iOS project on a compatible Mac and open `ios/Healthfolio.xcworkspace`.
+`npm run web` starts the local web app with its encrypted browser vault. Native features require a custom build. Use the **Build iOS IPA (Unsigned)** GitHub workflow, or generate the iOS project on a compatible Mac and open `ios/Healthfolio.xcworkspace`.
 

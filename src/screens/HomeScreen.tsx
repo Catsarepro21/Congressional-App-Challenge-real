@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text } from 'react-native';
-import { PUBLIC_WEB_DEMO, useSafeScaleStore } from '../store/useSafeScaleStore';
+import { PUBLIC_WEB_PREVIEW, useSafeScaleStore } from '../store/useSafeScaleStore';
 import HealthConnections from '../components/care/HealthConnections';
 import FoodNutritionModal from '../components/care/FoodNutritionModal';
 import FoodSearchModal from '../components/care/FoodSearchModal';
@@ -47,7 +47,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
       case 'sleep': return <SleepArchitectureCard />;
       case 'activity': return <Card><Heading title="Make room for movement" detail="View activity rings and record a workout." /><Button label="Open activity" icon="heart-pulse" secondary onPress={() => onNavigate(1)} /></Card>;
       case 'journal': return <Card><Heading title={checkedIn ? 'Your check-in is saved' : 'How are you feeling?'} detail="Capture symptoms, mood, and questions while they are fresh." /><View style={s.wrap}><Button label={checkedIn ? 'View journal' : 'Add a check-in'} secondary onPress={() => onNavigate(2)} /><Button label="View timeline" secondary onPress={() => onNavigate(9)} /></View></Card>;
-      case 'readings': return <Card><Heading title="Latest health readings" detail={lastSync ? `Last sync ${new Date(lastSync).toLocaleString()}` : 'No sync yet. Connect Apple Health when you are ready.'} />
+      case 'readings': return <Card><Heading title="Latest health readings" detail={lastSync ? `Last sync ${new Date(lastSync).toLocaleString()}` : PUBLIC_WEB_PREVIEW ? 'Health sync is available in the native app.' : 'No sync yet. Connect Apple Health when you are ready.'} />
         <Text style={s.body}>Latest imported snapshot; individual readings may be older than the sync time.</Text>
         {(['heartRate','sleepMinutes','steps'] as const).map(key => {
           const labels = {heartRate:'Heart rate',sleepMinutes:'Sleep (minutes)',steps:'Steps'};
@@ -55,7 +55,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
           const known = !!vitals.readingMetadata?.[key] || value > 0;
           return <View key={key} style={{gap:4}}><View style={[s.row,{justifyContent:'space-between'}]}><Text style={s.body}>{labels[key]}</Text><Text style={s.heading}>{known ? Math.round(value).toLocaleString() : 'Not recorded'}</Text></View><Text style={s.body}>{readingCaption(vitals.readingMetadata?.[key])}</Text></View>;
         })}
-        {!PUBLIC_WEB_DEMO && <Button label="Sync health readings" secondary icon="sync" onPress={() => setConnectionsOpen(true)} />}</Card>;
+        {!PUBLIC_WEB_PREVIEW && <Button label="Sync health readings" secondary icon="sync" onPress={() => setConnectionsOpen(true)} />}</Card>;
     }
   };
   return <Page title={profile.name ? `Hello, ${profile.name.split(' ')[0]}.` : 'A little care, every day.'} subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}>
@@ -68,9 +68,9 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
     </View>
     <View style={s.wrap}>
       <Button label="AI Health Assistant" secondary icon="brain" onPress={() => onNavigate(10)} />
-      {!PUBLIC_WEB_DEMO && <Button label="Log meal" secondary onPress={() => setMealOpen(true)} />}
+      <Button label="Log meal" secondary onPress={() => setMealOpen(true)} />
       <Button label="Search food" secondary icon="magnify" onPress={() => setFoodSearchOpen(true)} />
-      {!PUBLIC_WEB_DEMO && <>
+      {!PUBLIC_WEB_PREVIEW && <>
         <Button label="Scan barcode" secondary icon="barcode-scan" onPress={() => setBarcodeOpen(true)} />
         <Button label="Snap meal photo" secondary icon="camera" onPress={() => promptMealPhoto(setFoodPhotoUri)} />
       </>}
@@ -90,8 +90,8 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (index: number)
       <Button label="Restore default layout" secondary onPress={() => save([...DEFAULT_TODAY_CARDS])} /><Button label="Done" onPress={() => setCustomizing(false)} />
     </Sheet> : null}
     {connectionsOpen ? <Sheet title="Health connections" onClose={() => setConnectionsOpen(false)}><HealthConnections /></Sheet> : null}
-    {!PUBLIC_WEB_DEMO && <FoodNutritionModal visible={mealOpen || foodPhotoUri !== null} onClose={() => { setFoodPhotoUri(null); setMealOpen(false); }} photoUri={foodPhotoUri || undefined} />}
+    <FoodNutritionModal visible={mealOpen || foodPhotoUri !== null} onClose={() => { setFoodPhotoUri(null); setMealOpen(false); }} photoUri={foodPhotoUri || undefined} />
     <FoodSearchModal visible={foodSearchOpen} onClose={() => setFoodSearchOpen(false)} />
-    {!PUBLIC_WEB_DEMO && <BarcodeScannerModal visible={barcodeOpen} onClose={() => setBarcodeOpen(false)} />}
+    {!PUBLIC_WEB_PREVIEW && <BarcodeScannerModal visible={barcodeOpen} onClose={() => setBarcodeOpen(false)} />}
   </Page>;
 }

@@ -2,7 +2,7 @@ import { localImageUri } from '../services/OfflinePolicy';
 import { validateVitalReadings } from '../utils/daily';
 import React, { useState } from "react";
 import { View, Text, Alert, Image, StyleSheet } from "react-native";
-import { PUBLIC_WEB_DEMO, useSafeScaleStore } from "../store/useSafeScaleStore";
+import { PUBLIC_WEB_PREVIEW, useSafeScaleStore } from "../store/useSafeScaleStore";
 import FoodNutritionModal from "../components/care/FoodNutritionModal";
 import { promptMealPhoto } from "../utils/mealPhotoPicker";
 import { classifyBloodPressure } from "../services/CardioDiagnosticsService";
@@ -170,12 +170,12 @@ export default function JournalScreen() {
           icon="heart-pulse"
           onPress={() => setForm("Vitals")}
         />
-        {!PUBLIC_WEB_DEMO && <Button
+        <Button
           label="Log a meal"
           secondary
-          icon="camera"
-          onPress={snapMealPhoto}
-        />}
+          icon={PUBLIC_WEB_PREVIEW ? "plus" : "camera"}
+          onPress={PUBLIC_WEB_PREVIEW ? () => setFoodModalOpen(true) : snapMealPhoto}
+        />
       </View>
       <Field
         label="Search your journal"

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Platform, Text, View, Switch } from 'react-native';
-import { useSafeScaleStore } from '../../store/useSafeScaleStore';
+import { PUBLIC_WEB_PREVIEW, useSafeScaleStore } from '../../store/useSafeScaleStore';
 import { HEALTH_SOURCE_NAMES, syncHealthSource, cancelGoogleHealthSync, type ProfileSuggestion } from '../../services/HealthSyncService';
 import { HealthDataService } from '../../services/HealthDataService';
 import { classifyHRV } from '../../services/CardioDiagnosticsService';
@@ -112,6 +112,7 @@ export default function HealthConnections({ onProfile, onBusyChange }: { onProfi
       } },
     ]);
   }
+  if (PUBLIC_WEB_PREVIEW) return <Text style={s.body}>Health connections such as Apple Health are unavailable in the web preview. You can enter readings manually.</Text>;
   return <View style={{ gap: 16 }}>
     <Heading title="Connect your health apps" detail="Choose a source to import your available readings. You can connect now or come back later." />
     {demo ? <Text style={s.body}>Exit sample mode in Settings to connect your own accounts.</Text> : null}

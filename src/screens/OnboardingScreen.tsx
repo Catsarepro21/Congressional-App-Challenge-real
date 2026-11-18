@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Text, View, Keyboard } from 'react-native';
-import { useSafeScaleStore } from '../store/useSafeScaleStore';
+import { PUBLIC_WEB_PREVIEW, useSafeScaleStore } from '../store/useSafeScaleStore';
 import { localDate, validDate } from '../utils/daily';
 import HealthConnections from '../components/care/HealthConnections';
 import AIProviderSelector from '../components/care/AIProviderSelector';
@@ -40,9 +40,14 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
     onDone();
   }
   return <Page key={step} title={STEP_TITLES[step]} subtitle={`Step ${step + 1} of ${STEP_TITLES.length} · You can update these choices in Settings.`}>
-    {step === 0 ? <><Card><HealthConnections onProfile={setSuggestion} onBusyChange={setBusy} /></Card><Text style={s.body}>Connections are optional. Apple Health and Health Connect read on-device data. Google Health / Fitbit imports download permitted readings from Google after you sign in. Journal records, photos and chats are not uploaded.</Text><Button label="Continue" disabled={busy} onPress={next} /><Button label="Enter manually" secondary disabled={busy} onPress={next} /></> : null}
+    {step === 0 ? <>
+      <Card><HealthConnections onProfile={setSuggestion} onBusyChange={setBusy} /></Card>
+      {!PUBLIC_WEB_PREVIEW && <Text style={s.body}>Connections are optional. Apple Health and Health Connect read on-device data. Google Health / Fitbit imports download permitted readings from Google after you sign in. Journal records, photos and chats are not uploaded.</Text>}
+      <Button label="Continue" disabled={busy} onPress={next} />
+      {!PUBLIC_WEB_PREVIEW && <Button label="Enter manually" secondary disabled={busy} onPress={next} />}
+    </> : null}
     {step === 1 ? <><Card><AIProviderSelector value={aiPref} onChange={setAiPref} /></Card><Button label="Continue" onPress={next} /><Button label="Back" secondary onPress={() => setStep(0)} /></> : null}
-    {step === 2 ? <Card><Heading title="Review your profile" detail="All fields are optional. Only enter details you want to keep here." />
+    {step === 2 ? <Card><Heading title="Review your profile" detail={PUBLIC_WEB_PREVIEW ? "All fields are optional. Use fictional details in the web preview." : "All fields are optional. Only enter details you want to keep here."} />
       {suggestion && (suggestion.name || suggestion.dob) ? <View style={{ gap: 8 }}><Text style={s.body}>Available from your health connection: {[suggestion.name, suggestion.dob].filter(Boolean).join(' · ')}</Text><Button label="Use imported details" secondary onPress={() => { if (suggestion.name) setName(suggestion.name); if (suggestion.dob && validDate(suggestion.dob)) setDob(suggestion.dob); }} /></View> : null}
       <Field label="What should we call you?" value={name} onChangeText={setName} maxLength={100} />
       <Field label="Date of birth (YYYY-MM-DD, optional)" value={dob} onChangeText={setDob} maxLength={10} />
@@ -50,6 +55,11 @@ export default function OnboardingScreen({ onDone }: { onDone: () => void }) {
       <Field label="Known allergies (comma-separated, optional)" value={allergies} onChangeText={setAllergies} multiline maxLength={1000} />
       {error ? <Text accessibilityRole="alert" style={s.error}>{error}</Text> : null}<Button label="Review setup" onPress={next} /><Button label="Back" secondary onPress={() => setStep(1)} />
     </Card> : null}
-    {step === 3 ? <Card><Heading title="Your setup" /><Text style={s.body}>Name: {name.trim() || 'Not entered'}{'\n'}Birth date: {dob || 'Not entered'}{'\n'}Blood type: {blood}{'\n'}Allergies: {allergies.trim() || 'Not entered'}{'\n'}AI Engine: {AIIntelligenceService.providerLabel(aiPref)}</Text><Text style={s.body}>Your profile and notes are encrypted on this device. AI runs locally. Optional Google Health / Fitbit import uses read-only Google requests. Browser records require your vault passphrase; native records use a device secure-storage key.</Text><Button label="Get started" onPress={finish} /><Button label="Back" secondary onPress={() => setStep(2)} /></Card> : null}
+    {step === 3 ? <Card><Heading title="Your setup" /><Text style={s.body}>Name: {name.trim() || 'Not entered'}{'\n'}Birth date: {dob || 'Not entered'}{'\n'}Blood type: {blood}{'\n'}Allergies: {allergies.trim() || 'Not entered'}{'\n'}AI Engine: {AIIntelligenceService.providerLabel(aiPref)}</Text>
+      <Text style={s.body}>{PUBLIC_WEB_PREVIEW
+        ? 'Your entries stay in this tab and reset when you reload. The health assistant uses built-in rules in your browser.'
+        : 'Your profile and notes are encrypted on this device. AI runs locally. Optional Google Health / Fitbit import uses read-only Google requests. Browser records require your vault passphrase; native records use a device secure-storage key.'}</Text>
+      <Button label="Get started" onPress={finish} /><Button label="Back" secondary onPress={() => setStep(2)} />
+    </Card> : null}
   </Page>;
 }

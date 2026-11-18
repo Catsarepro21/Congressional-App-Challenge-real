@@ -1,11 +1,11 @@
 import PrivacySettings from '../components/care/PrivacySettings';
 import React, { useState, useEffect } from 'react';
 import { View, Text, Alert, Linking, Pressable, StyleSheet } from 'react-native';
-import { useSafeScaleStore } from '../store/useSafeScaleStore';
+import { PUBLIC_WEB_PREVIEW, useSafeScaleStore } from '../store/useSafeScaleStore';
 import { validDate, localDate } from '../utils/daily';
 import HealthConnections from '../components/care/HealthConnections';
 import AIProviderSelector from '../components/care/AIProviderSelector';
-import { AIIntelligenceService, getDeviceCapabilities, refreshDeviceCapabilities } from '../services/AIIntelligenceService';
+import { AIIntelligenceService, refreshDeviceCapabilities } from '../services/AIIntelligenceService';
 import {isFoundationModelSupportedAsync, generateTextAsync} from '../../modules/safescale-vision';
 import {controlledRequest} from '../services/RequestControl';
 import { getSuggestedOwnerName } from '../utils/deviceName';
@@ -198,6 +198,18 @@ export default function ProfileScreen() {
         </Text>
       )}
 
+      <Card>
+        <Heading
+          title="Competition demo"
+          detail="Explore sample records. Your own entries return when you exit, and changes to the sample records are discarded."
+        />
+        <Button
+          label={demo ? 'Exit Competition Demo' : 'Enter Competition Demo'}
+          secondary
+          onPress={toggleTest}
+        />
+      </Card>
+
       {/* MEDICAL ID CARD PREVIEW */}
       <View style={styles.medicalCard}>
         <View style={s.row}>
@@ -236,12 +248,13 @@ export default function ProfileScreen() {
         {contacts.length > 0 && (
           <View style={[s.row, { marginTop: 8 }]}>
             <Text style={[styles.cardDetailLabel, { flex: 1 }]}>PRIMARY EMERGENCY CONTACT</Text>
-            <Button
+            {!PUBLIC_WEB_PREVIEW && <Button
               label={`Call ${contacts[0].name.split(' ')[0]}`}
               icon="phone"
               secondary
+              disabled={demo}
               onPress={() => handleCall(contacts[0].phone)}
-            />
+            />}
           </View>
         )}
       </View>
@@ -260,12 +273,12 @@ export default function ProfileScreen() {
           <View style={{ gap: 6 }}>
             <View style={s.row}>
               <Text style={[s.label, { flex: 1 }]}>Full Name</Text>
-              <Button
+              {!PUBLIC_WEB_PREVIEW && <Button
                 label="Auto-detect from Device"
                 secondary
                 icon="cellphone-check"
                 onPress={handleAutoDetectName}
-              />
+              />}
             </View>
             <Field
               label=""
@@ -323,7 +336,7 @@ export default function ProfileScreen() {
           <Icon name="phone-alert-outline" size={24} color={C.red} />
           <Heading
             title="Emergency Contacts"
-            detail="Contacts displayed on your Medical ID who can be called directly in an emergency."
+            detail={PUBLIC_WEB_PREVIEW ? "Contacts displayed on your Medical ID. Calling is unavailable in the web preview." : "Contacts displayed on your Medical ID who can be called directly in an emergency."}
           />
         </View>
 
@@ -335,12 +348,13 @@ export default function ProfileScreen() {
                   <Text style={styles.contactName}>{contact.name}</Text>
                   <Text style={styles.contactPhone}>{contact.phone}</Text>
                 </View>
-                <Button
+                {!PUBLIC_WEB_PREVIEW && <Button
                   label="Call"
                   icon="phone"
                   secondary
+                  disabled={demo}
                   onPress={() => handleCall(contact.phone)}
-                />
+                />}
                 <Pressable
                   accessibilityLabel="Remove contact"
                   onPress={() => useSafeScaleStore.getState().removeEmergencyContact(contact.id)}
@@ -432,7 +446,7 @@ export default function ProfileScreen() {
           onChange={setAIPreference}
           showHeading={false}
         />
-        <Button label={modelTesting ? 'Testing local text model…' : 'Test on-device text model'} secondary disabled={modelTesting} onPress={testLocalModel} />
+        {!PUBLIC_WEB_PREVIEW && <Button label={modelTesting ? 'Testing local text model…' : 'Test on-device text model'} secondary disabled={modelTesting} onPress={testLocalModel} />}
         {modelResult ? <Text accessibilityLiveRegion="polite" style={s.body}>{modelResult}</Text> : null}
 
         <View style={[styles.aiBenchmarkCard, { marginTop: 12 }]}>
@@ -457,21 +471,6 @@ export default function ProfileScreen() {
             <Text style={styles.aiResultSummary}>{localAiResult.summary}</Text>
           </View>
         )}
-      </Card>
-
-      {/* SAMPLE MODE & RESTART */}
-      <Card>
-        <Heading
-          title="Competition demo"
-          detail="Explore fictional records with cloud AI uploads disabled. Your real records return when you exit; demo edits are discarded."
-        />
-        <View style={s.wrap}>
-          <Button
-            label={demo ? 'Exit Competition Demo' : 'Enter Competition Demo'}
-            secondary
-            onPress={toggleTest}
-          />
-        </View>
       </Card>
 
       {/* ADD CONTACT MODAL */}

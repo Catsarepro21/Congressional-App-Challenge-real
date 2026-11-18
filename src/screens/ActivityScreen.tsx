@@ -10,7 +10,7 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
-import { retryWorkoutSync, useSafeScaleStore } from '../store/useSafeScaleStore';
+import { PUBLIC_WEB_PREVIEW, retryWorkoutSync, useSafeScaleStore } from '../store/useSafeScaleStore';
 import { ActivityRings } from '../components/care/ActivityRings';
 import SleepArchitectureCard from '../components/care/SleepArchitectureCard';
 import AutonomicCardioCard from '../components/care/AutonomicCardioCard';
@@ -491,7 +491,9 @@ export default function ActivityScreen() {
             Select your activity type. A timer and estimated calories will be recorded. Apple Health sync is attempted when you finish.
           </Text>
 
-          <View style={s.row}><Text style={[s.body,{flex:1}]}>Record GPS route and steps while Healthfolio is open. Location and motion permissions are optional. Recording pauses on screen lock or background.</Text><Switch accessibilityLabel="Record GPS and steps" value={recordSensors} onValueChange={setRecordSensors} disabled={demo} /></View>
+          {PUBLIC_WEB_PREVIEW
+            ? <Text style={s.body}>You can time a workout here. GPS routes and step tracking require the native app.</Text>
+            : <View style={s.row}><Text style={[s.body,{flex:1}]}>Record GPS route and steps while Healthfolio is open. Location and motion permissions are optional. Recording pauses on screen lock or background.</Text><Switch accessibilityLabel="Record GPS and steps" value={recordSensors} onValueChange={setRecordSensors} disabled={demo} /></View>}
           <View style={styles.typeSelectorGrid}>
             {WORKOUT_TYPES.map((item) => (
               <Pressable

@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, Linking, Alert } from "react-native";
-import { useSafeScaleStore } from "../store/useSafeScaleStore";
+import { PUBLIC_WEB_PREVIEW, useSafeScaleStore } from "../store/useSafeScaleStore";
 import { Button, Card, Heading, Page, C, s } from "../components/care/UI";
 export default function EmergencyScreen() {
   const profile = useSafeScaleStore((state) => state.profile);
@@ -91,7 +91,7 @@ export default function EmergencyScreen() {
                   {contact.phone}
                 </Text>
               </View>
-              <Button
+              {!PUBLIC_WEB_PREVIEW && <Button
                 label={`Call ${contact.name}`}
                 disabled={demo}
                 secondary
@@ -101,7 +101,7 @@ export default function EmergencyScreen() {
                     { text: "Call", onPress: () => call(contact.phone) },
                   ])
                 }
-              />
+              />}
             </View>
           ))
         ) : (

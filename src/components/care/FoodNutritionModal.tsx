@@ -22,7 +22,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useSafeScaleStore } from '../../store/useSafeScaleStore';
+import { PUBLIC_WEB_PREVIEW, useSafeScaleStore } from '../../store/useSafeScaleStore';
 import { FoodVisionService } from '../../services/FoodVisionService';
 import { AllergenEngine } from '../../services/AllergenEngine';
 import { USDALookupService } from '../../services/USDALookupService';
@@ -242,13 +242,13 @@ export default function FoodNutritionModal({
             {AI_LABELS[aiPreference]}
           </Text>
         </View>
-        <Pressable
+        {!PUBLIC_WEB_PREVIEW && <Pressable
           onPress={() => setBarcodeModalOpen(true)}
           style={localStyles.barcodeHeaderBtn}
         >
           <MaterialCommunityIcons name="barcode-scan" size={15} color={C.green} />
           <Text style={localStyles.barcodeHeaderBtnText}>Scan Barcode</Text>
-        </Pressable>
+        </Pressable>}
       </View>
 
       {!analyzing && !result && !logged ? (

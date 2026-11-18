@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {Alert, Platform, Share, Text, TextInput, View} from 'react-native';
-import {deleteLocalHealthData, useSafeScaleStore} from '../../store/useSafeScaleStore';
+import {deleteLocalHealthData, PUBLIC_WEB_PREVIEW, useSafeScaleStore} from '../../store/useSafeScaleStore';
 import {Button, Card, Heading, Sheet, s} from './UI';
 
 import {privacyExport} from '../../utils/privacyExport';
@@ -22,16 +22,22 @@ export default function PrivacySettings() {
     } catch { Alert.alert('Export failed', 'Your records are unchanged. Please try again.'); }
   };
   return <Card>
-    <Heading title="Privacy & local processing" detail="AI, photos and health insights stay on this device. Optional Google Health / Fitbit import uses Google sign-in and read-only requests after you connect." />
-    <Text style={s.body}>{Platform.OS === 'web'
+    <Heading title="Privacy & local processing" detail={PUBLIC_WEB_PREVIEW
+      ? 'Entries stay in this tab and are cleared on reload. Use fictional details only.'
+      : 'AI, photos and health insights stay on this device. Optional Google Health / Fitbit import uses Google sign-in and read-only requests after you connect.'} />
+    {!PUBLIC_WEB_PREVIEW && <Text style={s.body}>{Platform.OS === 'web'
       ? 'Saved browser records are encrypted with your vault passphrase. The passphrase and key are not saved; close this tab to lock the vault.'
-      : 'Saved records are encrypted on this device. The encryption key is kept in device secure storage. Apple Health permissions are managed separately by iOS.'}</Text>
-    <Heading title="Your local data" detail="Export is an unencrypted copy of your health records without API keys or account tokens. Photos/files are not copied. Sharing or downloading is your choice and leaves this vault; protect the exported copy." />
+      : 'Saved records are encrypted on this device. The encryption key is kept in device secure storage. Apple Health permissions are managed separately by iOS.'}</Text>}
+    <Heading title="Your local data" detail={PUBLIC_WEB_PREVIEW
+      ? 'Export downloads an unencrypted copy of this session’s entries.'
+      : 'Export is an unencrypted copy of your health records without API keys or account tokens. Photos/files are not copied. Sharing or downloading is your choice and leaves this vault; protect the exported copy.'} />
     <Button label="Export health records" secondary disabled={demo} onPress={exportData} />
     <Button label="Delete local data…" secondary disabled={demo} onPress={() => {setConfirmation('');setDeleting(true);}} />
     {deleting && <Sheet title="Delete local data" onClose={() => setDeleting(false)}>
-      <Text style={s.body}>This permanently deletes Healthfolio's saved records, profile, credentials, active workout, chat, and app reminders on this device. It cannot be undone. Export anything you want to keep first.</Text>
-      <Text style={s.body}>Apple Health, Google accounts, your photo library, attached files, and previously exported copies are not deleted. Revoke health/account permissions in those services separately.</Text>
+      <Text style={s.body}>{PUBLIC_WEB_PREVIEW
+        ? 'This clears your entries, profile, and chat from this tab and returns you to setup. Downloaded files stay on your device.'
+        : "This permanently deletes Healthfolio's saved records, profile, credentials, active workout, chat, and app reminders on this device. It cannot be undone. Export anything you want to keep first."}</Text>
+      {!PUBLIC_WEB_PREVIEW && <Text style={s.body}>Apple Health, Google accounts, your photo library, attached files, and previously exported copies are not deleted. Revoke health/account permissions in those services separately.</Text>}
       <TextInput accessibilityLabel="Type DELETE to confirm" placeholder="Type DELETE to confirm" value={confirmation} onChangeText={setConfirmation} autoCapitalize="characters" style={s.input} />
       <Button label="Permanently delete local data" disabled={confirmation !== 'DELETE'} onPress={async () => {
         try { await deleteLocalHealthData(); }
